@@ -379,6 +379,13 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .cum-table td.cum-diff { font-family: var(--font-mono); font-weight: 700; }
 .cum-table td.cum-diff.up { color: var(--color-error); }
 .cum-table td.cum-diff.flat { color: var(--color-text-muted); }
+
+.cum-result-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.cum-table { min-width: 560px; }
+@media (max-width: 640px) {
+  .cum-table { font-size: var(--text-xs); min-width: 520px; }
+  .cum-table th, .cum-table td { padding: var(--space-2) var(--space-2); white-space: nowrap; }
+}
 .receptor-popup { font-size: var(--text-xs); font-family: var(--font-body); }
 .receptor-popup strong { font-family: var(--font-mono); }
 
