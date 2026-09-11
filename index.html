@@ -174,7 +174,7 @@
       <span class="module-num">Module 3</span>
       <h2>Kaart — turbines plaatsen en geluid per categorie</h2>
     </div>
-    <p class="module-desc">Klik op de kaart van Nederland om windturbines te plaatsen (max. 8). Voor elke turbine worden zeven ringen getekend op 500 / 700 / 900 / 1100 / 1300 / 1500 / 5000 m, gekleurd naar het berekende niveau in de actieve geluidscategorie — inclusief windrichting, dag/nacht en de gekozen scenariofactoren. De instellingen uit Module 1 en 2 gelden voor elke geplaatste turbine afzonderlijk (zonder onderlinge cumulatie, zie Methodologie).</p>
+    <p class="module-desc">Plaats windturbines op de kaart van Nederland — door te klikken, door een adres/plaats te zoeken, of door coördinaten in te voeren (max. 8). Voor elke turbine worden zeven ringen getekend op 500 / 700 / 900 / 1100 / 1300 / 1500 / 5000 m, gekleurd naar het berekende niveau in de actieve geluidscategorie — inclusief windrichting, dag/nacht en de gekozen scenariofactoren. De instellingen uit Module 1 en 2 gelden voor elke geplaatste turbine afzonderlijk (zonder onderlinge cumulatie, zie Methodologie).</p>
 
     <div class="cat-tabs" id="category-tabs" role="tablist" aria-label="Geluidscategorie">
       <button type="button" class="cat-tab cat-hoorbaar" data-category="hoorbaar" aria-pressed="true">Hoorbaar geluid<span class="cat-tab-sub">≈200 Hz–20 kHz · dB(A)</span></button>
@@ -184,13 +184,33 @@
 
     <div class="m3-layout">
       <div class="map-wrap">
+        <div class="location-panel">
+          <div class="loc-tabs" role="tablist" aria-label="Locatie invoermethode">
+            <button type="button" class="loc-tab" data-loc-tab="adres" aria-pressed="true">Zoeken op adres/plaats</button>
+            <button type="button" class="loc-tab" data-loc-tab="coords" aria-pressed="false">Coördinaten invoeren</button>
+          </div>
+          <div class="loc-row">
+            <div class="loc-field" id="loc-field-adres">
+              <div class="address-search">
+                <input type="text" id="address-input" placeholder="Bijv. Cattenbroek, Montfoort of een postcode" autocomplete="off" aria-label="Zoek een adres of plaats">
+                <ul class="address-suggestions" id="address-suggestions" role="listbox" hidden></ul>
+              </div>
+            </div>
+            <div class="loc-field" id="loc-field-coords" hidden>
+              <input type="number" id="lat-input" step="0.0001" placeholder="Breedtegraad, bv. 52.1500" aria-label="Breedtegraad (lat)">
+              <input type="number" id="lng-input" step="0.0001" placeholder="Lengtegraad, bv. 5.3000" aria-label="Lengtegraad (lon)">
+            </div>
+            <button type="button" class="add-turbine-btn" id="add-turbine-btn">+ Turbine toevoegen</button>
+          </div>
+          <p class="loc-status" id="loc-status" role="status" aria-live="polite"></p>
+        </div>
         <div class="map-toolbar">
           <span class="turbine-count" id="turbine-count">0 / 8 turbines geplaatst</span>
           <button type="button" class="clear-btn" id="clear-turbines">Wis alle turbines</button>
         </div>
         <div class="map-container">
           <div id="turbine-map" role="img" aria-label="Kaart van Nederland waarop windturbines geplaatst kunnen worden"></div>
-          <div class="empty-map-hint" id="empty-map-hint">Klik op de kaart om een windturbine te plaatsen (max. 8).</div>
+          <div class="empty-map-hint" id="empty-map-hint">Klik op de kaart, of zoek hierboven een adres/coördinaat, om een windturbine te plaatsen (max. 8).</div>
         </div>
         <div class="legend">
           <div class="legend-bar" id="legend-bar"></div>

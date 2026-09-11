@@ -161,6 +161,15 @@ const turbineCountEl = document.getElementById('turbine-count');
 const clearTurbinesBtn = document.getElementById('clear-turbines');
 const emptyMapHint = document.getElementById('empty-map-hint');
 const infrasoundCallout = document.getElementById('infrasound-callout');
+const locTabs = document.querySelectorAll('.loc-tab');
+const locFieldAdres = document.getElementById('loc-field-adres');
+const locFieldCoords = document.getElementById('loc-field-coords');
+const addressInput = document.getElementById('address-input');
+const addressSuggestions = document.getElementById('address-suggestions');
+const latInput = document.getElementById('lat-input');
+const lngInput = document.getElementById('lng-input');
+const addTurbineBtn = document.getElementById('add-turbine-btn');
+const locStatus = document.getElementById('loc-status');
 
 // ---------- Static: octave table ----------
 (function fillOctaveTable() {
@@ -517,6 +526,148 @@ function render() {
 
   renderAllTurbineRings();
 }
+
+// ---------- Locatie toevoegen: adreszoeker (PDOK Locatieserver) & coordinaten ----------
+const NL_BOUNDS = { minLat: 50.4, maxLat: 53.8, minLng: 2.9, maxLng: 7.4 };
+let activeLocTab = 'adres';
+let selectedAddressResult = null; // { lat, lng, label }
+let addressDebounceTimer = null;
+let addressAbortController = null;
+
+function setLocStatus(message, tone) {
+  locStatus.textContent = message || '';
+  locStatus.classList.remove('error', 'success');
+  if (tone) locStatus.classList.add(tone);
+}
+
+locTabs.forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeLocTab = btn.dataset.locTab;
+    locTabs.forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+    locFieldAdres.hidden = activeLocTab !== 'adres';
+    locFieldCoords.hidden = activeLocTab !== 'coords';
+    addressSuggestions.hidden = true;
+    setLocStatus('');
+  });
+});
+
+function hideSuggestions() {
+  addressSuggestions.hidden = true;
+  addressSuggestions.innerHTML = '';
+}
+
+addressInput.addEventListener('input', () => {
+  selectedAddressResult = null;
+  const q = addressInput.value.trim();
+  clearTimeout(addressDebounceTimer);
+  if (q.length < 2) { hideSuggestions(); return; }
+  addressDebounceTimer = setTimeout(() => fetchAddressSuggestions(q), 300);
+});
+
+addressInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const firstItem = addressSuggestions.querySelector('li');
+    if (firstItem) firstItem.click();
+    else addTurbineBtn.click();
+  } else if (e.key === 'Escape') {
+    hideSuggestions();
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.address-search')) hideSuggestions();
+});
+
+async function fetchAddressSuggestions(query) {
+  if (addressAbortController) addressAbortController.abort();
+  addressAbortController = new AbortController();
+  try {
+    const url = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/suggest?q=${encodeURIComponent(query)}&fq=type:(woonplaats OR adres OR postcode OR weg)&rows=6`;
+    const res = await fetch(url, { signal: addressAbortController.signal });
+    if (!res.ok) throw new Error('PDOK suggest mislukt');
+    const data = await res.json();
+    const docs = (data.response && data.response.docs) || [];
+    if (!docs.length) {
+      addressSuggestions.innerHTML = '<li class="no-result">Geen resultaten gevonden.</li>';
+      addressSuggestions.hidden = false;
+      return;
+    }
+    addressSuggestions.innerHTML = docs.map(d => `<li role="option" data-id="${d.id}" data-label="${d.weergavenaam.replace(/"/g, '&quot;')}">${d.weergavenaam}</li>`).join('');
+    addressSuggestions.hidden = false;
+    addressSuggestions.querySelectorAll('li[data-id]').forEach(li => {
+      li.addEventListener('click', () => selectAddressSuggestion(li.dataset.id, li.dataset.label));
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    addressSuggestions.innerHTML = '<li class="no-result">Zoeken via PDOK is mislukt. Probeer het opnieuw.</li>';
+    addressSuggestions.hidden = false;
+  }
+}
+
+async function selectAddressSuggestion(id, label) {
+  hideSuggestions();
+  addressInput.value = label;
+  setLocStatus('Locatie ophalen\u2026');
+  try {
+    const res = await fetch(`https://api.pdok.nl/bzk/locatieserver/search/v3_1/lookup?id=${encodeURIComponent(id)}`);
+    if (!res.ok) throw new Error('PDOK lookup mislukt');
+    const data = await res.json();
+    const doc = data.response && data.response.docs && data.response.docs[0];
+    if (!doc || !doc.centroide_ll) throw new Error('Geen co\u00f6rdinaten gevonden');
+    const match = /POINT\(([-0-9.]+) ([-0-9.]+)\)/.exec(doc.centroide_ll);
+    if (!match) throw new Error('Onbekend co\u00f6rdinatenformaat');
+    const lng = parseFloat(match[1]);
+    const lat = parseFloat(match[2]);
+    selectedAddressResult = { lat, lng, label };
+    setLocStatus(`Gevonden: ${label}. Klik op "Turbine toevoegen".`, 'success');
+  } catch (err) {
+    selectedAddressResult = null;
+    setLocStatus('Kon geen co\u00f6rdinaten ophalen voor deze locatie. Probeer het opnieuw.', 'error');
+  }
+}
+
+function withinNetherlands(lat, lng) {
+  return lat >= NL_BOUNDS.minLat && lat <= NL_BOUNDS.maxLat && lng >= NL_BOUNDS.minLng && lng <= NL_BOUNDS.maxLng;
+}
+
+addTurbineBtn.addEventListener('click', () => {
+  if (state.turbines.length >= MAX_TURBINES) {
+    setLocStatus(`Maximaal ${MAX_TURBINES} turbines geplaatst. Verwijder er eerst een.`, 'error');
+    return;
+  }
+
+  let lat, lng, label;
+  if (activeLocTab === 'adres') {
+    if (!selectedAddressResult || selectedAddressResult.label !== addressInput.value) {
+      setLocStatus('Kies eerst een locatie uit de suggesties hierboven.', 'error');
+      return;
+    }
+    ({ lat, lng, label } = selectedAddressResult);
+  } else {
+    lat = parseFloat(latInput.value);
+    lng = parseFloat(lngInput.value);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      setLocStatus('Vul zowel een geldige breedtegraad als lengtegraad in.', 'error');
+      return;
+    }
+    label = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  }
+
+  if (!withinNetherlands(lat, lng)) {
+    setLocStatus('Deze co\u00f6rdinaten liggen buiten Nederland (ongeveer lat 50,4\u201353,8 \u00b7 lon 2,9\u20137,4).', 'error');
+    return;
+  }
+
+  addTurbine(lat, lng);
+  map.flyTo([lat, lng], Math.max(map.getZoom(), 11), { duration: 0.6 });
+  setLocStatus(`Turbine toegevoegd bij ${label}.`, 'success');
+
+  addressInput.value = '';
+  selectedAddressResult = null;
+  latInput.value = '';
+  lngInput.value = '';
+});
 
 // ---------- Wire up turbine controls & init ----------
 clearTurbinesBtn.addEventListener('click', clearAllTurbines);
