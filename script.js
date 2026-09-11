@@ -335,13 +335,12 @@ function updateEmptyHint() {
 
 function applyMapTileTheme() {
   if (!map) return;
-  if (tileLayer) map.removeLayer(tileLayer);
-  const url = currentTheme === 'dark'
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-  tileLayer = L.tileLayer(url, {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
-    subdomains: 'abcd',
+  const mapEl = document.getElementById('turbine-map');
+  if (mapEl) mapEl.classList.toggle('dark-tiles', currentTheme === 'dark');
+  if (tileLayer) return;
+  tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+    subdomains: 'abc',
     maxZoom: 19,
   });
   tileLayer.addTo(map);
