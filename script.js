@@ -223,13 +223,14 @@ function renderMap(lwInput) {
     }
   });
 
-  // distance labels (placed along bearing 200 to avoid legend/compass clutter)
-  const labelBearing = 205;
-  DISTANCES.forEach(d => {
+  // distance labels — fanned across separate bearings (155°→255°, southwest quadrant)
+  // so closely-spaced rings (500-1000m) don't stack their badges on top of one another.
+  DISTANCES.forEach((d, i) => {
     const r = d * PX_PER_M;
+    const labelBearing = 155 + i * 20;
     const p = polar(CX, CY, r, labelBearing);
     svg += `<g>
-      <rect x="${(p.x - 22).toFixed(1)}" y="${(p.y - 9).toFixed(1)}" width="44" height="16" rx="4" fill="var(--color-surface)" opacity="0.88" />
+      <rect x="${(p.x - 22).toFixed(1)}" y="${(p.y - 9).toFixed(1)}" width="44" height="16" rx="4" fill="var(--color-surface)" opacity="0.92" />
       <text x="${p.x.toFixed(1)}" y="${(p.y + 3).toFixed(1)}" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--color-text-muted)">${d} m</text>
     </g>`;
   });
