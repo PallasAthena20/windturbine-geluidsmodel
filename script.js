@@ -335,13 +335,13 @@ function updateEmptyHint() {
 
 function applyMapTileTheme() {
   if (!map) return;
-  const mapEl = document.getElementById('turbine-map');
-  if (mapEl) mapEl.classList.toggle('dark-tiles', currentTheme === 'dark');
-  if (tileLayer) return;
-  tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
-    subdomains: 'abc',
-    maxZoom: 19,
+  if (tileLayer) map.removeLayer(tileLayer);
+  const url = currentTheme === 'dark'
+    ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+    : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  tileLayer = L.tileLayer(url, {
+    attribution: '&copy; <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>, HERE, Garmin, FAO, NOAA, USGS',
+    maxZoom: 16,
   });
   tileLayer.addTo(map);
   tileLayer.setZIndex(0);
