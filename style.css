@@ -274,7 +274,8 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 }
 .address-search input:focus-visible,
 .loc-field input[type="number"]:focus-visible { border-color: var(--color-primary); }
-#loc-field-coords { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+#loc-field-coords:not([hidden]) { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+#loc-field-coords[hidden] { display: none; }
 #loc-field-coords input { flex: 1 1 140px; }
 .address-suggestions {
   position: absolute; top: calc(100% + var(--space-1)); left: 0; right: 0; z-index: 600;
