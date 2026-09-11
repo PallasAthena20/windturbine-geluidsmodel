@@ -308,8 +308,8 @@ function windArrowIcon() {
     html: `<div class="wind-arrow-rotate"><svg width="${WIND_ARROW_SIZE}" height="${WIND_ARROW_SIZE}" viewBox="0 0 ${WIND_ARROW_SIZE} ${WIND_ARROW_SIZE}">
       <line x1="${c}" y1="${c}" x2="${c}" y2="8" stroke="#a1332f" stroke-width="3" stroke-linecap="round"/>
       <path d="M${c} 8 L${c - 6} 19 L${c + 6} 19 Z" fill="#a1332f"/>
-      <line x1="${c}" y1="${c}" x2="${c}" y2="${WIND_ARROW_SIZE - 8}" stroke="#3d7a4a" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 5"/>
-      <circle cx="${c}" cy="${WIND_ARROW_SIZE - 8}" r="3.5" fill="#3d7a4a"/>
+      <line x1="${c}" y1="${c}" x2="${c}" y2="${WIND_ARROW_SIZE - 8}" stroke="#3d7a4a" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="4 3.5"/>
+      <circle cx="${c}" cy="${WIND_ARROW_SIZE - 8}" r="4.5" fill="#3d7a4a"/>
     </svg></div>`,
     iconSize: [WIND_ARROW_SIZE, WIND_ARROW_SIZE],
     iconAnchor: [WIND_ARROW_SIZE / 2, WIND_ARROW_SIZE / 2],
