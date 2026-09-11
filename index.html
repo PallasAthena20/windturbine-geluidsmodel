@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@500,700&f[]=general-sans@400,500,600,700&f[]=jetbrains-mono@400,500,700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -35,7 +36,7 @@
   <section class="hero">
     <span class="hero-kicker">Interactief rekenmodel</span>
     <h1>Van bronvermogen naar geluid op afstand — inclusief windrichting, dag/nacht en versterkende factoren</h1>
-    <p>Dit model zet het bronvermogen van een windturbine (in dB(A)) om naar een <strong>ongewogen</strong> geluidsniveau en berekent hoe dat niveau afneemt met de afstand — asymmetrisch, want downwind draagt het geluid verder dan upwind. Vul het bronvermogen in, kies windrichting, dag/nacht en een scenario, en bekijk het resultaat op de kaart tot 2000 meter.</p>
+    <p>Dit model zet het bronvermogen van een windturbine (in dB(A)) om naar drie afzonderlijke geluidscategorieën — <strong>hoorbaar</strong>, <strong>laagfrequent</strong> en <strong>infrasoon</strong> geluid — en berekent per categorie hoe het niveau afneemt met de afstand, asymmetrisch omdat downwind het geluid verder draagt dan upwind. Plaats één of meer turbines op de kaart van Nederland en bekijk het resultaat op 500 tot 5000 meter.</p>
   </section>
 
   <!-- MODULE 1 -->
@@ -62,24 +63,28 @@
           <span class="v" id="out-lwa">106.0 dB(A)</span>
         </div>
         <div class="result-row">
-          <span class="k">Reken-offset (A-weging → ongewogen)</span>
-          <span class="v" id="out-offset">+12.4 dB</span>
+          <span class="k cat-badge cat-hoorbaar">Hoorbaar L<sub>W</sub></span>
+          <span class="v emph" id="out-hoorbaar">105.4 dB(A)</span>
         </div>
         <div class="result-row">
-          <span class="k">Ongewogen bronvermogen L<sub>W</sub></span>
-          <span class="v emph" id="out-lw">118.4 dB</span>
+          <span class="k cat-badge cat-laagfrequent">Laagfrequent L<sub>W</sub></span>
+          <span class="v emph" id="out-laagfrequent">121.9 dB(Lin)</span>
+        </div>
+        <div class="result-row">
+          <span class="k cat-badge cat-infrasoon">Infrasoon L<sub>W</sub></span>
+          <span class="v emph" id="out-infrasoon">130.9 dB(G)</span>
         </div>
 
         <details class="calc-panel">
-          <summary>Toon berekening — octaafbandspectrum en A-weging</summary>
+          <summary>Toon berekening — octaafbandspectrum, A- en G-weging</summary>
           <div class="calc-body">
-            <p>De offset wordt niet vast ingesteld, maar per octaafband herleid uit een gepubliceerd bronspectrum (Vestas V90, 80 m ashoogte, genormaliseerd op 106 dB(A) totaal) en de standaard A-wegingscorrecties uit <a href="https://webstore.iec.ch/publication/2977" target="_blank" rel="noopener">IEC 61672-1</a>.</p>
+            <p>Elke categorie telt een eigen subset octaafbanden energetisch op uit een gepubliceerd bronspectrum (Vestas V90, 80 m ashoogte, genormaliseerd op 106 dB(A) totaal), aangevuld met een extrapolatie naar 8/16/31,5 Hz (+3 dB/octaaf omlaag, per <a href="https://tethys.pnnl.gov/sites/default/files/publications/RSG-2016-Report.pdf" target="_blank" rel="noopener">RSG 2016</a>), de A-wegingscorrecties uit <a href="https://webstore.iec.ch/publication/2977" target="_blank" rel="noopener">IEC 61672-1</a> en de G-wegingscorrecties uit <a href="https://www.iso.org/standard/13813.html" target="_blank" rel="noopener">ISO 7196</a>.</p>
             <table class="calc-table" id="octave-table">
-              <thead><tr><th>Band (Hz)</th><th>L<sub>WA</sub>-band</th><th>A-correctie</th><th>L<sub>W</sub>-band (ongewogen)</th></tr></thead>
+              <thead><tr><th>Band (Hz)</th><th>Categorie</th><th>L<sub>W</sub>-band (ongewogen)</th><th>A-correctie</th><th>L<sub>WA</sub>-band</th></tr></thead>
               <tbody></tbody>
             </table>
             <div class="formula" id="offset-formula"></div>
-            <p>Bron octaafbandspectrum: <a href="https://www.torrancewindfarmextension2.co.uk/wp-content/uploads/2023/03/Appendix-7.1-Cumulative-Sound-Power-Levels.pdf" target="_blank" rel="noopener">Torrance Wind Farm Extension, Technical Appendix 7.1</a>. De offset (~+12,4 dB) is turbinetype-onafhankelijk vrij stabiel omdat laagfrequente banden (63–250 Hz) door de A-weging het sterkst worden onderschat en bij windturbines relatief veel energie bevatten.</p>
+            <p>Bron octaafbandspectrum (63–8000 Hz): <a href="https://www.torrancewindfarmextension2.co.uk/wp-content/uploads/2023/03/Appendix-7.1-Cumulative-Sound-Power-Levels.pdf" target="_blank" rel="noopener">Torrance Wind Farm Extension, Technical Appendix 7.1</a>. De 8/16/31,5 Hz-banden zijn geen directe meting maar een modelmatige extrapolatie — zie Methodologie §1.</p>
           </div>
         </details>
       </div>
@@ -167,17 +172,30 @@
   <section class="module" id="module-3">
     <div class="module-head">
       <span class="module-num">Module 3</span>
-      <h2>Kaart — ongewogen geluid rond de turbine</h2>
+      <h2>Kaart — turbines plaatsen en geluid per categorie</h2>
     </div>
-    <p class="module-desc">Zes cirkels op ware schaal (500 / 700 / 800 / 900 / 1000 / 2000 m). Elke cirkel is opgebouwd uit segmenten waarvan de kleur het berekende ongewogen niveau (dB) op die afstand en hoek weergeeft, inclusief de gekozen scenariofactoren.</p>
+    <p class="module-desc">Klik op de kaart van Nederland om windturbines te plaatsen (max. 8). Voor elke turbine worden zeven ringen getekend op 500 / 700 / 900 / 1100 / 1300 / 1500 / 5000 m, gekleurd naar het berekende niveau in de actieve geluidscategorie — inclusief windrichting, dag/nacht en de gekozen scenariofactoren. De instellingen uit Module 1 en 2 gelden voor elke geplaatste turbine afzonderlijk (zonder onderlinge cumulatie, zie Methodologie).</p>
+
+    <div class="cat-tabs" id="category-tabs" role="tablist" aria-label="Geluidscategorie">
+      <button type="button" class="cat-tab cat-hoorbaar" data-category="hoorbaar" aria-pressed="true">Hoorbaar geluid<span class="cat-tab-sub">≈200 Hz–20 kHz · dB(A)</span></button>
+      <button type="button" class="cat-tab cat-laagfrequent" data-category="laagfrequent" aria-pressed="false">Laagfrequent geluid<span class="cat-tab-sub">20–200 Hz · dB(Lin)</span></button>
+      <button type="button" class="cat-tab cat-infrasoon" data-category="infrasoon" aria-pressed="false">Infrasoon geluid<span class="cat-tab-sub">&lt;20 Hz · dB(G)</span></button>
+    </div>
 
     <div class="m3-layout">
       <div class="map-wrap">
-        <svg class="map-svg" id="map-svg" viewBox="0 0 620 620" role="img" aria-label="Kaart met geluidscontouren rond de windturbine"></svg>
+        <div class="map-toolbar">
+          <span class="turbine-count" id="turbine-count">0 / 8 turbines geplaatst</span>
+          <button type="button" class="clear-btn" id="clear-turbines">Wis alle turbines</button>
+        </div>
+        <div class="map-container">
+          <div id="turbine-map" role="img" aria-label="Kaart van Nederland waarop windturbines geplaatst kunnen worden"></div>
+          <div class="empty-map-hint" id="empty-map-hint">Klik op de kaart om een windturbine te plaatsen (max. 8).</div>
+        </div>
         <div class="legend">
           <div class="legend-bar" id="legend-bar"></div>
           <div class="legend-ticks" id="legend-ticks"></div>
-          <p class="legend-caption">Ongewogen geluidsniveau (dB) — lichter/koeler = stiller, donkerder/warmer = luider</p>
+          <p class="legend-caption" id="legend-caption">Hoorbaar geluid (dB(A)) — lichter/koeler = stiller, donkerder/warmer = luider</p>
         </div>
       </div>
 
@@ -185,15 +203,16 @@
         <div class="readout-mini">
           <span class="rm-title">Huidig scenario</span>
           <span class="rm-val" id="mini-scenario">Best case</span>
-          <span class="rm-sub" id="mini-sub">Dag · Wind uit N</span>
+          <span class="rm-sub" id="mini-sub">Dag · Wind uit N · 0 turbines</span>
         </div>
 
         <div class="data-table-card">
-          <h3>Ongewogen dB per afstand en richting</h3>
+          <h3 id="data-table-title">Hoorbaar geluid (dB(A)) per afstand en richting</h3>
           <table class="data-table">
-            <thead><tr><th>Afstand</th><th>Downwind</th><th>Zijwind</th><th>Upwind</th></tr></thead>
-            <tbody id="data-table-body"></tbody>
+            <thead id="data-table-head"><tr><th>Afstand</th><th>Downwind</th><th>Zijwind</th><th>Upwind</th></tr></thead>
+            <tbody id="data-table-body"><tr><td colspan="4" class="empty-row">Plaats een turbine op de kaart om resultaten te zien.</td></tr></tbody>
           </table>
+          <p class="callout" id="infrasound-callout"></p>
         </div>
       </div>
     </div>
@@ -207,15 +226,26 @@
     </div>
 
     <div class="method-section">
-      <h3>1. Bronvermogen-conversie (dB(A) → ongewogen)</h3>
-      <p>Windturbinespecificaties vermelden bijna altijd het A-gewogen bronvermogen L<sub>WA</sub>. Omdat A-weging laagfrequent geluid (20–200 Hz) sterk dempt — bijvoorbeeld −26,2 dB bij 63 Hz en −16,1 dB bij 125 Hz volgens IEC 61672-1 — geeft dB(A) een vertekend beeld van het werkelijke, ongewogen geluidsniveau dat op afstand nog waarneembaar is. Dit model herleidt per octaafband het ongewogen niveau uit een gepubliceerd bronspectrum en telt de banden energetisch (logaritmisch) op tot een ongewogen totaal. De resulterende offset (ca. +12,4 dB bovenop de dB(A)-waarde) wordt in Module 1 live herberekend, niet hardcoded.</p>
+      <h3>1. Drie geluidscategorieën en hun weging</h3>
+      <p>Windturbinespecificaties vermelden bijna altijd het A-gewogen bronvermogen L<sub>WA</sub>. A-weging is ontworpen voor hoorbaar geluid en dempt lagere frequenties zwaar — bijvoorbeeld −26,2 dB bij 63 Hz en −77,8 dB bij 8 Hz volgens <a href="https://webstore.iec.ch/publication/2977" target="_blank" rel="noopener">IEC 61672-1</a>. Dat onderschat laagfrequent en infrasoon geluid systematisch. Dit model splitst het octaafbandspectrum daarom in drie categorieën, elk met een eigen weging, conform de driedeling in de Positionpaper Geluidpropagatie Windturbines:</p>
+      <ul>
+        <li><strong>Hoorbaar geluid</strong> (250–8000 Hz, dB(A) A-gewogen): sterkste richtingsasymmetrie, kleinste reikwijdte (doorgaans 1–2 km).</li>
+        <li><strong>Laagfrequent geluid</strong> (31,5–125 Hz, dB(Lin) ongewogen): gematigde asymmetrie, iets groter bereik dan hoorbaar geluid.</li>
+        <li><strong>Infrasoon geluid</strong> (8–16 Hz, dB(G) G-gewogen conform <a href="https://www.iso.org/standard/13813.html" target="_blank" rel="noopener">ISO 7196</a>): nauwelijks asymmetrie, verwaarloosbare atmosferische demping — kan zich volgens <a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson et al. (2026)</a> onder gunstige omstandigheden over meer dan 10 km verspreiden.</li>
+      </ul>
+      <p>De octaafbanden 63–8000 Hz komen uit het gepubliceerde spectrum van een Vestas V90 (<a href="https://www.torrancewindfarmextension2.co.uk/wp-content/uploads/2023/03/Appendix-7.1-Cumulative-Sound-Power-Levels.pdf" target="_blank" rel="noopener">Torrance Wind Farm Extension, Technical Appendix 7.1</a>). De banden 8/16/31,5 Hz zijn hieraan toegevoegd via extrapolatie: <a href="https://tethys.pnnl.gov/sites/default/files/publications/RSG-2016-Report.pdf" target="_blank" rel="noopener">RSG (2016), "Massachusetts Study on Wind Turbine Acoustics"</a> rapporteert dat het bronniveau van windturbines circa 3 dB per octaaf toeneemt naarmate de frequentie daalt, tot ongeveer 4 Hz. Dezelfde studie meette turbine-infrasoon typisch op 55–70 dB(G), 25 dB of meer onder de ISO 7196-hoorbaarheidsdrempel van 90–100 dB(G) — dit model toont daarom ook een live vergelijking met die drempel bij de infrasoon-tab. Elke categorie telt zijn banden energetisch (logaritmisch) op tot een categorie-specifiek bronvermogen; dit gebeurt live in Module 1, niet hardcoded.</p>
     </div>
 
     <div class="method-section">
-      <h3>2. Richtingsafhankelijke propagatie (downwind vs. upwind)</h3>
-      <p>Geluid van windturbines draagt asymmetrisch: door meesleuring met de wind reikt downwind geluid aanzienlijk verder dan upwind geluid op dezelfde afstand. <a href="https://www.uknown.co.uk/wp-content/uploads/2016/01/AV1300R02_Evans_Cooper_2012.pdf" target="_blank" rel="noopener">Evans &amp; Cooper (2012)</a> kwantificeerden dit voor A-gewogen geluid: het downwind/upwind-verschil groeit van circa 3–5 dB(A) op 500 m tot 6–7 dB(A) op 1000 m. <a href="https://ntrs.nasa.gov/citations/19910006812" target="_blank" rel="noopener">Hubbard &amp; Shepherd (1990, NASA)</a> vonden voor lage frequenties (8–16 Hz) een vergelijkbaar patroon: upwind circa 6 dB afname per afstandsverdubbeling tegenover circa 3 dB downwind.</p>
-      <p>Uit de Evans &amp; Cooper-datapunten is een dempingshelling per richting gefit (t.o.v. 120 m referentieafstand): downwind m ≈ 18,5, zijwind m ≈ 23,2, upwind m ≈ 25,3 (dB per log10-afstandsverdubbeling-eenheid). Deze worden hoek-afhankelijk geïnterpoleerd via <code>m(x) = 23,2 − 3,4x − 1,3x²</code>, met x = cos(hoek t.o.v. de downwind-as).</p>
-      <div class="callout">Belangrijke kanttekening: de Evans &amp; Cooper-asymmetrie is gemeten in dB(A), dus vooral bepaald door hoorbaar/middenfrequent geluid. Voor het <strong>ongewogen</strong>, laagfrequent-gedomineerde signaal dat dit model toont, is de richtingsasymmetrie naar verwachting kleiner — infrasoon geluid (&lt;20 Hz) vertoont volgens de Positioning Paper Laagfrequent Geluid vrijwel geen richtingsasymmetrie, terwijl hoorbaar geluid de sterkste asymmetrie heeft. Dit model dempt daarom de hoekafhankelijke term met een factor 0,4 t.o.v. de dB(A)-fit, om de gematigde asymmetrie van het ongewogen/laagfrequente niveau te benaderen. Dit is een modelmatige vereenvoudiging, geen gemeten waarde.</div>
+      <h3>2. Richtingsafhankelijke propagatie per categorie</h3>
+      <p>Geluid van windturbines draagt asymmetrisch: door meesleuring met de wind reikt downwind geluid aanzienlijk verder dan upwind geluid op dezelfde afstand. <a href="https://www.uknown.co.uk/wp-content/uploads/2016/01/AV1300R02_Evans_Cooper_2012.pdf" target="_blank" rel="noopener">Evans &amp; Cooper (2012)</a> kwantificeerden dit voor A-gewogen (hoorbaar) geluid: het downwind/upwind-verschil groeit van circa 3–5 dB(A) op 500 m tot 6–7 dB(A) op 1000 m. <a href="https://ntrs.nasa.gov/citations/19910006812" target="_blank" rel="noopener">Hubbard &amp; Shepherd (1990, NASA)</a> vonden voor lage frequenties (8–16 Hz) een vergelijkbaar patroon qua richting, maar met kleinere absolute verschillen: upwind circa 6 dB afname per afstandsverdubbeling tegenover circa 3 dB downwind.</p>
+      <p>Uit de Evans &amp; Cooper-datapunten is een dempingshelling per richting gefit (t.o.v. 120 m referentieafstand): downwind m ≈ 18,5, zijwind m ≈ 23,2, upwind m ≈ 25,3 (dB per log10-afstandsverdubbeling-eenheid), hoek-afhankelijk geïnterpoleerd via <code>m(x) = 23,2 − 3,4x − 1,3x²</code> met x = cos(hoek t.o.v. de downwind-as). Dit model gebruikt drie varianten van deze fit, één per categorie:</p>
+      <ul>
+        <li><strong>Hoorbaar:</strong> de volledige, ongedempte Evans &amp; Cooper-fit — sterkste asymmetrie.</li>
+        <li><strong>Laagfrequent:</strong> dezelfde fit met de hoekafhankelijke term gedempt × 0,4, om de gematigde asymmetrie te benaderen die de Positioning Paper Laagfrequent Geluid aan dit frequentiegebied toeschrijft.</li>
+        <li><strong>Infrasoon:</strong> een vrijwel vlakke curve rond m ≈ 20, licht gedempt (× 0,05) t.o.v. de hoorbare fit — dit weerspiegelt de "nauwelijks asymmetrie, verwaarloosbare atmosferische demping" die aan infrasoon geluid wordt toegeschreven.</li>
+      </ul>
+      <div class="callout">Dit zijn modelmatige benaderingen, geen gemeten curves per categorie — er bestaat geen gepubliceerde directionele meetreeks die alle drie categorieën afzonderlijk dekt tot 5 km. De dempingsfactoren (0,4 en 0,05) zijn gekozen om de kwalitatieve volgorde uit de bronnen (hoorbaar &gt; laagfrequent &gt; infrasoon qua asymmetrie) consistent weer te geven, niet om exacte dB-waarden te claimen.</div>
     </div>
 
     <div class="method-section">
@@ -231,9 +261,11 @@
     <div class="method-section">
       <h3>4. Beperkingen van dit model</h3>
       <ul>
-        <li>De kaart is een schematische weergave op ware afstandsschaal, geen georefereerd terreinmodel — bodemdemping, obstakels, reflecties en lokale topografie zijn niet meegenomen.</li>
-        <li>De richtingsfit is gebaseerd op een beperkt aantal Evans &amp; Cooper-datapunten (120–1000 m) en wordt hier geëxtrapoleerd tot 2000 m; op grotere afstand nemen infrasone en atmosferische effecten relatief toe, wat dit model vereenvoudigt.</li>
-        <li>Scenariofactoren zijn optelbaar aangenomen (energetisch, niet logaritmisch samengesteld) voor transparantie; in werkelijkheid kunnen effecten deels overlappen of elkaar versterken.</li>
+        <li>De kaart toont ringen op ware geografische afstandsschaal (via een boldriehoeksberekening vanaf elke turbinelocatie), maar is geen akoestisch terreinmodel — bodemdemping, obstakels, reflecties, bebouwing en lokale topografie zijn niet meegenomen.</li>
+        <li>De richtingsfit is gebaseerd op een beperkt aantal Evans &amp; Cooper-datapunten (120–1000 m, gemeten in dB(A)) en wordt hier geëxtrapoleerd tot 5000 m en naar de twee andere categorieën; dit is een modelmatige aanname, geen meting (zie §2).</li>
+        <li>De 8/16/31,5 Hz-banden zijn geëxtrapoleerd met een vaste +3 dB/octaaf-regel (RSG 2016) en niet gemeten voor het specifieke referentieturbinetype; werkelijke infrasone spectra kunnen per turbine en omstandigheid afwijken.</li>
+        <li>Scenariofactoren (windschering, torenzog, AM, curtailment) zijn optelbaar aangenomen en identiek toegepast op alle drie categorieën en op elke geplaatste turbine — in werkelijkheid kunnen deze effecten per frequentiegebied verschillen en elkaar deels overlappen of versterken.</li>
+        <li>Bij meerdere turbines op de kaart wordt elke turbine onafhankelijk berekend; er vindt geen akoestische sommatie tussen turbines plaats (cumulatieve geluidsbelasting van een windpark vereist een aparte, energetische optelling per rekenpunt).</li>
         <li>Dit model dient ter illustratie van beleidsmatige gevoeligheid van aannames — het vervangt geen akoestisch onderzoek of formele geluidsmeting conform de Activiteitenregeling milieubeheer.</li>
       </ul>
     </div>
@@ -241,9 +273,10 @@
 </main>
 
 <footer>
-  Interactief model · gebaseerd op de bijgevoegde position papers "Geluidpropagatie windturbines" en "Laagfrequent geluid en windturbines", Evans &amp; Cooper (2012), Hubbard &amp; Shepherd (1990, NASA), IEC 61672-1 en TNO-2025-R10988. Uitsluitend voor beleidsmatige illustratie — geen formele akoestische beoordeling.
+  Interactief model · gebaseerd op de bijgevoegde position papers "Geluidpropagatie windturbines" en "Laagfrequent geluid en windturbines", <a href="https://www.uknown.co.uk/wp-content/uploads/2016/01/AV1300R02_Evans_Cooper_2012.pdf" target="_blank" rel="noopener">Evans &amp; Cooper (2012)</a>, <a href="https://ntrs.nasa.gov/citations/19910006812" target="_blank" rel="noopener">Hubbard &amp; Shepherd (1990, NASA)</a>, <a href="https://webstore.iec.ch/publication/2977" target="_blank" rel="noopener">IEC 61672-1</a>, <a href="https://www.iso.org/standard/13813.html" target="_blank" rel="noopener">ISO 7196</a>, <a href="https://tethys.pnnl.gov/sites/default/files/publications/RSG-2016-Report.pdf" target="_blank" rel="noopener">RSG (2016)</a>, <a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson et al. (2026)</a> en <a href="https://publications.tno.nl/publication/34644559/QRWhHojF/TNO-2025-R10988.pdf" target="_blank" rel="noopener">TNO-2025-R10988</a>. Kaartlagen &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-contributors, &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>. Uitsluitend voor beleidsmatige illustratie — geen formele akoestische beoordeling.
 </footer>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
