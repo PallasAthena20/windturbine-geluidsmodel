@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Windturbine Geluidsmodel — Richtingsafhankelijke Propagatie</title>
+<meta name="description" content="Interactief model voor ongewogen geluidsniveaus rond een windturbine, met bronvermogen-conversie, windrichting, dag/nacht en best/middel/worst-case scenario's." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@500,700&f[]=general-sans@400,500,600,700&f[]=jetbrains-mono@400,500,700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 48 48" fill="none" aria-label="Logo">
+      <circle cx="24" cy="24" r="2.6" fill="currentColor"/>
+      <path d="M24 24 L24 6 C31 6 33 12 33 15 C33 19 29 24 24 24 Z" fill="currentColor" opacity="0.9"/>
+      <path d="M24 24 L38.5 32 C35 38 28 39 25 37 C22 34.5 21 28.5 24 24 Z" fill="currentColor" opacity="0.65"/>
+      <path d="M24 24 L9.5 32 C13 38 20 39 23 37 C26 34.5 27 28.5 24 24 Z" fill="currentColor" opacity="0.4"/>
+      <line x1="24" y1="24" x2="24" y2="44" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+    </svg>
+    <div class="brand-text">
+      <span class="brand-title">Geluidsmodel Windturbines</span>
+      <span class="brand-sub">Richtingsafhankelijke propagatie · ongewogen dB</span>
+    </div>
+  </div>
+  <button class="theme-toggle" data-theme-toggle aria-label="Wissel naar donkere modus" type="button">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</header>
+
+<main>
+  <section class="hero">
+    <span class="hero-kicker">Interactief rekenmodel</span>
+    <h1>Van bronvermogen naar geluid op afstand — inclusief windrichting, dag/nacht en versterkende factoren</h1>
+    <p>Dit model zet het bronvermogen van een windturbine (in dB(A)) om naar een <strong>ongewogen</strong> geluidsniveau en berekent hoe dat niveau afneemt met de afstand — asymmetrisch, want downwind draagt het geluid verder dan upwind. Vul het bronvermogen in, kies windrichting, dag/nacht en een scenario, en bekijk het resultaat op de kaart tot 2000 meter.</p>
+  </section>
+
+  <!-- MODULE 1 -->
+  <section class="module" id="module-1">
+    <div class="module-head">
+      <span class="module-num">Module 1</span>
+      <h2>Bronvermogen van de turbine</h2>
+    </div>
+    <p class="module-desc">Windturbines worden doorgaans gespecificeerd in dB(A) — het A-gewogen bronvermogen (Lw). Voor dit model rekenen we dat om naar het <em>ongewogen</em> (lineaire) bronvermogen, omdat laagfrequent geluid in dB(A) sterk wordt onderschat.</p>
+
+    <div class="m1-grid">
+      <div class="field-group">
+        <label for="lwa-input">Bronvermogen L<sub>WA</sub> (dB(A))</label>
+        <div class="slider-row">
+          <input type="range" id="lwa-input" min="95" max="112" step="0.1" value="106" />
+          <span class="dba-readout" id="lwa-readout">106.0</span>
+        </div>
+        <span class="hint">Typische range moderne 3–6 MW turbines: ca. 103–108 dB(A) op ashoogte. Standaard 106 dB(A) is gebaseerd op het gepubliceerde octaafbandspectrum van een Vestas V90 (80 m ashoogte).</span>
+      </div>
+
+      <div class="result-card">
+        <div class="result-row">
+          <span class="k">Ingevoerd bronvermogen (A-gewogen)</span>
+          <span class="v" id="out-lwa">106.0 dB(A)</span>
+        </div>
+        <div class="result-row">
+          <span class="k">Reken-offset (A-weging → ongewogen)</span>
+          <span class="v" id="out-offset">+12.4 dB</span>
+        </div>
+        <div class="result-row">
+          <span class="k">Ongewogen bronvermogen L<sub>W</sub></span>
+          <span class="v emph" id="out-lw">118.4 dB</span>
+        </div>
+
+        <details class="calc-panel">
+          <summary>Toon berekening — octaafbandspectrum en A-weging</summary>
+          <div class="calc-body">
+            <p>De offset wordt niet vast ingesteld, maar per octaafband herleid uit een gepubliceerd bronspectrum (Vestas V90, 80 m ashoogte, genormaliseerd op 106 dB(A) totaal) en de standaard A-wegingscorrecties uit <a href="https://webstore.iec.ch/publication/2977" target="_blank" rel="noopener">IEC 61672-1</a>.</p>
+            <table class="calc-table" id="octave-table">
+              <thead><tr><th>Band (Hz)</th><th>L<sub>WA</sub>-band</th><th>A-correctie</th><th>L<sub>W</sub>-band (ongewogen)</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <div class="formula" id="offset-formula"></div>
+            <p>Bron octaafbandspectrum: <a href="https://www.torrancewindfarmextension2.co.uk/wp-content/uploads/2023/03/Appendix-7.1-Cumulative-Sound-Power-Levels.pdf" target="_blank" rel="noopener">Torrance Wind Farm Extension, Technical Appendix 7.1</a>. De offset (~+12,4 dB) is turbinetype-onafhankelijk vrij stabiel omdat laagfrequente banden (63–250 Hz) door de A-weging het sterkst worden onderschat en bij windturbines relatief veel energie bevatten.</p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODULE 2 -->
+  <section class="module" id="module-2">
+    <div class="module-head">
+      <span class="module-num">Module 2</span>
+      <h2>Omstandigheden</h2>
+    </div>
+    <p class="module-desc">Windrichting bepaalt waar downwind (verder draagend) en upwind (sneller dempend) geluid valt. Dag/nacht en scenario bepalen welke versterkende factoren meetellen.</p>
+
+    <div class="m2-grid">
+      <div>
+        <h3 style="font-size:var(--text-sm);font-weight:700;margin-bottom:var(--space-4);text-align:center;">Windrichting (waar de wind vandaan komt)</h3>
+        <div class="compass-wrap">
+          <div class="compass">
+            <div class="compass-ring"></div>
+            <svg class="compass-arrow" id="wind-arrow" viewBox="0 0 200 200" width="200" height="200">
+              <g id="arrow-group" transform="rotate(0 100 100)">
+                <line x1="100" y1="100" x2="100" y2="42" stroke="var(--color-primary)" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+                <path d="M100 34 L91 52 L109 52 Z" fill="var(--color-primary)" opacity="0.85"/>
+              </g>
+            </svg>
+            <!-- 8 compass buttons placed via JS transform -->
+            <button class="compass-btn" data-dir="N" data-bearing="0" style="top:0;left:79px;" aria-pressed="false">N</button>
+            <button class="compass-btn" data-dir="NE" data-bearing="45" style="top:24px;left:135px;" aria-pressed="false">NE</button>
+            <button class="compass-btn" data-dir="E" data-bearing="90" style="top:79px;left:158px;" aria-pressed="false">E</button>
+            <button class="compass-btn" data-dir="SE" data-bearing="135" style="top:135px;left:135px;" aria-pressed="false">SE</button>
+            <button class="compass-btn" data-dir="S" data-bearing="180" style="top:158px;left:79px;" aria-pressed="false">S</button>
+            <button class="compass-btn" data-dir="SW" data-bearing="225" style="top:135px;left:24px;" aria-pressed="false">SW</button>
+            <button class="compass-btn" data-dir="W" data-bearing="270" style="top:79px;left:0px;" aria-pressed="false">W</button>
+            <button class="compass-btn" data-dir="NW" data-bearing="315" style="top:24px;left:24px;" aria-pressed="false">NW</button>
+          </div>
+          <span class="compass-label" id="wind-label">Wind uit het noorden (N) → geluid draagt naar het zuiden</span>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="font-size:var(--text-sm);font-weight:700;margin-bottom:var(--space-4);text-align:center;">Dag / nacht</h3>
+        <div class="toggle-row">
+          <div class="pill-toggle" id="daynight-toggle">
+            <button data-val="dag" aria-pressed="true" type="button">☀ Dag</button>
+            <button data-val="nacht" aria-pressed="false" type="button">☾ Nacht</button>
+          </div>
+        </div>
+        <p class="hint" style="text-align:center;margin-top:var(--space-4);">Windschering/temperatuurinversie — een van de grootste versterkende factoren — telt alleen 's nachts mee (zie Positioning Paper Laagfrequent Geluid).</p>
+
+        <div class="checkbox-row" id="curtailment-row">
+          <input type="checkbox" id="curtailment-check" />
+          <label for="curtailment-check">Curtailment/stall-gebaseerde afregeling actief
+            <span class="sub">Toerental- of pitch-afregeling nabij de stall-hoek kan amplitudemodulatie (OAM) versterken (zie N33-casus en TNO-2025-R10988). Alleen relevant in middel/worst.</span>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="font-size:var(--text-sm);font-weight:700;margin-bottom:var(--space-4);text-align:center;">Scenario</h3>
+        <div class="scenario-list" id="scenario-list">
+          <div class="scenario-card" data-scenario="best" aria-pressed="true">
+            <div class="sc-head"><span><span class="dot best"></span>Best case</span></div>
+            <p class="sc-desc">Geen versterkende factoren: stabiele atmosfeer, geen torenzog, geen OAM-intensivering.</p>
+          </div>
+          <div class="scenario-card" data-scenario="middel" aria-pressed="false">
+            <div class="sc-head"><span><span class="dot mid"></span>Middenscenario</span></div>
+            <p class="sc-desc">Gematigde windschering (nacht), beperkt torenzog-effect, lichte amplitudemodulatie.</p>
+          </div>
+          <div class="scenario-card" data-scenario="worst" aria-pressed="false">
+            <div class="sc-head"><span><span class="dot worst"></span>Worst case</span></div>
+            <p class="sc-desc">Sterke windschering/inversie (nacht), volledig torenzog-effect, intensieve OAM ("swish"/thump).</p>
+          </div>
+        </div>
+
+        <div class="factor-breakdown">
+          <h3>Actieve factoren (optellend, in dB)</h3>
+          <div id="factor-rows"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODULE 3 -->
+  <section class="module" id="module-3">
+    <div class="module-head">
+      <span class="module-num">Module 3</span>
+      <h2>Kaart — ongewogen geluid rond de turbine</h2>
+    </div>
+    <p class="module-desc">Zes cirkels op ware schaal (500 / 700 / 800 / 900 / 1000 / 2000 m). Elke cirkel is opgebouwd uit segmenten waarvan de kleur het berekende ongewogen niveau (dB) op die afstand en hoek weergeeft, inclusief de gekozen scenariofactoren.</p>
+
+    <div class="m3-layout">
+      <div class="map-wrap">
+        <svg class="map-svg" id="map-svg" viewBox="0 0 620 620" role="img" aria-label="Kaart met geluidscontouren rond de windturbine"></svg>
+        <div class="legend">
+          <div class="legend-bar" id="legend-bar"></div>
+          <div class="legend-ticks" id="legend-ticks"></div>
+          <p class="legend-caption">Ongewogen geluidsniveau (dB) — lichter/koeler = stiller, donkerder/warmer = luider</p>
+        </div>
+      </div>
+
+      <div class="side-col">
+        <div class="readout-mini">
+          <span class="rm-title">Huidig scenario</span>
+          <span class="rm-val" id="mini-scenario">Best case</span>
+          <span class="rm-sub" id="mini-sub">Dag · Wind uit N</span>
+        </div>
+
+        <div class="data-table-card">
+          <h3>Ongewogen dB per afstand en richting</h3>
+          <table class="data-table">
+            <thead><tr><th>Afstand</th><th>Downwind</th><th>Zijwind</th><th>Upwind</th></tr></thead>
+            <tbody id="data-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- METHODOLOGY -->
+  <section class="module" id="methodology">
+    <div class="module-head">
+      <span class="module-num">Verantwoording</span>
+      <h2>Methodologie &amp; bronnen</h2>
+    </div>
+
+    <div class="method-section">
+      <h3>1. Bronvermogen-conversie (dB(A) → ongewogen)</h3>
+      <p>Windturbinespecificaties vermelden bijna altijd het A-gewogen bronvermogen L<sub>WA</sub>. Omdat A-weging laagfrequent geluid (20–200 Hz) sterk dempt — bijvoorbeeld −26,2 dB bij 63 Hz en −16,1 dB bij 125 Hz volgens IEC 61672-1 — geeft dB(A) een vertekend beeld van het werkelijke, ongewogen geluidsniveau dat op afstand nog waarneembaar is. Dit model herleidt per octaafband het ongewogen niveau uit een gepubliceerd bronspectrum en telt de banden energetisch (logaritmisch) op tot een ongewogen totaal. De resulterende offset (ca. +12,4 dB bovenop de dB(A)-waarde) wordt in Module 1 live herberekend, niet hardcoded.</p>
+    </div>
+
+    <div class="method-section">
+      <h3>2. Richtingsafhankelijke propagatie (downwind vs. upwind)</h3>
+      <p>Geluid van windturbines draagt asymmetrisch: door meesleuring met de wind reikt downwind geluid aanzienlijk verder dan upwind geluid op dezelfde afstand. <a href="https://www.uknown.co.uk/wp-content/uploads/2016/01/AV1300R02_Evans_Cooper_2012.pdf" target="_blank" rel="noopener">Evans &amp; Cooper (2012)</a> kwantificeerden dit voor A-gewogen geluid: het downwind/upwind-verschil groeit van circa 3–5 dB(A) op 500 m tot 6–7 dB(A) op 1000 m. <a href="https://ntrs.nasa.gov/citations/19910006812" target="_blank" rel="noopener">Hubbard &amp; Shepherd (1990, NASA)</a> vonden voor lage frequenties (8–16 Hz) een vergelijkbaar patroon: upwind circa 6 dB afname per afstandsverdubbeling tegenover circa 3 dB downwind.</p>
+      <p>Uit de Evans &amp; Cooper-datapunten is een dempingshelling per richting gefit (t.o.v. 120 m referentieafstand): downwind m ≈ 18,5, zijwind m ≈ 23,2, upwind m ≈ 25,3 (dB per log10-afstandsverdubbeling-eenheid). Deze worden hoek-afhankelijk geïnterpoleerd via <code>m(x) = 23,2 − 3,4x − 1,3x²</code>, met x = cos(hoek t.o.v. de downwind-as).</p>
+      <div class="callout">Belangrijke kanttekening: de Evans &amp; Cooper-asymmetrie is gemeten in dB(A), dus vooral bepaald door hoorbaar/middenfrequent geluid. Voor het <strong>ongewogen</strong>, laagfrequent-gedomineerde signaal dat dit model toont, is de richtingsasymmetrie naar verwachting kleiner — infrasoon geluid (&lt;20 Hz) vertoont volgens de Positioning Paper Laagfrequent Geluid vrijwel geen richtingsasymmetrie, terwijl hoorbaar geluid de sterkste asymmetrie heeft. Dit model dempt daarom de hoekafhankelijke term met een factor 0,4 t.o.v. de dB(A)-fit, om de gematigde asymmetrie van het ongewogen/laagfrequente niveau te benaderen. Dit is een modelmatige vereenvoudiging, geen gemeten waarde.</div>
+    </div>
+
+    <div class="method-section">
+      <h3>3. Versterkende omstandigheidsfactoren</h3>
+      <ul>
+        <li><strong>Windschering/temperatuurinversie (alleen nacht):</strong> 's nachts kan de turbine bij windstil zijn op maaiveld nog altijd hard draaien op ashoogte. Dit kan het geluid met <strong>10 tot 15 dB</strong> verhogen t.o.v. de jaargemiddelde situatie. Model: best 0 dB, middel +5 dB, worst +12 dB. Bron: Positioning Paper Laagfrequent Geluid en Windturbines (bijlage).</li>
+        <li><strong>Toren-/gondelzog-effect:</strong> bij grotere turbines (5–10+ MW klasse) kan interferentie met het zog van toren en gondel het geluid lokaal verhogen, met het sterkste effect binnen circa 1000 m, uitdovend richting 2000 m. Model: best 0 dB, middel +2 dB, worst +5 dB. Bron: Positionpaper Geluidpropagatie Windturbines (bijlage, voetnoot 5).</li>
+        <li><strong>Amplitudemodulatie (AM/OAM):</strong> het karakteristieke "swish"-geluid kan 's nachts intensiveren of van karakter veranderen ("thump"). Model: best 0 dB, middel +1 dB, worst +3 dB.</li>
+        <li><strong>Curtailment/stall-gebaseerde afregeling (optioneel):</strong> toerental- of pitch-afregeling nabij de stall-hoek kan lokale stroomafscheiding en daarmee OAM versterken in plaats van verminderen — zoals gedocumenteerd bij <a href="https://windpowernl.com/2023/07/26/preliminary-results-noise-measurement-study-at-n33-wind-farm-show-possible-relation-humming-sounds-with-curtailment/" target="_blank" rel="noopener">Windpark N33</a> (<a href="https://geluidnieuws.nl/home/overlast-windmolens-n33-vooral-tijdens-curtailment/" target="_blank" rel="noopener">Geluidnieuws</a>) en onderzocht in <a href="https://publications.tno.nl/publication/34644559/QRWhHojF/TNO-2025-R10988.pdf" target="_blank" rel="noopener">TNO-2025-R10988</a>. Model (indien aangevinkt): middel +1 dB, worst +2 dB.</li>
+      </ul>
+    </div>
+
+    <div class="method-section">
+      <h3>4. Beperkingen van dit model</h3>
+      <ul>
+        <li>De kaart is een schematische weergave op ware afstandsschaal, geen georefereerd terreinmodel — bodemdemping, obstakels, reflecties en lokale topografie zijn niet meegenomen.</li>
+        <li>De richtingsfit is gebaseerd op een beperkt aantal Evans &amp; Cooper-datapunten (120–1000 m) en wordt hier geëxtrapoleerd tot 2000 m; op grotere afstand nemen infrasone en atmosferische effecten relatief toe, wat dit model vereenvoudigt.</li>
+        <li>Scenariofactoren zijn optelbaar aangenomen (energetisch, niet logaritmisch samengesteld) voor transparantie; in werkelijkheid kunnen effecten deels overlappen of elkaar versterken.</li>
+        <li>Dit model dient ter illustratie van beleidsmatige gevoeligheid van aannames — het vervangt geen akoestisch onderzoek of formele geluidsmeting conform de Activiteitenregeling milieubeheer.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Interactief model · gebaseerd op de bijgevoegde position papers "Geluidpropagatie windturbines" en "Laagfrequent geluid en windturbines", Evans &amp; Cooper (2012), Hubbard &amp; Shepherd (1990, NASA), IEC 61672-1 en TNO-2025-R10988. Uitsluitend voor beleidsmatige illustratie — geen formele akoestische beoordeling.
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
