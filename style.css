@@ -8,6 +8,9 @@ html {
 }
 body { min-height: 100dvh; line-height: 1.6; font-family: var(--font-body, sans-serif); font-size: var(--text-base); color: var(--color-text); background-color: var(--color-bg); }
 img, picture, video, canvas, svg { display: block; max-width: 100%; height: auto; }
+.leaflet-container canvas,
+.leaflet-container img,
+.leaflet-container svg { max-width: none; height: auto; width: auto; }
 ul[role='list'], ol[role='list'] { list-style: none; }
 input, button, textarea, select { font: inherit; color: inherit; }
 h1, h2, h3, h4, h5, h6 { text-wrap: balance; line-height: 1.15; }
