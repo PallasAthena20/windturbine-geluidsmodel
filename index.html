@@ -174,7 +174,7 @@
       <span class="module-num">Module 3</span>
       <h2>Kaart — turbines plaatsen en geluid per categorie</h2>
     </div>
-    <p class="module-desc">Plaats windturbines op de kaart van Nederland — door te klikken, door een adres/plaats te zoeken, of door coördinaten in te voeren (max. 8). Voor elke turbine worden zeven ringen getekend op 500 / 700 / 900 / 1100 / 1300 / 1500 / 5000 m, gekleurd naar het berekende niveau in de actieve geluidscategorie — inclusief windrichting, dag/nacht en de gekozen scenariofactoren. De instellingen uit Module 1 en 2 gelden voor elke geplaatste turbine afzonderlijk (zonder onderlinge cumulatie, zie Methodologie).</p>
+    <p class="module-desc">Plaats windturbines op de kaart van Nederland — door te klikken, door een adres/plaats te zoeken, of door coördinaten in te voeren (max. 8). Voor elke turbine worden acht ringen getekend op 500 / 700 / 900 / 1100 / 1300 / 1500 / 2000 / 5000 m, gekleurd naar het berekende niveau in de actieve geluidscategorie — inclusief windrichting, dag/nacht en de gekozen scenariofactoren. Door elke turbine loopt een pijl: het <span class="dw-tag">rode deel</span> wijst downwind (geluid draagt verder), het <span class="uw-tag">groene deel</span> wijst upwind (geluid dooft sneller). De instellingen uit Module 1 en 2 gelden voor elke geplaatste turbine afzonderlijk — zie Module 4 voor de cumulatie van meerdere turbines samen.</p>
 
     <div class="cat-tabs" id="category-tabs" role="tablist" aria-label="Geluidscategorie">
       <button type="button" class="cat-tab cat-hoorbaar" data-category="hoorbaar" aria-pressed="true">Hoorbaar geluid<span class="cat-tab-sub">≈200 Hz–20 kHz · dB(A)</span></button>
@@ -206,6 +206,7 @@
         </div>
         <div class="map-toolbar">
           <span class="turbine-count" id="turbine-count">0 / 8 turbines geplaatst</span>
+          <span class="wind-indicator" id="m3-wind-indicator"></span>
           <button type="button" class="clear-btn" id="clear-turbines">Wis alle turbines</button>
         </div>
         <div class="map-container">
@@ -235,6 +236,36 @@
           <p class="callout" id="infrasound-callout"></p>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- MODULE 4 -->
+  <section class="module" id="module-4">
+    <div class="module-head">
+      <span class="module-num">Module 4</span>
+      <h2>Cumulatie van meerdere turbines</h2>
+    </div>
+    <p class="module-desc">Module 3 berekent elke turbine afzonderlijk. In werkelijkheid telt geluid van meerdere turbines op eenzelfde punt <strong>energetisch (logaritmisch)</strong> op: L<sub>totaal</sub> = 10 log₁₀ Σ 10<sup>(L<sub>i</sub>/10)</sup>. Deze module kiest voor elke geplaatste turbine het downwind-referentiepunt op de gekozen afstand en telt daar de bijdrage van <em>alle</em> geplaatste turbines samen — inclusief hun eigen, werkelijke afstand en hoek tot dat punt. Categorie volgt de actieve tab in Module 3.</p>
+
+    <div class="cum-controls">
+      <div class="cum-field">
+        <label for="cum-distance-select">Referentieafstand (downwind van elke turbine)</label>
+        <select id="cum-distance-select"></select>
+      </div>
+      <label class="cum-toggle">
+        <input type="checkbox" id="cum-show-receptors">
+        Toon referentiepunten op de kaart
+      </label>
+    </div>
+
+    <div class="cum-result-wrap">
+      <table class="data-table cum-table">
+        <thead>
+          <tr><th>Referentiepunt van</th><th>Alleen deze turbine</th><th>Cumulatief (alle turbines)</th><th>Verschil door cumulatie</th></tr>
+        </thead>
+        <tbody id="cum-table-body"><tr><td colspan="4" class="empty-row">Plaats minstens één turbine op de kaart in Module 3 om cumulatie te berekenen.</td></tr></tbody>
+      </table>
+      <p class="callout" id="cum-callout"></p>
     </div>
   </section>
 
@@ -285,7 +316,7 @@
         <li>De richtingsfit is gebaseerd op een beperkt aantal Evans &amp; Cooper-datapunten (120–1000 m, gemeten in dB(A)) en wordt hier geëxtrapoleerd tot 5000 m en naar de twee andere categorieën; dit is een modelmatige aanname, geen meting (zie §2).</li>
         <li>De 8/16/31,5 Hz-banden zijn geëxtrapoleerd met een vaste +3 dB/octaaf-regel (RSG 2016) en niet gemeten voor het specifieke referentieturbinetype; werkelijke infrasone spectra kunnen per turbine en omstandigheid afwijken.</li>
         <li>Scenariofactoren (windschering, torenzog, AM, curtailment) zijn optelbaar aangenomen en identiek toegepast op alle drie categorieën en op elke geplaatste turbine — in werkelijkheid kunnen deze effecten per frequentiegebied verschillen en elkaar deels overlappen of versterken.</li>
-        <li>Bij meerdere turbines op de kaart wordt elke turbine onafhankelijk berekend; er vindt geen akoestische sommatie tussen turbines plaats (cumulatieve geluidsbelasting van een windpark vereist een aparte, energetische optelling per rekenpunt).</li>
+        <li>Module 3 berekent elke turbine onafhankelijk. Module 4 telt de bijdragen energetisch op voor één vast type rekenpunt (het downwind-punt van elke turbine op een gekozen afstand) — dit is een vereenvoudigde benadering, geen volledig rekenraster over het gebied zoals een formeel akoestisch onderzoek zou gebruiken. Bij turbines die zeer dicht bij elkaar staan (dichter dan de gekozen referentieafstand) kan de onderliggende richtingsfit minder betrouwbaar worden, omdat die is gefit op afstanden vanaf 120 m.</li>
         <li>Dit model dient ter illustratie van beleidsmatige gevoeligheid van aannames — het vervangt geen akoestisch onderzoek of formele geluidsmeting conform de Activiteitenregeling milieubeheer.</li>
       </ul>
     </div>
@@ -293,7 +324,7 @@
 </main>
 
 <footer>
-  Interactief model · gebaseerd op de bijgevoegde position papers "Geluidpropagatie windturbines" en "Laagfrequent geluid en windturbines", <a href="https://www.uknown.co.uk/wp-content/uploads/2016/01/AV1300R02_Evans_Cooper_2012.pdf" target="_blank" rel="noopener">Evans &amp; Cooper (2012)</a>, <a href="https://ntrs.nasa.gov/citations/19910006812" target="_blank" rel="noopener">Hubbard &amp; Shepherd (1990, NASA)</a>, <a href="https://webstore.iec.ch/publication/2977" target="_blank" rel="noopener">IEC 61672-1</a>, <a href="https://www.iso.org/standard/13813.html" target="_blank" rel="noopener">ISO 7196</a>, <a href="https://tethys.pnnl.gov/sites/default/files/publications/RSG-2016-Report.pdf" target="_blank" rel="noopener">RSG (2016)</a>, <a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson et al. (2026)</a> en <a href="https://publications.tno.nl/publication/34644559/QRWhHojF/TNO-2025-R10988.pdf" target="_blank" rel="noopener">TNO-2025-R10988</a>. Kaartlagen &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-contributors, &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>. Uitsluitend voor beleidsmatige illustratie — geen formele akoestische beoordeling.
+  Interactief model · gebaseerd op de bijgevoegde position papers "Geluidpropagatie windturbines" en "Laagfrequent geluid en windturbines", <a href="https://www.uknown.co.uk/wp-content/uploads/2016/01/AV1300R02_Evans_Cooper_2012.pdf" target="_blank" rel="noopener">Evans &amp; Cooper (2012)</a>, <a href="https://ntrs.nasa.gov/citations/19910006812" target="_blank" rel="noopener">Hubbard &amp; Shepherd (1990, NASA)</a>, <a href="https://webstore.iec.ch/publication/2977" target="_blank" rel="noopener">IEC 61672-1</a>, <a href="https://www.iso.org/standard/13813.html" target="_blank" rel="noopener">ISO 7196</a>, <a href="https://tethys.pnnl.gov/sites/default/files/publications/RSG-2016-Report.pdf" target="_blank" rel="noopener">RSG (2016)</a>, <a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson et al. (2026)</a> en <a href="https://publications.tno.nl/publication/34644559/QRWhHojF/TNO-2025-R10988.pdf" target="_blank" rel="noopener">TNO-2025-R10988</a>. Kaartlagen © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-contributors, © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>. Geocodering via de <a href="https://www.pdok.nl/introductie/-/article/pdok-locatieserver" target="_blank" rel="noopener">PDOK Locatieserver</a> (Kadaster). Uitsluitend voor beleidsmatige illustratie — geen formele akoestische beoordeling.
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

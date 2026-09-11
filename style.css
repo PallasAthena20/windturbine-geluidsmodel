@@ -299,8 +299,14 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 
 .map-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); flex-wrap: wrap; }
 .turbine-count { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); }
+.wind-indicator { font-size: var(--text-xs); color: var(--color-text-muted); flex: 1 1 auto; text-align: center; min-width: 180px; }
+.wind-indicator .dw-tag { color: var(--color-error); font-weight: 700; }
+.wind-indicator .uw-tag { color: var(--color-success); font-weight: 700; }
 .clear-btn { padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1.5px solid var(--color-border); background: var(--color-surface-2); font-size: var(--text-xs); font-weight: 600; color: var(--color-text); }
 .clear-btn:hover { border-color: var(--color-error); color: var(--color-error); }
+
+.dw-tag { color: var(--color-error); font-weight: 700; }
+.uw-tag { color: var(--color-success); font-weight: 700; }
 
 .map-container { position: relative; border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--color-border); }
 #turbine-map { width: 100%; height: 520px; background: var(--color-surface-2); }
@@ -317,6 +323,9 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .empty-map-hint.warn { background: var(--color-error); color: var(--color-text-inverse); }
 
 .turbine-marker-icon { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
+.wind-arrow-icon { pointer-events: none; }
+.wind-arrow-rotate { width: 100%; height: 100%; transition: transform 220ms ease; }
+.receptor-marker-icon { pointer-events: none; }
 .turbine-popup { font-family: var(--font-body); font-size: var(--text-sm); color: #1c2b28; }
 .popup-remove-btn { margin-top: var(--space-2); padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: 1px solid #a1332f; color: #a1332f; background: #fbfaf7; font-size: var(--text-xs); font-weight: 600; }
 .popup-remove-btn:hover { background: #ecd4cf; }
@@ -355,6 +364,22 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .method-section a { color: var(--color-primary); text-decoration: underline; text-decoration-color: color-mix(in oklab, var(--color-primary) 40%, transparent); }
 .method-section a:hover { color: var(--color-primary-hover); }
 .callout { background: var(--color-warning-highlight); border-left: 3px solid var(--color-warning); border-radius: var(--radius-md); padding: var(--space-4); font-size: var(--text-sm); color: var(--color-text); margin: var(--space-4) 0; }
+
+/* ============ Module 4: cumulatie ============ */
+.cum-controls { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-5); flex-wrap: wrap; margin-bottom: var(--space-5); background: var(--color-surface-offset); border-radius: var(--radius-lg); padding: var(--space-5); }
+.cum-field { display: flex; flex-direction: column; gap: var(--space-2); }
+.cum-field label { font-size: var(--text-sm); font-weight: 600; }
+.cum-field select { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border: 1.5px solid var(--color-border); background: var(--color-surface-2); font-family: var(--font-mono); font-size: var(--text-sm); min-width: 12ch; }
+.cum-toggle { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+.cum-toggle input { width: 1.1em; height: 1.1em; accent-color: var(--color-primary); }
+.cum-result-wrap { background: var(--color-surface-offset); border-radius: var(--radius-lg); padding: var(--space-5); }
+.cum-table td.cum-own { font-family: var(--font-mono); }
+.cum-table td.cum-total { font-family: var(--font-mono); font-weight: 700; color: var(--color-primary); }
+.cum-table td.cum-diff { font-family: var(--font-mono); font-weight: 700; }
+.cum-table td.cum-diff.up { color: var(--color-error); }
+.cum-table td.cum-diff.flat { color: var(--color-text-muted); }
+.receptor-popup { font-size: var(--text-xs); font-family: var(--font-body); }
+.receptor-popup strong { font-family: var(--font-mono); }
 
 footer { text-align: center; padding: var(--space-10) var(--space-6); color: var(--color-text-faint); font-size: var(--text-xs); border-top: 1px solid var(--color-divider); }
 

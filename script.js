@@ -125,8 +125,9 @@ function lpAt(d, x, categoryKey, lwCat, state) {
 const state = {
   lwa: 106.0, windBearing: 0, daynight: 'dag', scenario: 'best', curtailment: false,
   category: 'hoorbaar', turbines: [], selectedTurbineId: null,
+  cumDistance: 500, cumShowReceptors: false,
 };
-const DISTANCES = [500, 700, 900, 1100, 1300, 1500, 5000];
+const DISTANCES = [500, 700, 900, 1100, 1300, 1500, 2000, 5000];
 const DIR_LABELS = { N: 'het noorden', NE: 'het noordoosten', E: 'het oosten', SE: 'het zuidoosten', S: 'het zuiden', SW: 'het zuidwesten', W: 'het westen', NW: 'het noordwesten' };
 const OPPOSITE_LABEL = { N: 'zuiden', NE: 'zuidwesten', E: 'westen', SE: 'noordwesten', S: 'noorden', SW: 'noordoosten', W: 'oosten', NW: 'zuidoosten' };
 const MAX_TURBINES = 8;
@@ -170,6 +171,11 @@ const latInput = document.getElementById('lat-input');
 const lngInput = document.getElementById('lng-input');
 const addTurbineBtn = document.getElementById('add-turbine-btn');
 const locStatus = document.getElementById('loc-status');
+const m3WindIndicator = document.getElementById('m3-wind-indicator');
+const cumDistanceSelect = document.getElementById('cum-distance-select');
+const cumShowReceptorsCheck = document.getElementById('cum-show-receptors');
+const cumTableBody = document.getElementById('cum-table-body');
+const cumCallout = document.getElementById('cum-callout');
 
 // ---------- Static: octave table ----------
 (function fillOctaveTable() {
@@ -273,13 +279,50 @@ function destPoint(lat, lng, bearingDeg, distM) {
   const lng2 = lng1 + Math.atan2(Math.sin(brng) * Math.sin(dR) * Math.cos(lat1), Math.cos(dR) - Math.sin(lat1) * Math.sin(lat2));
   return [lat2 * 180 / Math.PI, ((lng2 * 180 / Math.PI) + 540) % 360 - 180];
 }
+function haversineDist(lat1, lng1, lat2, lng2) {
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_R * Math.asin(Math.sqrt(a));
+}
+function bearingBetween(lat1, lng1, lat2, lng2) {
+  const toRad = d => d * Math.PI / 180, toDeg = r => r * 180 / Math.PI;
+  const y = Math.sin(toRad(lng2 - lng1)) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lng2 - lng1));
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
 
 // ---------- Leaflet map ----------
 const RING_SEGMENTS = 16;
 const ARC_SUBSTEPS = 4;
-let map, mapRenderer, turbineLayer, tileLayer;
+let map, mapRenderer, turbineLayer, tileLayer, turbineArrowLayer, receptorLayer;
 const turbineRingGroups = new Map(); // id -> L.LayerGroup
 const turbineMarkers = new Map();    // id -> L.Marker
+const turbineWindArrows = new Map(); // id -> L.Marker (divIcon, rotated in place)
+
+const WIND_ARROW_SIZE = 74;
+function windArrowIcon() {
+  const c = WIND_ARROW_SIZE / 2;
+  return L.divIcon({
+    className: 'wind-arrow-icon',
+    html: `<div class="wind-arrow-rotate"><svg width="${WIND_ARROW_SIZE}" height="${WIND_ARROW_SIZE}" viewBox="0 0 ${WIND_ARROW_SIZE} ${WIND_ARROW_SIZE}">
+      <line x1="${c}" y1="${c}" x2="${c}" y2="8" stroke="#a1332f" stroke-width="3" stroke-linecap="round"/>
+      <path d="M${c} 8 L${c - 6} 19 L${c + 6} 19 Z" fill="#a1332f"/>
+      <line x1="${c}" y1="${c}" x2="${c}" y2="${WIND_ARROW_SIZE - 8}" stroke="#3d7a4a" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 5"/>
+      <circle cx="${c}" cy="${WIND_ARROW_SIZE - 8}" r="3.5" fill="#3d7a4a"/>
+    </svg></div>`,
+    iconSize: [WIND_ARROW_SIZE, WIND_ARROW_SIZE],
+    iconAnchor: [WIND_ARROW_SIZE / 2, WIND_ARROW_SIZE / 2],
+  });
+}
+function updateWindArrowRotations() {
+  const downwindBearing = (state.windBearing + 180) % 360;
+  turbineWindArrows.forEach(marker => {
+    const el = marker.getElement();
+    const inner = el && el.querySelector('.wind-arrow-rotate');
+    if (inner) inner.style.transform = `rotate(${downwindBearing}deg)`;
+  });
+}
 
 const TURBINE_ICON_SVG = (color) => `<svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg">
   <g transform="translate(13,12)">
@@ -311,7 +354,9 @@ function initMap() {
     renderer: mapRenderer,
     zoomControl: true,
   });
+  turbineArrowLayer = L.layerGroup().addTo(map);
   turbineLayer = L.layerGroup().addTo(map);
+  receptorLayer = L.layerGroup().addTo(map);
   applyMapTileTheme();
 
   map.on('click', (e) => {
@@ -346,11 +391,12 @@ function applyMapTileTheme() {
   if (!map) return;
   if (tileLayer) map.removeLayer(tileLayer);
   const url = currentTheme === 'dark'
-    ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
-    : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
   tileLayer = L.tileLayer(url, {
-    attribution: '&copy; <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>, HERE, Garmin, FAO, NOAA, USGS',
-    maxZoom: 16,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-contributors, &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
+    subdomains: 'abcd',
+    maxZoom: 19,
   });
   tileLayer.addTo(map);
   tileLayer.setZIndex(0);
@@ -370,6 +416,9 @@ function addTurbine(lat, lng) {
   });
   turbineMarkers.set(id, marker);
 
+  const arrowMarker = L.marker([lat, lng], { icon: windArrowIcon(), interactive: false, keyboard: false }).addTo(turbineArrowLayer);
+  turbineWindArrows.set(id, arrowMarker);
+
   const group = L.layerGroup().addTo(map);
   turbineRingGroups.set(id, group);
 
@@ -380,6 +429,8 @@ function addTurbine(lat, lng) {
 function removeTurbine(id) {
   const marker = turbineMarkers.get(id);
   if (marker) { turbineLayer.removeLayer(marker); turbineMarkers.delete(id); }
+  const arrowMarker = turbineWindArrows.get(id);
+  if (arrowMarker) { turbineArrowLayer.removeLayer(arrowMarker); turbineWindArrows.delete(id); }
   const group = turbineRingGroups.get(id);
   if (group) { map.removeLayer(group); turbineRingGroups.delete(id); }
   state.turbines = state.turbines.filter(t => t.id !== id);
@@ -394,6 +445,8 @@ function clearAllTurbines() {
   turbineRingGroups.clear();
   turbineMarkers.forEach(m => turbineLayer.removeLayer(m));
   turbineMarkers.clear();
+  turbineWindArrows.forEach(m => turbineArrowLayer.removeLayer(m));
+  turbineWindArrows.clear();
   state.turbines = [];
   state.selectedTurbineId = null;
   render();
@@ -422,7 +475,7 @@ function ringsForTurbine(turbine, lwCat) {
       }
       polylines.push(L.polyline(pts, {
         color: colorForDb(db, cat.domainMin, cat.domainMax),
-        weight: 6, opacity: 0.85, lineCap: 'butt', interactive: false, renderer: mapRenderer,
+        weight: 2.5, opacity: 0.85, lineCap: 'butt', interactive: false, renderer: mapRenderer,
       }));
     }
   });
@@ -459,6 +512,10 @@ function render() {
   const downwindBearing = (state.windBearing + 180) % 360;
   windLabel.textContent = `Wind uit ${DIR_LABELS[state.windDir]} (${state.windDir}) → geluid draagt naar het ${OPPOSITE_LABEL[state.windDir]}`;
   arrowGroup.setAttribute('transform', `rotate(${downwindBearing} 100 100)`);
+  if (m3WindIndicator) {
+    m3WindIndicator.innerHTML = `Wind uit ${state.windDir} · <span class="dw-tag">rood = downwind</span> · <span class="uw-tag">groen = upwind</span>`;
+  }
+  updateWindArrowRotations();
 
   // curtailment enable/disable
   if (state.scenario === 'best') {
@@ -525,6 +582,7 @@ function render() {
   }
 
   renderAllTurbineRings();
+  renderCumulativeModule(catLw);
 }
 
 // ---------- Locatie toevoegen: adreszoeker (PDOK Locatieserver) & coordinaten ----------
@@ -668,6 +726,72 @@ addTurbineBtn.addEventListener('click', () => {
   latInput.value = '';
   lngInput.value = '';
 });
+
+// ---------- Module 4: cumulatie ----------
+cumDistanceSelect.innerHTML = DISTANCES.map(d => `<option value="${d}">${d} m</option>`).join('');
+cumDistanceSelect.value = String(state.cumDistance);
+cumDistanceSelect.addEventListener('change', () => {
+  state.cumDistance = parseInt(cumDistanceSelect.value, 10);
+  render();
+});
+cumShowReceptorsCheck.addEventListener('change', () => {
+  state.cumShowReceptors = cumShowReceptorsCheck.checked;
+  render();
+});
+
+function renderCumulativeModule(catLw) {
+  receptorLayer.clearLayers();
+  const cat = CATEGORY[state.category];
+  const lwCat = catLw[state.category];
+  const downwindBearing = (state.windBearing + 180) % 360;
+  const d = state.cumDistance;
+
+  if (state.turbines.length === 0) {
+    cumTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Plaats minstens één turbine op de kaart in Module 3 om cumulatie te berekenen.</td></tr>`;
+    cumCallout.textContent = '';
+    return;
+  }
+
+  const rows = state.turbines.map(anchor => {
+    const receptor = destPoint(anchor.lat, anchor.lng, downwindBearing, d);
+    const ownLevel = lpAt(d, 1, state.category, lwCat, state);
+    const contributions = state.turbines.map(t => {
+      const dist = Math.max(haversineDist(receptor[0], receptor[1], t.lat, t.lng), 30);
+      const bearingFromTurbine = bearingBetween(t.lat, t.lng, receptor[0], receptor[1]);
+      const x = xFromAngle(bearingFromTurbine, downwindBearing);
+      return lpAt(dist, x, state.category, lwCat, state);
+    });
+    const total = logSum(contributions);
+    const diff = total - ownLevel;
+    return { anchor, receptor, ownLevel, total, diff };
+  });
+
+  cumTableBody.innerHTML = rows.map(r => {
+    const diffClass = r.diff >= 0.15 ? 'up' : 'flat';
+    const diffText = (r.diff >= 0 ? '+' : '') + r.diff.toFixed(1) + ' dB';
+    return `<tr><td>Turbine #${r.anchor.id} · ${d} m downwind</td><td class="cum-own">${r.ownLevel.toFixed(1)}</td><td class="cum-total">${r.total.toFixed(1)}</td><td class="cum-diff ${diffClass}">${diffText}</td></tr>`;
+  }).join('');
+
+  const maxDiff = Math.max(...rows.map(r => r.diff));
+  const cat_unit = cat.unit;
+  if (state.turbines.length === 1) {
+    cumCallout.textContent = `Met één turbine is er niets om mee te cumuleren — "cumulatief" is hier gelijk aan de eigen bijdrage. Plaats een tweede turbine om het effect van optelling te zien.`;
+  } else if (maxDiff < 0.15) {
+    cumCallout.textContent = `Bij de huidige turbineposities en windrichting dragen de andere turbines vrijwel niets bij op de downwind-referentiepunten (< 0,15 dB extra) — ze staan te ver uit elkaar of niet in elkaars downwind-lijn op ${d} m.`;
+  } else {
+    cumCallout.textContent = `Op minstens één referentiepunt loopt het niveau door cumulatie met +${maxDiff.toFixed(1)} ${cat_unit} op ten opzichte van de losse turbine — energetische optelling (10·log₁₀ Σ 10^(L/10)) van de bijdragen van alle geplaatste turbines op dat punt.`;
+  }
+
+  if (state.cumShowReceptors) {
+    rows.forEach(r => {
+      const marker = L.circleMarker(r.receptor, {
+        radius: 5, color: '#1c2b28', weight: 1.5, fillColor: colorForDb(r.total, cat.domainMin, cat.domainMax), fillOpacity: 0.95, interactive: true, renderer: mapRenderer,
+      });
+      marker.bindTooltip(`<div class="receptor-popup">Referentiepunt turbine #${r.anchor.id}<br>Cumulatief: <strong>${r.total.toFixed(1)} ${cat_unit}</strong></div>`, { direction: 'top', offset: [0, -4] });
+      marker.addTo(receptorLayer);
+    });
+  }
+}
 
 // ---------- Wire up turbine controls & init ----------
 clearTurbinesBtn.addEventListener('click', clearAllTurbines);
