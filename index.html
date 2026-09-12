@@ -350,6 +350,51 @@
     </div>
   </section>
 
+<!-- MODULE 6 -->
+  <section class="module" id="module-6">
+    <div class="module-head">
+      <span class="module-num">Module 6</span>
+      <h2>Hoe vaak komt het nacht-scenario best/midden/worst voor?</h2>
+    </div>
+    <p class="module-desc">De scenario's <strong>best</strong>, <strong>middel</strong> en <strong>worst</strong> uit Module 2/3 zijn geen willekeurige keuze — ze corresponderen met de atmosferische stabiliteit 's nachts. Bij een <strong>stabiele atmosfeer</strong> (weinig turbulentie, vaak heldere/koude nachten met matige wind) ontstaat sterke windschering tussen ashoogte en de grond, wat de versterkende factoren (windschering, amplitudemodulatie) activeert die in Module 2 het worst-case scenario bepalen. Bij een <strong>neutrale/goed gemengde atmosfeer</strong> (meer bewolking, meer wind, overdag bijna altijd) treedt dit niet op — dat is het best-case scenario. Deze module schat, op basis van de <strong>positie van de turbine(s) uit Module 3</strong> en gepubliceerd meteorologisch onderzoek, hoeveel nachten per jaar en per maand elk scenario zich voordoet, en legt de relatie met windrichting.</p>
+
+    <div class="callout" id="m6-context-callout">Plaats minstens één turbine op de kaart in Module 3 om de schatting te koppelen aan die locatie. Zonder turbine wordt een landelijk gemiddelde (De Bilt, centraal Nederland) getoond.</div>
+
+    <h3 class="m6-subhead">Aandeel van de nachten per scenario</h3>
+    <div class="m6-pct-grid" id="m6-pct-grid"></div>
+    <p class="hint" id="m6-pct-explainer"></p>
+
+    <h3 class="m6-subhead">Dagen per jaar en per maand</h3>
+    <div class="data-table-card">
+      <table class="data-table m6-month-table" id="m6-month-table">
+        <thead>
+          <tr>
+            <th>Scenario</th>
+            <th>Dagen/jaar</th>
+            <th>jan</th><th>feb</th><th>mrt</th><th>apr</th><th>mei</th><th>jun</th>
+            <th>jul</th><th>aug</th><th>sep</th><th>okt</th><th>nov</th><th>dec</th>
+          </tr>
+        </thead>
+        <tbody id="m6-month-table-body"></tbody>
+      </table>
+    </div>
+    <p class="hint">Kalendermaanden waarin het scenario het vaakst voorkomt zijn donkerder gearceerd. De jaarverdeling volgt uit de nachtlengte per maand op de breedtegraad van de turbine (astronomisch berekend) — <strong>geen</strong> gemeten maandstatistiek (zie beperkingen).</p>
+
+    <h3 class="m6-subhead">Verband met windrichting</h3>
+    <p class="module-desc">Onderzoek naar nachtelijke <em>low-level jets</em> (een windscheringsverschijnsel dat rechtstreeks bijdraagt aan het worst-case mechanisme) op meetstation Cabauw laat zien dat de kans hierop samenhangt met de <strong>grootschalige (synoptische) windrichting</strong> — niet met lokale turbulentie alleen. Dit is een <strong>ander begrip</strong> dan de voortplantingsrichting die elders in dit model (Module 3–5, de kompas-instelling) bepaalt of een ontvangpunt downwind/crosswind/upwind van de turbine ligt. De onderstaande risico-index is illustratief/kwalitatief, niet een gemeten kans per graad.</p>
+    <div class="m6-wind-wrap">
+      <div class="m6-compass" id="m6-compass" aria-hidden="true"></div>
+      <div class="m6-wind-readout">
+        <p class="callout" id="m6-wind-callout"></p>
+        <span class="hint">De richting hierboven volgt automatisch de windrichting-instelling in Module 3 (kompas). Verplaats die knop om te zien hoe de synoptische-risico-inschatting meebeweegt.</span>
+      </div>
+    </div>
+
+    <div class="callout m6-limitations">
+      <strong>Beperkingen:</strong> (1) een robuust, algemeen erkend 3-regime-model (best/middel/worst) bestaat niet in de vakliteratuur zelf — Bosveld e.a. (2020) verwerpen expliciet een derde, fysiek onderscheidbare regime en werken met twee regimes (wSBL/vSBL) binnen de stabiele nachten; de 50/50-verdeling tussen middel en worst hierboven is een benadering op basis van hun bevinding dat volhardend-wSBL en volhardend-vSBL nachten ongeveer even vaak voorkomen, niet een exacte meting van alle nachten. (2) De maandverdeling is een illustratieve, op nachtlengte gebaseerde verdeling — er bestaat geen gepubliceerde Nederlandse maandstatistiek van dit specifieke 3-scenario-model. (3) Het verband met windrichting is indirect/correlatief (via bewolking en synoptische patronen), niet causaal, en de risico-index is kwalitatief. (4) De afstand-tot-kust-interpolatie is een vereenvoudiging gebaseerd op slechts twee referentiestations (Cabauw inland, Lutjewad kust); tussenliggende locaties zijn een lineaire schatting, geen gemeten waarde.
+    </div>
+  </section>
+
   <!-- METHODOLOGY -->
   <section class="module" id="methodology">
     <div class="module-head">
@@ -402,11 +447,19 @@
         <li>Dit model dient ter illustratie van beleidsmatige gevoeligheid van aannames — het vervangt geen akoestisch onderzoek of formele geluidsmeting conform de Activiteitenregeling milieubeheer.</li>
       </ul>
     </div>
+
+    <div class="method-section">
+      <h3>5. Module 6 — frequentie van de nacht-scenario's</h3>
+      <p>Module 6 zet niet de dosis-effectrelatie op afstand centraal, maar de vraag <em>hoe vaak</em> de atmosferische condities optreden die in Module 2/3 het onderscheid tussen best/middel/worst bepalen. <a href="https://documents.dps.ny.gov/public/Common/ViewDoc.aspx?DocRefId=%7BC7734D7B-E8F8-4334-9690-6F023A8E95CE%7D&amp;DocTitle=ACWE%20Exh%20MH-R5%20Van%20den%20Berg%20Turbines%20Night%20JSV%202004" target="_blank" rel="noopener">Van den Berg (2004)</a> en <a href="https://docs.wind-watch.org/vandenberg-wind-farm-noise-Lmax-Lden.pdf" target="_blank" rel="noopener">Van den Berg (2008)</a> tonen dat een stabiele nachtelijke atmosfeer (Pasquill-klassen E+F) in Nederland optreedt tussen circa <strong>15%</strong> van de nachtelijke uren nabij de kust (Lutjewad, 2001–2007) en circa <strong>40%</strong> landinwaarts (Cabauw, 1986–1997). Dit model interpoleert lineair tussen die twee referentiepunten op basis van de afstand van de turbine(s) uit Module 3 tot de dichtstbijzijnde kustreferentie (12 vaste kustpunten), gekapt op 40% vanaf circa 50 km landinwaarts.</p>
+      <p>Binnen die "stabiele" nachten onderscheiden <a href="https://journals.ametsoc.org/view/journals/atsc/76/11/jas-d-19-0078.1.xml" target="_blank" rel="noopener">Bosveld, Van Hooijdonk, Holtslag e.a. (2020, deel I &amp; II)</a> op basis van een Hidden Markov-classificatie te Cabauw twee robuuste regimes: een <strong>zwak stabiele grenslaag (wSBL)</strong>, met aanhoudende turbulentie, en een <strong>zeer stabiele grenslaag (vSBL)</strong>, met zwakke/intermitterende turbulentie — het mechanisme dat het worst-case scenario aandrijft. De auteurs testten expliciet een derde-regimemodel en concludeerden dat dit <strong>niet</strong> fysisch robuust of onderscheidbaar is. Op landstations zoals Cabauw is circa 50% van alle nachten "volhardend" (het hele etmaal in één regime), waarbij volhardend-wSBL en volhardend-vSBL ongeveer even vaak voorkomen. Dit model gebruikt die 50/50-verhouding om de stabiele nachten te splitsen in "middel" (wSBL-achtig) en "worst" (vSBL-achtig) — een benadering, geen exacte meting van alle nachten (zie beperkingen).</p>
+      <p>De maandverdeling volgt de astronomische nachtlengte op de breedtegraad van de turbine: <a href="https://journals.ametsoc.org/view/journals/apme/48/8/2009jamc1965.1.xml" target="_blank" rel="noopener">Bosveld e.a. (2020)</a> en <a href="https://journals.ametsoc.org/view/journals/apme/48/8/2009jamc1965.1.pdf" target="_blank" rel="noopener">Baas e.a. (2009)</a> documenteren dat volhardend-vSBL-nachten vaker voorkomen bij kortere nachten (zomer) en volhardend-wSBL-nachten bij langere nachten (winter) — dit model vertaalt dat naar een gewogen verdeling over de 12 kalendermaanden, expliciet gelabeld als illustratief. Het verband met windrichting komt uit de klimatologie van nachtelijke <em>low-level jets</em> te Cabauw (<a href="https://journals.ametsoc.org/view/journals/apme/48/8/2009jamc1965.1.xml" target="_blank" rel="noopener">Baas, Bosveld, Baltink &amp; Holtslag, 2009</a>): een brede piek in frequentie bij geostrofische windrichtingen van 45°–180° (NO–Z, samenhangend met sterkere uitstraling bij continentale luchtmassa's met minder bewolking) en een secundaire piek bij 225°–270° (ZZW–W, samenhangend met de overheersende windrichting in Nederland), met weinig low-level jets bij noordelijke richtingen. Bosveld e.a. (2020) vonden dat de windrichting zelf het regime niet direct bepaalt (bewolking is de sterkste aanjager) — het verband is dus indirect/correlatief, niet causaal, en <strong>losstaand</strong> van de voortplantingsrichting (windBearing) die elders in dit model downwind/upwind bepaalt.</p>
+      <div class="callout">Beperkingen: zie de \"Beperkingen\"-callout onderaan Module 6 zelf voor de volledige lijst — dit is geen gemeten Nederlandse 3-scenario-statistiek, maar een op gepubliceerde klimatologie gebaseerde, transparant beredeneerde schatting.</div>
+    </div>
   </section>
 </main>
 
 <footer>
-  Interactief model · gebaseerd op de bijgevoegde position papers "Geluidpropagatie windturbines" en "Laagfrequent geluid en windturbines", <a href="https://www.uknown.co.uk/wp-content/uploads/2016/01/AV1300R02_Evans_Cooper_2012.pdf" target="_blank" rel="noopener">Evans &amp; Cooper (2012)</a>, <a href="https://ntrs.nasa.gov/citations/19910006812" target="_blank" rel="noopener">Hubbard &amp; Shepherd (1990, NASA)</a>, <a href="https://webstore.iec.ch/publication/2977" target="_blank" rel="noopener">IEC 61672-1</a>, <a href="https://www.iso.org/standard/13813.html" target="_blank" rel="noopener">ISO 7196</a>, <a href="https://tethys.pnnl.gov/sites/default/files/publications/RSG-2016-Report.pdf" target="_blank" rel="noopener">RSG (2016)</a>, <a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson et al. (2026)</a> en <a href="https://publications.tno.nl/publication/34644559/QRWhHojF/TNO-2025-R10988.pdf" target="_blank" rel="noopener">TNO-2025-R10988</a>. Kaartlagen © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-contributors, tegels via <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>/<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a>, gerenderd met <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a>. Geocodering via de <a href="https://www.pdok.nl/introductie/-/article/pdok-locatieserver" target="_blank" rel="noopener">PDOK Locatieserver</a> (Kadaster). Uitsluitend voor beleidsmatige illustratie — geen formele akoestische beoordeling.
+  Interactief model · gebaseerd op de bijgevoegde position papers "Geluidpropagatie windturbines" en "Laagfrequent geluid en windturbines", <a href="https://www.uknown.co.uk/wp-content/uploads/2016/01/AV1300R02_Evans_Cooper_2012.pdf" target="_blank" rel="noopener">Evans &amp; Cooper (2012)</a>, <a href="https://ntrs.nasa.gov/citations/19910006812" target="_blank" rel="noopener">Hubbard &amp; Shepherd (1990, NASA)</a>, <a href="https://webstore.iec.ch/publication/2977" target="_blank" rel="noopener">IEC 61672-1</a>, <a href="https://www.iso.org/standard/13813.html" target="_blank" rel="noopener">ISO 7196</a>, <a href="https://tethys.pnnl.gov/sites/default/files/publications/RSG-2016-Report.pdf" target="_blank" rel="noopener">RSG (2016)</a>, <a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson et al. (2026)</a> en <a href="https://publications.tno.nl/publication/34644559/QRWhHojF/TNO-2025-R10988.pdf" target="_blank" rel="noopener">TNO-2025-R10988</a>. Kaartlagen © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-contributors, tegels via <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>/<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a>, gerenderd met <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a>. Geocodering via de <a href="https://www.pdok.nl/introductie/-/article/pdok-locatieserver" target="_blank" rel="noopener">PDOK Locatieserver</a> (Kadaster). Module 6 (frequentie van de nacht-scenario's) is gebaseerd op <a href="https://documents.dps.ny.gov/public/Common/ViewDoc.aspx?DocRefId=%7BC7734D7B-E8F8-4334-9690-6F023A8E95CE%7D&amp;DocTitle=ACWE%20Exh%20MH-R5%20Van%20den%20Berg%20Turbines%20Night%20JSV%202004" target="_blank" rel="noopener">Van den Berg (2004)</a>, <a href="https://docs.wind-watch.org/vandenberg-wind-farm-noise-Lmax-Lden.pdf" target="_blank" rel="noopener">Van den Berg (2008)</a>, <a href="https://journals.ametsoc.org/view/journals/atsc/76/11/jas-d-19-0078.1.xml" target="_blank" rel="noopener">Bosveld e.a. (2020)</a> en <a href="https://journals.ametsoc.org/view/journals/apme/48/8/2009jamc1965.1.xml" target="_blank" rel="noopener">Baas e.a. (2009)</a>. Uitsluitend voor beleidsmatige illustratie — geen formele akoestische beoordeling.
   <div class="footer-copyright">© 2026 Athena. Alle rechten voorbehouden.</div>
 </footer>
 

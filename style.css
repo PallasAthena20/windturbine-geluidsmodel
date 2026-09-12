@@ -453,6 +453,38 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
   .norm-table th, .norm-table td { padding: var(--space-2) var(--space-2); white-space: nowrap; }
 }
 
+/* ============ Module 6: frequentie nacht-scenario's ============ */
+.m6-subhead { font-size: var(--text-base); font-weight: 700; margin: var(--space-6) 0 var(--space-3); color: var(--color-text); }
+.m6-pct-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); margin-bottom: var(--space-2); }
+.m6-pct-card { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-4); text-align: center; background: var(--color-surface); }
+.m6-pct-card .m6-pct-label { display: block; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-faint); font-weight: 700; margin-bottom: var(--space-2); }
+.m6-pct-card .m6-pct-value { display: block; font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: 700; line-height: 1; }
+.m6-pct-card .m6-pct-days { display: block; font-size: var(--text-xs); color: var(--color-text-faint); margin-top: var(--space-2); }
+.m6-pct-card .m6-pct-bar { height: 6px; border-radius: 4px; background: var(--color-border); margin-top: var(--space-3); overflow: hidden; }
+.m6-pct-card .m6-pct-bar-fill { height: 100%; border-radius: 4px; }
+.m6-pct-card.m6-best { border-left: 3px solid var(--color-success); }
+.m6-pct-card.m6-middel { border-left: 3px solid #d69e2e; }
+.m6-pct-card.m6-worst { border-left: 3px solid var(--color-error); }
+.m6-pct-card.m6-best .m6-pct-value { color: var(--color-success); } .m6-pct-card.m6-best .m6-pct-bar-fill { background: var(--color-success); }
+.m6-pct-card.m6-middel .m6-pct-value { color: #d69e2e; } .m6-pct-card.m6-middel .m6-pct-bar-fill { background: #d69e2e; }
+.m6-pct-card.m6-worst .m6-pct-value { color: var(--color-error); } .m6-pct-card.m6-worst .m6-pct-bar-fill { background: var(--color-error); }
+@media (max-width: 640px) { .m6-pct-grid { grid-template-columns: 1fr; } }
+
+.m6-month-table { min-width: 900px; }
+.m6-month-table th:first-child, .m6-month-table td:first-child { text-align: left; }
+.m6-month-table td.m6-month-cell { font-family: var(--font-mono); font-size: var(--text-xs); text-align: center; }
+@media (max-width: 640px) {
+  .m6-month-table { font-size: var(--text-xs); min-width: 820px; }
+  .m6-month-table th, .m6-month-table td { padding: var(--space-2) var(--space-2); white-space: nowrap; }
+}
+
+.m6-wind-wrap { display: flex; gap: var(--space-6); align-items: center; flex-wrap: wrap; margin-top: var(--space-4); }
+.m6-compass { position: relative; width: 180px; height: 180px; border-radius: 50%; border: 1px solid var(--color-border); flex-shrink: 0; background: var(--color-surface); }
+.m6-wind-readout { flex: 1; min-width: 220px; }
+@media (max-width: 640px) { .m6-wind-wrap { justify-content: center; } }
+
+.m6-limitations { font-size: var(--text-xs); }
+
 footer { text-align: center; padding: var(--space-10) var(--space-6); color: var(--color-text-faint); font-size: var(--text-xs); border-top: 1px solid var(--color-divider); }
 .footer-copyright { margin-top: var(--space-4); font-size: var(--text-xs); color: var(--color-text-faint); }
 

@@ -255,6 +255,7 @@ const clearTurbinesBtn3a = document.getElementById('clear-turbines-3a');
 const emptyMapHint3a = document.getElementById('empty-map-hint-3a');
 const ringLegend3a = document.getElementById('ring-legend-3a');
 const legendCaption3a = document.getElementById('legend-caption-3a');
+
 const miniScenario3a = document.getElementById('mini-scenario-3a');
 const miniSub3a = document.getElementById('mini-sub-3a');
 const normTableBody3a = document.getElementById('norm-table-body-3a');
@@ -508,6 +509,7 @@ function render() {
   renderCumulativeModule(catLw);
   renderNormModule();
   renderModule3a();
+  renderModule6();
 }
 
 // ---------- Locatie toevoegen: adreszoeker (PDOK Locatieserver) & coordinaten ----------
@@ -1060,6 +1062,218 @@ addTurbineBtn3a.addEventListener('click', () => {
 });
 
 clearTurbinesBtn3a.addEventListener('click', clearAllTurbines3a);
+
+
+
+// ============================================================
+// Module 6: frequentie van de nacht-scenario's (best/middel/worst)
+// Toont hoe vaak (dagen/jaar, dagen/maand) elk nacht-scenario optreedt,
+// gekoppeld aan de turbineposities uit Module 3 (state.turbines3a) en
+// aan de windrichting-instelling (state.windDir/windBearing).
+// Bronnen: Van den Berg (2004, 2008), Bosveld e.a. (2020), Baas e.a. (2009) — zie Verantwoording §5.
+// ============================================================
+const M6_COAST_POINTS = [
+  { name: 'Vlissingen', lat: 51.45, lng: 3.57 },
+  { name: 'Domburg', lat: 51.56, lng: 3.50 },
+  { name: 'Hoek van Holland', lat: 51.98, lng: 4.12 },
+  { name: 'Zandvoort', lat: 52.37, lng: 4.53 },
+  { name: 'IJmuiden', lat: 52.46, lng: 4.60 },
+  { name: 'Den Helder', lat: 52.93, lng: 4.76 },
+  { name: 'De Cocksdorp (Texel)', lat: 53.17, lng: 4.85 },
+  { name: 'Harlingen', lat: 53.17, lng: 5.42 },
+  { name: 'Holwerd', lat: 53.38, lng: 5.85 },
+  { name: 'Lauwersoog', lat: 53.40, lng: 6.22 },
+  { name: 'Delfzijl', lat: 53.33, lng: 6.93 },
+  { name: 'Renesse', lat: 51.73, lng: 3.78 },
+];
+const M6_DEFAULT_LAT = 52.11; // De Bilt fallback (centraal NL)
+const M6_DEFAULT_LNG = 5.18;
+const M6_STABLE_PCT_COAST = 15;   // Van den Berg (2008), Lutjewad-referentie (kust)
+const M6_STABLE_PCT_INLAND = 40;  // Van den Berg (2008), Cabauw-referentie (~50 km landinwaarts)
+const M6_INLAND_CAP_KM = 50;
+
+function m6TurbineAnchor() {
+  if (state.turbines3a.length === 0) return { lat: M6_DEFAULT_LAT, lng: M6_DEFAULT_LNG, isDefault: true };
+  const lat = state.turbines3a.reduce((s, t) => s + t.lat, 0) / state.turbines3a.length;
+  const lng = state.turbines3a.reduce((s, t) => s + t.lng, 0) / state.turbines3a.length;
+  return { lat, lng, isDefault: false };
+}
+
+function m6DistanceToCoastKm(lat, lng) {
+  let min = Infinity;
+  for (const p of M6_COAST_POINTS) {
+    const d = haversineDist(lat, lng, p.lat, p.lng) / 1000;
+    if (d < min) min = d;
+  }
+  return min;
+}
+
+function m6StablePct(distKm) {
+  const frac = Math.min(1, Math.max(0, distKm / M6_INLAND_CAP_KM));
+  return M6_STABLE_PCT_COAST + frac * (M6_STABLE_PCT_INLAND - M6_STABLE_PCT_COAST);
+}
+
+function m6ScenarioPercentages(lat, lng) {
+  const distKm = m6DistanceToCoastKm(lat, lng);
+  const stable = m6StablePct(distKm);
+  // Bosveld e.a. (2020): volhardend-wSBL (middel) en volhardend-vSBL (worst) ongeveer even vaak
+  // binnen de stabiele nachten — 50/50 als benadering, geen exacte meting van alle nachten.
+  const middel = stable / 2;
+  const worst = stable / 2;
+  const best = 100 - stable;
+  return { best, middel, worst, distKm, stable };
+}
+
+// ---------- Astronomische nachtlengte per maand (voor illustratieve maandverdeling) ----------
+function m6SolarDeclinationDeg(dayOfYear) {
+  // Cooper (1969)-benadering, gangbaar in daglicht-/zonnestand-modellen.
+  return 23.45 * Math.sin((2 * Math.PI / 365) * (284 + dayOfYear));
+}
+
+function m6DayLengthHours(latDeg, dayOfYear) {
+  const decl = m6SolarDeclinationDeg(dayOfYear) * Math.PI / 180;
+  const latRad = latDeg * Math.PI / 180;
+  let cosH = -Math.tan(latRad) * Math.tan(decl);
+  cosH = Math.max(-1, Math.min(1, cosH));
+  const H = Math.acos(cosH); // halve-daglengte-hoek in radialen
+  return (2 * H * 180 / Math.PI) / 15; // uren
+}
+
+const M6_MONTH_NAMES = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+const M6_DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const M6_MONTH_MID_DAY = [16, 45, 75, 105, 136, 166, 197, 228, 259, 289, 320, 350]; // dag-van-jaar, maandmidden
+
+function m6MonthlyDayNightLengths(latDeg) {
+  const nightLen = [];
+  const dayLen = [];
+  for (let m = 0; m < 12; m++) {
+    const dl = m6DayLengthHours(latDeg, M6_MONTH_MID_DAY[m]);
+    dayLen.push(dl);
+    nightLen.push(24 - dl);
+  }
+  return { nightLen, dayLen };
+}
+
+function m6Normalize(weights, totalDays) {
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const raw = weights.map(w => (w / sum) * totalDays);
+  const rounded = raw.map(Math.round);
+  let diff = totalDays - rounded.reduce((a, b) => a + b, 0);
+  if (diff !== 0) {
+    let idx = rounded.indexOf(Math.max(...rounded));
+    rounded[idx] += diff;
+  }
+  return rounded;
+}
+
+function m6ComputeAll() {
+  const anchor = m6TurbineAnchor();
+  const pct = m6ScenarioPercentages(anchor.lat, anchor.lng);
+  let bestDays = Math.round(pct.best / 100 * 365);
+  let middelDays = Math.round(pct.middel / 100 * 365);
+  let worstDays = 365 - bestDays - middelDays;
+  const { nightLen, dayLen } = m6MonthlyDayNightLengths(anchor.lat);
+  // Bosveld e.a. (2020): langere nachten (winter) -> meer volhardend-wSBL ("middel");
+  // kortere nachten (zomer) -> meer volhardend-vSBL ("worst"). Best case: gelijk verdeeld
+  // over dagen-per-maand (geen sterk seizoenspatroon gedocumenteerd voor de neutrale/goed-gemengde toestand).
+  const middelMonthly = m6Normalize(nightLen, middelDays);
+  const worstMonthly = m6Normalize(dayLen, worstDays);
+  const bestMonthly = m6Normalize(M6_DAYS_IN_MONTH, bestDays);
+  return {
+    anchor, pct,
+    days: { best: bestDays, middel: middelDays, worst: worstDays },
+    monthly: { best: bestMonthly, middel: middelMonthly, worst: worstMonthly },
+  };
+}
+
+// ---------- Windrichting-verband (illustratief/kwalitatief, Baas e.a. 2009) ----------
+// Bredere piek NO-Z (45-180°), secundaire piek ZZW-W (225-270°), laag bij noordelijke richtingen.
+const M6_WIND_RISK = { N: 20, NE: 55, E: 90, SE: 95, S: 70, SW: 55, W: 70, NW: 35 };
+function m6WindRiskLabel(idx) {
+  if (idx >= 80) return 'verhoogd';
+  if (idx >= 50) return 'gemiddeld';
+  return 'verlaagd';
+}
+
+function renderModule6() {
+  const grid = document.getElementById('m6-pct-grid');
+  if (!grid) return;
+  const explainer = document.getElementById('m6-pct-explainer');
+  const monthBody = document.getElementById('m6-month-table-body');
+  const contextCallout = document.getElementById('m6-context-callout');
+  const windCallout = document.getElementById('m6-wind-callout');
+  const compass = document.getElementById('m6-compass');
+
+  const result = m6ComputeAll();
+  const { anchor, pct, days, monthly } = result;
+
+  if (contextCallout) {
+    contextCallout.textContent = anchor.isDefault
+      ? `Nog geen turbine geplaatst in Module 3 — onderstaande cijfers gebruiken een landelijk gemiddelde (De Bilt, ${M6_DEFAULT_LAT.toFixed(2)}°N).`
+      : `Gebaseerd op ${state.turbines3a.length} turbine${state.turbines3a.length === 1 ? '' : 's'} uit Module 3, gemiddeld ${pct.distKm.toFixed(0)} km van de dichtstbijzijnde kustreferentie.`;
+  }
+
+  grid.innerHTML = `
+    <div class="m6-pct-card m6-best">
+      <span class="m6-pct-label">Best case</span>
+      <span class="m6-pct-value">${pct.best.toFixed(0)}%</span>
+      <span class="m6-pct-days">≈ ${days.best} nachten/jaar</span>
+      <div class="m6-pct-bar"><div class="m6-pct-bar-fill" style="width:${pct.best}%"></div></div>
+    </div>
+    <div class="m6-pct-card m6-middel">
+      <span class="m6-pct-label">Middel case</span>
+      <span class="m6-pct-value">${pct.middel.toFixed(0)}%</span>
+      <span class="m6-pct-days">≈ ${days.middel} nachten/jaar</span>
+      <div class="m6-pct-bar"><div class="m6-pct-bar-fill" style="width:${pct.middel}%"></div></div>
+    </div>
+    <div class="m6-pct-card m6-worst">
+      <span class="m6-pct-label">Worst case</span>
+      <span class="m6-pct-value">${pct.worst.toFixed(0)}%</span>
+      <span class="m6-pct-days">≈ ${days.worst} nachten/jaar</span>
+      <div class="m6-pct-bar"><div class="m6-pct-bar-fill" style="width:${pct.worst}%"></div></div>
+    </div>
+  `;
+
+  if (explainer) {
+    explainer.textContent = `Stabiele atmosfeer (middel + worst samen): ${pct.stable.toFixed(0)}% van de nachten, geïnterpoleerd tussen 15% (kust, Lutjewad) en 40% (landinwaarts, Cabauw) op basis van de afstand tot de kust — zie Verantwoording §5.`;
+  }
+
+  if (monthBody) {
+    const scenarios = [
+      { key: 'best', label: 'Best' },
+      { key: 'middel', label: 'Middel' },
+      { key: 'worst', label: 'Worst' },
+    ];
+    const maxByMonth = M6_MONTH_NAMES.map((_, m) => Math.max(monthly.best[m], monthly.middel[m], monthly.worst[m]));
+    monthBody.innerHTML = scenarios.map(sc => {
+      const cells = monthly[sc.key].map((v, m) => {
+        const isMax = v === maxByMonth[m] && v > 0;
+        return `<td class="m6-month-cell"${isMax ? ' style="font-weight:700;background:var(--color-surface-offset);"' : ''}>${v}</td>`;
+      }).join('');
+      return `<tr><td><strong>${sc.label}</strong></td><td class="m6-month-cell"><strong>${days[sc.key]}</strong></td>${cells}</tr>`;
+    }).join('');
+  }
+
+  // Windrichting: hergebruikt de bestaande state.windDir/windBearing-instelling uit Module 3.
+  const dir = state.windDir || 'N';
+  const idx = M6_WIND_RISK[dir] ?? 50;
+  const label = m6WindRiskLabel(idx);
+  if (windCallout) {
+    windCallout.textContent = `Huidige instelling: wind uit het ${dir} (Module 3). Volgens de Cabauw-klimatologie van nachtelijke low-level jets (Baas e.a. 2009) is de kans op omstandigheden die het worst-case-mechanisme bevorderen bij deze windrichting ${label} (illustratieve risico-index ${idx}/100).`;
+  }
+  if (compass) {
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const dots = dirs.map((d, i) => {
+      const angle = i * 45;
+      const risk = M6_WIND_RISK[d];
+      const active = d === dir;
+      const hue = risk >= 80 ? 'var(--color-error)' : risk >= 50 ? '#d69e2e' : 'var(--color-success)';
+      return `<div style="position:absolute;top:50%;left:50%;width:11px;height:11px;border-radius:50%;background:${hue};opacity:${active ? 1 : 0.35};transform:translate(-50%,-50%) rotate(${angle}deg) translateY(-78px);${active ? 'outline:2px solid var(--color-text);' : ''}" title="${d}: risico-index ${risk}"></div>`;
+    }).join('');
+    const centerLabel = `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:11px;font-weight:700;color:var(--color-text-faint);text-align:center;">${dir}<br><span style="font-size:9px;font-weight:400;">huidig</span></div>`;
+    compass.innerHTML = dots + centerLabel;
+  }
+}
 
 // ---------- Wire up turbine controls & init ----------
 initMap3a();
