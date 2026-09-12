@@ -15,7 +15,6 @@ let currentTheme = matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 
     t.innerHTML = currentTheme === 'dark'
       ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
       : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-    applyMapTileTheme();
     applyMapTileTheme3a();
     render();
   });
@@ -204,10 +203,7 @@ const curtailmentRow = document.getElementById('curtailment-row');
 const curtailmentCheck = document.getElementById('curtailment-check');
 const scenarioList = document.getElementById('scenario-list');
 const factorRows = document.getElementById('factor-rows');
-const ringLegend = document.getElementById('ring-legend');
-const legendCaption = document.getElementById('legend-caption');
 const worstCaseReadout = document.getElementById('worst-case-readout');
-const dataTableBody = document.getElementById('data-table-body');
 const normPresetSelect = document.getElementById('norm-preset-select');
 const normCustomLnightField = document.getElementById('norm-custom-lnight-field');
 const normCustomLnightInput = document.getElementById('norm-custom-lnight');
@@ -226,26 +222,7 @@ if (normPresetSelect) {
     render();
   });
 }
-const dataTableHead = document.getElementById('data-table-head');
-const dataTableTitle = document.getElementById('data-table-title');
-const miniScenario = document.getElementById('mini-scenario');
-const miniSub = document.getElementById('mini-sub');
 const categoryTabs = document.getElementById('category-tabs');
-const turbineCountEl = document.getElementById('turbine-count');
-const clearTurbinesBtn = document.getElementById('clear-turbines');
-const emptyMapHint = document.getElementById('empty-map-hint');
-const infrasoundCallout = document.getElementById('infrasound-callout');
-const locTabs = document.querySelectorAll('.loc-tab');
-const locFieldAdres = document.getElementById('loc-field-adres');
-const locFieldCoords = document.getElementById('loc-field-coords');
-const addressInput = document.getElementById('address-input');
-const addressSuggestions = document.getElementById('address-suggestions');
-const latInput = document.getElementById('lat-input');
-const lngInput = document.getElementById('lng-input');
-const pickOnMapBtn = document.getElementById('pick-on-map-btn');
-const addTurbineBtn = document.getElementById('add-turbine-btn');
-const locStatus = document.getElementById('loc-status');
-const m3WindIndicator = document.getElementById('m3-wind-indicator');
 const cumDistanceSelect = document.getElementById('cum-distance-select');
 const cumShowReceptorsCheck = document.getElementById('cum-show-receptors');
 const cumTableBody = document.getElementById('cum-table-body');
@@ -375,12 +352,6 @@ function colorForDb(db, domainMin, domainMax) {
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
-function buildRingLegend() {
-  const cat = CATEGORY[state.category];
-  ringLegend.innerHTML = DISTANCES.map(d => `<span class="ring-legend-item"><span class="ring-swatch" style="border-color:${RING_COLORS[d]}"></span>${d} m</span>`).join('');
-  legendCaption.textContent = `Ringkleur toont de afstand tot de turbine (niet het geluidsniveau) — de ${cat.label.toLowerCase()} (${cat.unit}) per afstand en richting staat in de tabel hiernaast.`;
-}
-
 // ---------- Geo helpers ----------
 const EARTH_R = 6371000;
 function destPoint(lat, lng, bearingDeg, distM) {
@@ -405,36 +376,7 @@ function bearingBetween(lat1, lng1, lat2, lng2) {
 }
 
 // ---------- Leaflet map ----------
-const RING_SEGMENTS = 16;
-const ARC_SUBSTEPS = 4;
-let map, mapRenderer, turbineLayer, tileLayer, turbineArrowLayer, receptorLayer;
-const turbineRingGroups = new Map(); // id -> L.LayerGroup
-const turbineMarkers = new Map();    // id -> L.Marker
-const turbineWindArrows = new Map(); // id -> L.Marker (divIcon, rotated in place)
-
 const WIND_ARROW_SIZE = 74;
-function windArrowIcon() {
-  const c = WIND_ARROW_SIZE / 2;
-  return L.divIcon({
-    className: 'wind-arrow-icon',
-    html: `<div class="wind-arrow-rotate"><svg width="${WIND_ARROW_SIZE}" height="${WIND_ARROW_SIZE}" viewBox="0 0 ${WIND_ARROW_SIZE} ${WIND_ARROW_SIZE}">
-      <line x1="${c}" y1="${c}" x2="${c}" y2="8" stroke="#a1332f" stroke-width="3" stroke-linecap="round"/>
-      <path d="M${c} 8 L${c - 6} 19 L${c + 6} 19 Z" fill="#a1332f"/>
-      <line x1="${c}" y1="${c}" x2="${c}" y2="${WIND_ARROW_SIZE - 8}" stroke="#3d7a4a" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="4 3.5"/>
-      <circle cx="${c}" cy="${WIND_ARROW_SIZE - 8}" r="4.5" fill="#3d7a4a"/>
-    </svg></div>`,
-    iconSize: [WIND_ARROW_SIZE, WIND_ARROW_SIZE],
-    iconAnchor: [WIND_ARROW_SIZE / 2, WIND_ARROW_SIZE / 2],
-  });
-}
-function updateWindArrowRotations() {
-  const downwindBearing = (state.windBearing + 180) % 360;
-  turbineWindArrows.forEach(marker => {
-    const el = marker.getElement();
-    const inner = el && el.querySelector('.wind-arrow-rotate');
-    if (inner) inner.style.transform = `rotate(${downwindBearing}deg)`;
-  });
-}
 
 const TURBINE_ICON_SVG = (color) => `<svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg">
   <g transform="translate(13,12)">
@@ -456,175 +398,9 @@ function turbineIcon(selected) {
   });
 }
 
-function initMap() {
-  mapRenderer = L.canvas({ padding: 0.4 });
-  map = L.map('turbine-map', {
-    center: [52.15, 5.3],
-    zoom: 7,
-    minZoom: 6,
-    maxZoom: 15,
-    renderer: mapRenderer,
-    zoomControl: true,
-  });
-  turbineArrowLayer = L.layerGroup().addTo(map);
-  turbineLayer = L.layerGroup().addTo(map);
-  receptorLayer = L.layerGroup().addTo(map);
-  applyMapTileTheme();
-
-  map.on('click', (e) => {
-    if (!pickModeArmed) return;
-    if (state.turbines.length >= MAX_TURBINES) {
-      flashEmptyHint(`Maximaal ${MAX_TURBINES} turbines geplaatst. Verwijder er eerst een via de kaart of "Wis alle turbines".`);
-      setPickMode(false);
-      return;
-    }
-    latInput.value = e.latlng.lat.toFixed(4);
-    lngInput.value = e.latlng.lng.toFixed(4);
-    setPickMode(false);
-    setLocStatus(`Locatie gekozen op de kaart: ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}. Klik op "Turbine toevoegen" om te bevestigen.`, 'success');
-  });
-}
-
-function flashEmptyHint(msg) {
-  emptyMapHint.textContent = msg;
-  emptyMapHint.classList.add('visible', 'warn');
-  clearTimeout(flashEmptyHint._t);
-  flashEmptyHint._t = setTimeout(() => {
-    emptyMapHint.classList.remove('warn');
-    updateEmptyHint();
-  }, 2600);
-}
-
-function updateEmptyHint() {
-  if (state.turbines.length === 0) {
-    emptyMapHint.textContent = 'Zoek een adres, voer co\u00f6rdinaten in, of klik op "Of wijs de locatie aan op de kaart" om een windturbine te plaatsen (max. ' + MAX_TURBINES + ').';
-    emptyMapHint.classList.add('visible');
-  } else {
-    emptyMapHint.classList.remove('visible');
-  }
-}
-
-let pickModeArmed = false;
-const PICK_HINT = 'Klik op de kaart om de turbinelocatie te kiezen\u2026';
-function setPickMode(on) {
-  pickModeArmed = on;
-  pickOnMapBtn.setAttribute('aria-pressed', String(on));
-  document.getElementById('turbine-map').classList.toggle('pick-armed', on);
-  if (on) {
-    setLocStatus(PICK_HINT);
-  } else if (locStatus.textContent === PICK_HINT) {
-    setLocStatus('');
-  }
-}
-pickOnMapBtn.addEventListener('click', () => setPickMode(!pickModeArmed));
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && pickModeArmed) setPickMode(false);
-});
-
-function applyMapTileTheme() {
-  if (!map) return;
-  if (tileLayer) map.removeLayer(tileLayer);
-  tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-contributors, tegels via <a href="https://www.openstreetmap.fr/" target="_blank" rel="noopener">OpenStreetMap France</a>',
-    subdomains: 'abc',
-    maxZoom: 19,
-  });
-  tileLayer.addTo(map);
-  tileLayer.setZIndex(0);
-  const mapEl = document.getElementById('turbine-map');
-  if (mapEl) mapEl.classList.toggle('map-dark-filter', currentTheme === 'dark');
-}
-
-function addTurbine(lat, lng) {
-  const id = nextTurbineId++;
-  const turbine = { id, lat, lng };
-  state.turbines.push(turbine);
-
-  const marker = L.marker([lat, lng], { icon: turbineIcon(false) }).addTo(turbineLayer);
-  marker.bindPopup(`<div class="turbine-popup"><strong>Turbine #${id}</strong><br><button type="button" class="popup-remove-btn" data-remove-id="${id}">Verwijder deze turbine</button></div>`);
-  marker.on('click', () => { selectTurbine(id); });
-  marker.on('popupopen', () => {
-    const btn = document.querySelector(`.popup-remove-btn[data-remove-id="${id}"]`);
-    if (btn) btn.addEventListener('click', () => { removeTurbine(id); map.closePopup(); });
-  });
-  turbineMarkers.set(id, marker);
-
-  const arrowMarker = L.marker([lat, lng], { icon: windArrowIcon(), interactive: false, keyboard: false }).addTo(turbineArrowLayer);
-  turbineWindArrows.set(id, arrowMarker);
-
-  const group = L.layerGroup().addTo(map);
-  turbineRingGroups.set(id, group);
-
-  selectTurbine(id);
-  render();
-}
-
-function removeTurbine(id) {
-  const marker = turbineMarkers.get(id);
-  if (marker) { turbineLayer.removeLayer(marker); turbineMarkers.delete(id); }
-  const arrowMarker = turbineWindArrows.get(id);
-  if (arrowMarker) { turbineArrowLayer.removeLayer(arrowMarker); turbineWindArrows.delete(id); }
-  const group = turbineRingGroups.get(id);
-  if (group) { map.removeLayer(group); turbineRingGroups.delete(id); }
-  state.turbines = state.turbines.filter(t => t.id !== id);
-  if (state.selectedTurbineId === id) {
-    state.selectedTurbineId = state.turbines.length ? state.turbines[state.turbines.length - 1].id : null;
-  }
-  render();
-}
-
-function clearAllTurbines() {
-  turbineRingGroups.forEach(g => map.removeLayer(g));
-  turbineRingGroups.clear();
-  turbineMarkers.forEach(m => turbineLayer.removeLayer(m));
-  turbineMarkers.clear();
-  turbineWindArrows.forEach(m => turbineArrowLayer.removeLayer(m));
-  turbineWindArrows.clear();
-  state.turbines = [];
-  state.selectedTurbineId = null;
-  render();
-}
-
-function selectTurbine(id) {
-  state.selectedTurbineId = id;
-  turbineMarkers.forEach((marker, mid) => marker.setIcon(turbineIcon(mid === id)));
-  render();
-}
-
-function ringsForTurbine(turbine, lwCat) {
-  const cat = CATEGORY[state.category];
-  const circles = [];
-  [...DISTANCES].reverse().forEach(d => {
-    const down = lpAt(d, 1, state.category, lwCat, state);
-    const cross = lpAt(d, 0, state.category, lwCat, state);
-    const up = lpAt(d, -1, state.category, lwCat, state);
-    const circle = L.circle([turbine.lat, turbine.lng], {
-      radius: d,
-      color: RING_COLORS[d],
-      weight: 2.5, opacity: 0.85, fill: false, interactive: true, renderer: mapRenderer,
-    });
-    circle.bindTooltip(
-      `<div class="ring-tooltip"><strong>${d} m</strong><br>Downwind: ${down.toFixed(1)} ${cat.unit}<br>Zijwind: ${cross.toFixed(1)} ${cat.unit}<br>Upwind: ${up.toFixed(1)} ${cat.unit}</div>`,
-      { sticky: true, direction: 'top', className: 'ring-tooltip-wrap' }
-    );
-    circles.push(circle);
-  });
-  return circles;
-}
-
-function renderAllTurbineRings() {
-  const lwCat = computeCategoryLw(state.lwa)[state.category];
-  state.turbines.forEach(turbine => {
-    const group = turbineRingGroups.get(turbine.id);
-    if (!group) return;
-    group.clearLayers();
-    ringsForTurbine(turbine, lwCat).forEach(pl => group.addLayer(pl));
-  });
-}
-
 function renderNormModule() {
   if (!normTableBody) return;
-  const n = state.turbines.length;
+  const n = state.turbines3a.length;
   const norm = getActiveNorm();
   const cat = CATEGORY[state.category];
   if (normTableTitle) normTableTitle.textContent = `Toetsing geselecteerde turbine (${cat.label.toLowerCase()}, ${cat.unit})`;
@@ -644,7 +420,7 @@ function renderNormModule() {
     normContextCallout.innerHTML = `${n} turbines geplaatst: bij 3 of meer turbines gelden sinds de Delfzijluitspraak (2021) <strong>geen landelijke normen meer</strong> — het bevoegd gezag moet zelf een norm motiveren. De hier gekozen waarde is een referentie, geen automatisch geldende wettelijke norm.`;
   }
 
-  const selected = state.turbines.find(t => t.id === state.selectedTurbineId);
+  const selected = state.turbines3a.find(t => t.id === state.selectedTurbineId3a);
   if (!selected) {
     normTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Plaats een turbine op de kaart in Module 3 om te toetsen.</td></tr>`;
     return;
@@ -705,10 +481,6 @@ function render() {
   const downwindBearing = (state.windBearing + 180) % 360;
   windLabel.textContent = `Wind uit ${DIR_LABELS[state.windDir]} (${state.windDir}) → geluid draagt naar het ${OPPOSITE_LABEL[state.windDir]}`;
   arrowGroup.setAttribute('transform', `rotate(${downwindBearing} 100 100)`);
-  if (m3WindIndicator) {
-    m3WindIndicator.innerHTML = `Wind uit ${state.windDir} · <span class="dw-tag">rood = downwind</span> · <span class="uw-tag">groen = upwind</span>`;
-  }
-  updateWindArrowRotations();
 
   // curtailment enable/disable
   if (state.scenario === 'best') {
@@ -731,52 +503,8 @@ function render() {
     <div class="factor-row total"><span class="f-label">Totaal op 500 m</span><span class="f-val">+${f.total.toFixed(1)} dB</span></div>
   `;
 
-  // mini readout
-  const scenarioLabels = { best: 'Best case', middel: 'Middenscenario', worst: 'Worst case' };
-  miniScenario.textContent = scenarioLabels[state.scenario];
-  miniSub.textContent = `${state.daynight === 'dag' ? 'Dag' : 'Nacht'} · Wind uit ${state.windDir}${state.curtailment && state.scenario !== 'best' ? ' · curtailment actief' : ''} · ${state.turbines.length} turbine${state.turbines.length === 1 ? '' : 's'}`;
-
-  buildRingLegend();
   updateWorstCaseReadout();
 
-  // turbine count / empty hint
-  turbineCountEl.textContent = `${state.turbines.length} / ${MAX_TURBINES} turbines geplaatst`;
-  updateEmptyHint();
-
-  // data table for selected turbine
-  const cat = CATEGORY[state.category];
-  dataTableTitle.textContent = `${cat.label} (${cat.unit}) per afstand en richting`;
-  const selected = state.turbines.find(t => t.id === state.selectedTurbineId);
-  if (!selected) {
-    dataTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Plaats een turbine op de kaart om resultaten te zien.</td></tr>`;
-  } else {
-    const lwCat = catLw[state.category];
-    dataTableBody.innerHTML = DISTANCES.map(d => {
-      const down = lpAt(d, 1, state.category, lwCat, state);
-      const cross = lpAt(d, 0, state.category, lwCat, state);
-      const up = lpAt(d, -1, state.category, lwCat, state);
-      return `<tr><td>${d} m</td><td class="downwind">${down.toFixed(1)}</td><td>${cross.toFixed(1)}</td><td class="upwind">${up.toFixed(1)}</td></tr>`;
-    }).join('');
-  }
-
-  // infrasound threshold callout
-  if (state.category === 'infrasoon' && selected) {
-    const lwCat = catLw.infrasoon;
-    const worstNear = lpAt(500, 1, 'infrasoon', lwCat, state);
-    if (worstNear >= CATEGORY.infrasoon.threshold) {
-      infrasoundCallout.innerHTML = `Bij deze instellingen ligt het infrasone niveau op 500 m downwind (${worstNear.toFixed(1)} dB(G)) op of boven de ISO 7196-hoorbaarheidsdrempel van 90–100 dB(G) — normaliter wordt infrasoon geluid van windturbines daar ver onder gemeten.`;
-      infrasoundCallout.classList.add('visible', 'danger');
-    } else {
-      const margin = CATEGORY.infrasoon.threshold - worstNear;
-      infrasoundCallout.innerHTML = `Infrasoon niveau op 500 m downwind (${worstNear.toFixed(1)} dB(G)) ligt ${margin.toFixed(1)} dB onder de ISO 7196-hoorbaarheidsdrempel (90–100 dB(G)) — conform metingen in <a href="https://tethys.pnnl.gov/sites/default/files/publications/RSG-2016-Report.pdf" target="_blank" rel="noopener">RSG (2016)</a>, waar turbine-infrasoon doorgaans 25+ dB onder deze drempel bleef.`;
-      infrasoundCallout.classList.add('visible');
-      infrasoundCallout.classList.remove('danger');
-    }
-  } else {
-    infrasoundCallout.classList.remove('visible', 'danger');
-  }
-
-  renderAllTurbineRings();
   renderCumulativeModule(catLw);
   renderNormModule();
   renderModule3a();
@@ -784,147 +512,9 @@ function render() {
 
 // ---------- Locatie toevoegen: adreszoeker (PDOK Locatieserver) & coordinaten ----------
 const NL_BOUNDS = { minLat: 50.4, maxLat: 53.8, minLng: 2.9, maxLng: 7.4 };
-let activeLocTab = 'adres';
-let selectedAddressResult = null; // { lat, lng, label }
-let addressDebounceTimer = null;
-let addressAbortController = null;
-
-function setLocStatus(message, tone) {
-  locStatus.textContent = message || '';
-  locStatus.classList.remove('error', 'success');
-  if (tone) locStatus.classList.add(tone);
-}
-
-locTabs.forEach(btn => {
-  btn.addEventListener('click', () => {
-    activeLocTab = btn.dataset.locTab;
-    locTabs.forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
-    locFieldAdres.hidden = activeLocTab !== 'adres';
-    locFieldCoords.hidden = activeLocTab !== 'coords';
-    addressSuggestions.hidden = true;
-    if (pickModeArmed) setPickMode(false);
-    setLocStatus('');
-  });
-});
-
-function hideSuggestions() {
-  addressSuggestions.hidden = true;
-  addressSuggestions.innerHTML = '';
-}
-
-addressInput.addEventListener('input', () => {
-  selectedAddressResult = null;
-  const q = addressInput.value.trim();
-  clearTimeout(addressDebounceTimer);
-  if (q.length < 2) { hideSuggestions(); return; }
-  addressDebounceTimer = setTimeout(() => fetchAddressSuggestions(q), 300);
-});
-
-addressInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    const firstItem = addressSuggestions.querySelector('li');
-    if (firstItem) firstItem.click();
-    else addTurbineBtn.click();
-  } else if (e.key === 'Escape') {
-    hideSuggestions();
-  }
-});
-
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('.address-search')) hideSuggestions();
-});
-
-async function fetchAddressSuggestions(query) {
-  if (addressAbortController) addressAbortController.abort();
-  addressAbortController = new AbortController();
-  try {
-    const url = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/suggest?q=${encodeURIComponent(query)}&fq=type:(woonplaats OR adres OR postcode OR weg)&rows=6`;
-    const res = await fetch(url, { signal: addressAbortController.signal });
-    if (!res.ok) throw new Error('PDOK suggest mislukt');
-    const data = await res.json();
-    const docs = (data.response && data.response.docs) || [];
-    if (!docs.length) {
-      addressSuggestions.innerHTML = '<li class="no-result">Geen resultaten gevonden.</li>';
-      addressSuggestions.hidden = false;
-      return;
-    }
-    addressSuggestions.innerHTML = docs.map(d => `<li role="option" data-id="${d.id}" data-label="${d.weergavenaam.replace(/"/g, '&quot;')}">${d.weergavenaam}</li>`).join('');
-    addressSuggestions.hidden = false;
-    addressSuggestions.querySelectorAll('li[data-id]').forEach(li => {
-      li.addEventListener('click', () => selectAddressSuggestion(li.dataset.id, li.dataset.label));
-    });
-  } catch (err) {
-    if (err.name === 'AbortError') return;
-    addressSuggestions.innerHTML = '<li class="no-result">Zoeken via PDOK is mislukt. Probeer het opnieuw.</li>';
-    addressSuggestions.hidden = false;
-  }
-}
-
-async function selectAddressSuggestion(id, label) {
-  hideSuggestions();
-  addressInput.value = label;
-  setLocStatus('Locatie ophalen\u2026');
-  try {
-    const res = await fetch(`https://api.pdok.nl/bzk/locatieserver/search/v3_1/lookup?id=${encodeURIComponent(id)}`);
-    if (!res.ok) throw new Error('PDOK lookup mislukt');
-    const data = await res.json();
-    const doc = data.response && data.response.docs && data.response.docs[0];
-    if (!doc || !doc.centroide_ll) throw new Error('Geen co\u00f6rdinaten gevonden');
-    const match = /POINT\(([-0-9.]+) ([-0-9.]+)\)/.exec(doc.centroide_ll);
-    if (!match) throw new Error('Onbekend co\u00f6rdinatenformaat');
-    const lng = parseFloat(match[1]);
-    const lat = parseFloat(match[2]);
-    selectedAddressResult = { lat, lng, label };
-    setLocStatus(`Gevonden: ${label}. Klik op "Turbine toevoegen".`, 'success');
-  } catch (err) {
-    selectedAddressResult = null;
-    setLocStatus('Kon geen co\u00f6rdinaten ophalen voor deze locatie. Probeer het opnieuw.', 'error');
-  }
-}
-
 function withinNetherlands(lat, lng) {
   return lat >= NL_BOUNDS.minLat && lat <= NL_BOUNDS.maxLat && lng >= NL_BOUNDS.minLng && lng <= NL_BOUNDS.maxLng;
 }
-
-addTurbineBtn.addEventListener('click', () => {
-  if (state.turbines.length >= MAX_TURBINES) {
-    setLocStatus(`Maximaal ${MAX_TURBINES} turbines geplaatst. Verwijder er eerst een.`, 'error');
-    return;
-  }
-
-  let lat, lng, label;
-  if (activeLocTab === 'adres') {
-    if (!selectedAddressResult || selectedAddressResult.label !== addressInput.value) {
-      setLocStatus('Kies eerst een locatie uit de suggesties hierboven.', 'error');
-      return;
-    }
-    ({ lat, lng, label } = selectedAddressResult);
-  } else {
-    lat = parseFloat(latInput.value);
-    lng = parseFloat(lngInput.value);
-    if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      setLocStatus('Vul zowel een geldige breedtegraad als lengtegraad in.', 'error');
-      return;
-    }
-    label = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-  }
-
-  if (!withinNetherlands(lat, lng)) {
-    setLocStatus('Deze co\u00f6rdinaten liggen buiten Nederland (ongeveer lat 50,4\u201353,8 \u00b7 lon 2,9\u20137,4).', 'error');
-    return;
-  }
-
-  addTurbine(lat, lng);
-  map.flyTo([lat, lng], Math.max(map.getZoom(), 11), { duration: 0.6 });
-  setLocStatus(`Turbine toegevoegd bij ${label}.`, 'success');
-
-  addressInput.value = '';
-  selectedAddressResult = null;
-  latInput.value = '';
-  lngInput.value = '';
-});
-
 // ---------- Module 4: cumulatie ----------
 cumDistanceSelect.innerHTML = DISTANCES.map(d => `<option value="${d}">${d} m</option>`).join('');
 cumDistanceSelect.value = String(state.cumDistance);
@@ -938,22 +528,22 @@ cumShowReceptorsCheck.addEventListener('change', () => {
 });
 
 function renderCumulativeModule(catLw) {
-  receptorLayer.clearLayers();
+  if (receptorLayer3a) receptorLayer3a.clearLayers();
   const cat = CATEGORY[state.category];
   const lwCat = catLw[state.category];
   const downwindBearing = (state.windBearing + 180) % 360;
   const d = state.cumDistance;
 
-  if (state.turbines.length === 0) {
+  if (state.turbines3a.length === 0) {
     cumTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Plaats minstens één turbine op de kaart in Module 3 om cumulatie te berekenen.</td></tr>`;
     cumCallout.textContent = '';
     return;
   }
 
-  const rows = state.turbines.map(anchor => {
+  const rows = state.turbines3a.map(anchor => {
     const receptor = destPoint(anchor.lat, anchor.lng, downwindBearing, d);
     const ownLevel = lpAt(d, 1, state.category, lwCat, state);
-    const contributions = state.turbines.map(t => {
+    const contributions = state.turbines3a.map(t => {
       const dist = Math.max(haversineDist(receptor[0], receptor[1], t.lat, t.lng), 30);
       const bearingFromTurbine = bearingBetween(t.lat, t.lng, receptor[0], receptor[1]);
       const x = xFromAngle(bearingFromTurbine, downwindBearing);
@@ -972,7 +562,7 @@ function renderCumulativeModule(catLw) {
 
   const maxDiff = Math.max(...rows.map(r => r.diff));
   const cat_unit = cat.unit;
-  if (state.turbines.length === 1) {
+  if (state.turbines3a.length === 1) {
     cumCallout.textContent = `Met één turbine is er niets om mee te cumuleren — "cumulatief" is hier gelijk aan de eigen bijdrage. Plaats een tweede turbine om het effect van optelling te zien.`;
   } else if (maxDiff < 0.15) {
     cumCallout.textContent = `Bij de huidige turbineposities en windrichting dragen de andere turbines vrijwel niets bij op de downwind-referentiepunten (< 0,15 dB extra) — ze staan te ver uit elkaar of niet in elkaars downwind-lijn op ${d} m.`;
@@ -983,10 +573,10 @@ function renderCumulativeModule(catLw) {
   if (state.cumShowReceptors) {
     rows.forEach(r => {
       const marker = L.circleMarker(r.receptor, {
-        radius: 5, color: '#1c2b28', weight: 1.5, fillColor: colorForDb(r.total, cat.domainMin, cat.domainMax), fillOpacity: 0.95, interactive: true, renderer: mapRenderer,
+        radius: 5, color: '#1c2b28', weight: 1.5, fillColor: colorForDb(r.total, cat.domainMin, cat.domainMax), fillOpacity: 0.95, interactive: true, renderer: mapRenderer3a,
       });
       marker.bindTooltip(`<div class="receptor-popup">Referentiepunt turbine #${r.anchor.id}<br>Cumulatief: <strong>${r.total.toFixed(1)} ${cat_unit}</strong></div>`, { direction: 'top', offset: [0, -4] });
-      marker.addTo(receptorLayer);
+      marker.addTo(receptorLayer3a);
     });
   }
 }
@@ -997,7 +587,7 @@ function renderCumulativeModule(catLw) {
 // Volledig eigen turbine-invoer, dag/nacht-toggle en normselectie,
 // onafhankelijk van Module 3/2/5 hierboven.
 // ============================================================
-let map3a, mapRenderer3a, turbineLayer3a, tileLayer3a, turbineArrowLayer3a;
+let map3a, mapRenderer3a, turbineLayer3a, tileLayer3a, turbineArrowLayer3a, receptorLayer3a;
 const turbineRingGroups3a = new Map(); // id -> L.LayerGroup met L.circle-ringen op vaste afstand
 const turbineMarkers3a = new Map();
 const turbineWindArrows3a = new Map();
@@ -1063,6 +653,7 @@ function initMap3a() {
   new CompassRoseControl({ position: 'topleft' }).addTo(map3a);
   turbineArrowLayer3a = L.layerGroup().addTo(map3a);
   turbineLayer3a = L.layerGroup().addTo(map3a);
+  receptorLayer3a = L.layerGroup().addTo(map3a);
   applyMapTileTheme3a();
 
   map3a.on('click', (e) => {
@@ -1471,7 +1062,5 @@ addTurbineBtn3a.addEventListener('click', () => {
 clearTurbinesBtn3a.addEventListener('click', clearAllTurbines3a);
 
 // ---------- Wire up turbine controls & init ----------
-clearTurbinesBtn.addEventListener('click', clearAllTurbines);
-initMap();
 initMap3a();
 render();

@@ -178,98 +178,20 @@
     </div>
   </section>
 
-  <!-- MODULE 3 -->
-  <section class="module" id="module-3">
+  <section class="module" id="module-3a">
     <div class="module-head">
       <span class="module-num">Module 3</span>
       <h2>Kaart — turbines plaatsen en geluid per categorie</h2>
     </div>
-    <p class="module-desc">Plaats windturbines op de kaart van Nederland — door een adres/plaats te zoeken, door coördinaten in te voeren, of door als alternatief een plek op de kaart aan te wijzen (max. 8). Voor elke turbine worden zes afstandsringen getekend op 500 / 900 / 1300 / 1500 / 2000 / 5000 m, elk in een vaste kleur die uitsluitend de afstand tot de turbine aangeeft (groen–geel–rood–blauw–paars–oranje) — hover over een ring voor de dB-waarde op die afstand. De volledige dB-tabel per afstand en richting, inclusief windrichting, dag/nacht en de gekozen scenariofactoren, staat rechts. Door elke turbine loopt een pijl: het <span class="dw-tag">rode deel</span> wijst downwind (geluid draagt verder), het <span class="uw-tag">groene deel</span> wijst upwind (geluid dooft sneller). De instellingen uit Module 1 en 2 gelden voor elke geplaatste turbine afzonderlijk — zie Module 4 voor de cumulatie van meerdere turbines samen.</p>
-
-    <div class="cat-tabs" id="category-tabs" role="tablist" aria-label="Geluidscategorie">
-      <button type="button" class="cat-tab cat-hoorbaar" data-category="hoorbaar" aria-pressed="true">Hoorbaar geluid<span class="cat-tab-sub">≈200 Hz–20 kHz · dB(A)</span></button>
-      <button type="button" class="cat-tab cat-laagfrequent" data-category="laagfrequent" aria-pressed="false">Laagfrequent geluid<span class="cat-tab-sub">20–200 Hz · dB(Lin)</span></button>
-      <button type="button" class="cat-tab cat-infrasoon" data-category="infrasoon" aria-pressed="false">Infrasoon geluid<span class="cat-tab-sub">&lt;20 Hz · dB(G)</span></button>
-    </div>
-
-    <div class="m3-layout">
-      <div class="map-wrap">
-        <div class="location-panel">
-          <div class="loc-tabs" role="tablist" aria-label="Locatie invoermethode">
-            <button type="button" class="loc-tab" data-loc-tab="adres" aria-pressed="true">Zoeken op adres/plaats</button>
-            <button type="button" class="loc-tab" data-loc-tab="coords" aria-pressed="false">Coördinaten invoeren</button>
-          </div>
-          <div class="loc-row">
-            <div class="loc-field" id="loc-field-adres">
-              <div class="address-search">
-                <input type="text" id="address-input" placeholder="Bijv. Cattenbroek, Montfoort of een postcode" autocomplete="off" aria-label="Zoek een adres of plaats">
-                <ul class="address-suggestions" id="address-suggestions" role="listbox" hidden></ul>
-              </div>
-            </div>
-            <div class="loc-field" id="loc-field-coords" hidden>
-              <div class="coords-inputs-row">
-                <input type="number" id="lat-input" step="0.0001" placeholder="Breedtegraad, bv. 52.1500" aria-label="Breedtegraad (lat)">
-                <input type="number" id="lng-input" step="0.0001" placeholder="Lengtegraad, bv. 5.3000" aria-label="Lengtegraad (lon)">
-              </div>
-              <button type="button" class="pick-on-map-btn" id="pick-on-map-btn" aria-pressed="false">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s7-7.58 7-12a7 7 0 1 0-14 0c0 4.42 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>
-                Of wijs de locatie aan op de kaart
-              </button>
-            </div>
-            <button type="button" class="add-turbine-btn" id="add-turbine-btn">+ Turbine toevoegen</button>
-          </div>
-          <p class="loc-status" id="loc-status" role="status" aria-live="polite"></p>
-        </div>
-        <div class="map-toolbar">
-          <span class="turbine-count" id="turbine-count">0 / 8 turbines geplaatst</span>
-          <span class="wind-indicator" id="m3-wind-indicator"></span>
-          <button type="button" class="clear-btn" id="clear-turbines">Wis alle turbines</button>
-        </div>
-        <div class="map-container">
-          <div id="turbine-map" role="img" aria-label="Kaart van Nederland waarop windturbines geplaatst kunnen worden"></div>
-          <div class="empty-map-hint" id="empty-map-hint">Zoek een adres, voer coördinaten in, of klik op "Of wijs de locatie aan op de kaart" om een windturbine te plaatsen (max. 8).</div>
-        </div>
-        <div class="legend">
-          <div class="ring-legend" id="ring-legend"></div>
-          <p class="legend-caption" id="legend-caption">Ringkleur toont de afstand tot de turbine (niet het geluidsniveau) — de dB-waarde per afstand en richting staat in de tabel hiernaast.</p>
-        </div>
-      </div>
-
-      <div class="side-col">
-        <div class="readout-mini">
-          <span class="rm-title">Huidig scenario</span>
-          <span class="rm-val" id="mini-scenario">Best case</span>
-          <span class="rm-sub" id="mini-sub">Dag · Wind uit N · 0 turbines</span>
-        </div>
-
-        <div class="data-table-card">
-          <h3 id="data-table-title">Hoorbaar geluid (dB(A)) per afstand en richting</h3>
-          <table class="data-table">
-            <thead id="data-table-head"><tr><th>Afstand</th><th>Downwind</th><th>Zijwind</th><th>Upwind</th></tr></thead>
-            <tbody id="data-table-body"><tr><td colspan="4" class="empty-row">Plaats een turbine op de kaart om resultaten te zien.</td></tr></tbody>
-          </table>
-          <p class="callout" id="infrasound-callout"></p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- MODULE 3A -->
-  <section class="module" id="module-3a">
-    <div class="module-head">
-      <span class="module-num">Module 3a</span>
-      <h2>Herbouwde kaart — contouren en normtoetsing</h2>
-    </div>
-    <p class="module-desc">Deze module herbouwt de kaart uit Module 3 op een eigen, onafhankelijke basis: dezelfde ondergrond als in het andere tool (een lichte, neutrale <strong>MapLibre/OpenFreeMap-kaart</strong>) met een kompas linksboven en zoomknoppen rechtsboven, en dezelfde <strong>afstandsringen op vaste afstand</strong> (500/900/1300/1500/2000/5000 m) als Module 3 — hover over een ring voor de dB-waarde in die richting. Turbines plaats je hier opnieuw en onafhankelijk van Module 3 (adres, coördinaten of aanwijzen op de kaart). Categorie, dag/nacht en de te toetsen norm stel je hieronder in — als één samenhangend blok, zodat kaart, ringen en normtoetsing continu consistent blijven.</p>
+    <p class="module-desc">Plaats windturbines op een lichte, neutrale <strong>MapLibre/OpenFreeMap-kaart</strong> van Nederland — door een adres/plaats te zoeken, door coördinaten in te voeren, of door een plek op de kaart aan te wijzen (max. 8). Voor elke turbine worden zes afstandsringen getekend op vaste afstand (500/900/1300/1500/2000/5000 m), elk in een vaste kleur die uitsluitend de afstand tot de turbine aangeeft — hover over een ring voor de dB-waarde in die richting, per geluidscategorie. Categorie, dag/nacht en de te toetsen norm stel je hieronder in — als één samenhangend blok, zodat kaart, ringen en normtoetsing continu consistent blijven. Module 4 en 5 gebruiken de turbines die je hier plaatst.</p>
 
     <p class="callout" id="m3a-context-callout"></p>
 
-    <div class="cat-tabs" id="category-tabs-3a" role="tablist" aria-label="Geluidscategorie (module 3a)">
+    <div class="cat-tabs" id="category-tabs-3a" role="tablist" aria-label="Geluidscategorie">
       <button type="button" class="cat-tab cat-hoorbaar" data-category="hoorbaar" aria-pressed="true">Hoorbaar geluid<span class="cat-tab-sub">≈200 Hz–20 kHz · dB(A)</span></button>
       <button type="button" class="cat-tab cat-laagfrequent" data-category="laagfrequent" aria-pressed="false">Laagfrequent geluid<span class="cat-tab-sub">20–200 Hz · dB(Lin)</span></button>
       <button type="button" class="cat-tab cat-infrasoon" data-category="infrasoon" aria-pressed="false">Infrasoon geluid<span class="cat-tab-sub">&lt;20 Hz · dB(G)</span></button>
     </div>
-    <p class="legend-caption" style="margin-top:calc(var(--space-3) * -1); margin-bottom: var(--space-4);">Deze tabs delen dezelfde categorie als Module 3 — wisselen doe je op beide plekken tegelijk.</p>
 
     <div class="cum-controls">
       <div class="cum-field">
@@ -296,7 +218,7 @@
     <div class="m3-layout">
       <div class="map-wrap">
         <div class="location-panel">
-          <div class="loc-tabs" role="tablist" aria-label="Locatie invoermethode (module 3a)">
+          <div class="loc-tabs" role="tablist" aria-label="Locatie invoermethode">
             <button type="button" class="loc-tab" data-loc-tab-3a="adres" aria-pressed="true">Zoeken op adres/plaats</button>
             <button type="button" class="loc-tab" data-loc-tab-3a="coords" aria-pressed="false">Coördinaten invoeren</button>
           </div>
@@ -366,7 +288,7 @@
       <span class="module-num">Module 4</span>
       <h2>Cumulatie van meerdere turbines</h2>
     </div>
-    <p class="module-desc">Module 3 berekent elke turbine afzonderlijk. In werkelijkheid telt geluid van meerdere turbines op eenzelfde punt <strong>energetisch (logaritmisch)</strong> op: L<sub>totaal</sub> = 10 log₁₀ Σ 10<sup>(L<sub>i</sub>/10)</sup>. Deze module kiest voor elke geplaatste turbine het downwind-referentiepunt op de gekozen afstand en telt daar de bijdrage van <em>alle</em> geplaatste turbines samen — inclusief hun eigen, werkelijke afstand en hoek tot dat punt. Categorie volgt de actieve tab in Module 3.</p>
+    <p class="module-desc">Module 3 berekent elke turbine afzonderlijk. In werkelijkheid telt geluid van meerdere turbines op eenzelfde punt <strong>energetisch (logaritmisch)</strong> op: L<sub>totaal</sub> = 10 log₁₀ Σ 10<sup>(L<sub>i</sub>/10)</sup>. Deze module kiest voor elke geplaatste turbine het downwind-referentiepunt op de gekozen afstand en telt daar de bijdrage van <em>alle</em> geplaatste turbines samen — inclusief hun eigen, werkelijke afstand en hoek tot dat punt. Categorie volgt de actieve tab in Module 3, en gebruikt de turbines die daar zijn geplaatst.</p>
 
     <div class="cum-controls">
       <div class="cum-field">
@@ -396,7 +318,7 @@
       <span class="module-num">Module 5</span>
       <h2>Toetsing aan wettelijke normen</h2>
     </div>
-    <p class="module-desc">Sinds de <a href="https://www.raadvanstate.nl/@126772/202008065-1-r3/" target="_blank" rel="noopener">Delfzijluitspraak</a> (Afdeling bestuursrechtspraak van de Raad van State, 30 juni 2021) gelden de oude landelijke geluidsnormen uit het Activiteitenbesluit/Activiteitenregeling milieubeheer (47 dB Lden / 41 dB Lnight) <strong>niet meer</strong> voor windparken van drie of meer turbines, zolang er geen plan-MER is doorlopen (<a href="https://www.rvo.nl/onderwerpen/windenergie-op-land/wonen-windturbine/geluidnormering-windturbines" target="_blank" rel="noopener">RVO.nl</a>). Voor 1–2 turbines blijven deze normen wel gewoon van kracht. Voor 3+ turbines stelt het bevoegd gezag (gemeente/provincie) zelf een gemotiveerde norm vast — in de praktijk meestal nog 45–47 dB Lden / 41 dB Lnight, soms de WHO-advieswaarde van 45 dB Lden (<a href="https://repository.officiele-overheidspublicaties.nl/externebijlagen/exb-2026-25019/1/bijlage/exb-2026-25019.pdf" target="_blank" rel="noopener">Notitie geluidsnorm windturbines Gelderland, nov. 2025</a>). Er bestaat dus momenteel <strong>geen uniforme landelijke norm</strong> voor windparken — kies hieronder tegen welke referentiewaarde je wilt toetsen. Deze module gebruikt de berekening voor de actieve geluidscategorie (Hoorbaar/Laagfrequent/Infrasoon, in te stellen bij Module 3 of 3a) van de geselecteerde turbine, downwind (de kritische richting).</p>
+    <p class="module-desc">Sinds de <a href="https://www.raadvanstate.nl/@126772/202008065-1-r3/" target="_blank" rel="noopener">Delfzijluitspraak</a> (Afdeling bestuursrechtspraak van de Raad van State, 30 juni 2021) gelden de oude landelijke geluidsnormen uit het Activiteitenbesluit/Activiteitenregeling milieubeheer (47 dB Lden / 41 dB Lnight) <strong>niet meer</strong> voor windparken van drie of meer turbines, zolang er geen plan-MER is doorlopen (<a href="https://www.rvo.nl/onderwerpen/windenergie-op-land/wonen-windturbine/geluidnormering-windturbines" target="_blank" rel="noopener">RVO.nl</a>). Voor 1–2 turbines blijven deze normen wel gewoon van kracht. Voor 3+ turbines stelt het bevoegd gezag (gemeente/provincie) zelf een gemotiveerde norm vast — in de praktijk meestal nog 45–47 dB Lden / 41 dB Lnight, soms de WHO-advieswaarde van 45 dB Lden (<a href="https://repository.officiele-overheidspublicaties.nl/externebijlagen/exb-2026-25019/1/bijlage/exb-2026-25019.pdf" target="_blank" rel="noopener">Notitie geluidsnorm windturbines Gelderland, nov. 2025</a>). Er bestaat dus momenteel <strong>geen uniforme landelijke norm</strong> voor windparken — kies hieronder tegen welke referentiewaarde je wilt toetsen. Deze module gebruikt de berekening voor de actieve geluidscategorie (Hoorbaar/Laagfrequent/Infrasoon, in te stellen bij Module 3) van de geselecteerde turbine, downwind (de kritische richting).</p>
 
     <p class="callout" id="norm-context-callout"></p>
 
@@ -484,7 +406,7 @@
 </main>
 
 <footer>
-  Interactief model · gebaseerd op de bijgevoegde position papers "Geluidpropagatie windturbines" en "Laagfrequent geluid en windturbines", <a href="https://www.uknown.co.uk/wp-content/uploads/2016/01/AV1300R02_Evans_Cooper_2012.pdf" target="_blank" rel="noopener">Evans &amp; Cooper (2012)</a>, <a href="https://ntrs.nasa.gov/citations/19910006812" target="_blank" rel="noopener">Hubbard &amp; Shepherd (1990, NASA)</a>, <a href="https://webstore.iec.ch/publication/2977" target="_blank" rel="noopener">IEC 61672-1</a>, <a href="https://www.iso.org/standard/13813.html" target="_blank" rel="noopener">ISO 7196</a>, <a href="https://tethys.pnnl.gov/sites/default/files/publications/RSG-2016-Report.pdf" target="_blank" rel="noopener">RSG (2016)</a>, <a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson et al. (2026)</a> en <a href="https://publications.tno.nl/publication/34644559/QRWhHojF/TNO-2025-R10988.pdf" target="_blank" rel="noopener">TNO-2025-R10988</a>. Kaartlagen © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-contributors, tegels via <a href="https://www.openstreetmap.fr/" target="_blank" rel="noopener">OpenStreetMap France</a> (module 3) en via <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>/<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a>, gerenderd met <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (module 3a). Geocodering via de <a href="https://www.pdok.nl/introductie/-/article/pdok-locatieserver" target="_blank" rel="noopener">PDOK Locatieserver</a> (Kadaster). Uitsluitend voor beleidsmatige illustratie — geen formele akoestische beoordeling.
+  Interactief model · gebaseerd op de bijgevoegde position papers "Geluidpropagatie windturbines" en "Laagfrequent geluid en windturbines", <a href="https://www.uknown.co.uk/wp-content/uploads/2016/01/AV1300R02_Evans_Cooper_2012.pdf" target="_blank" rel="noopener">Evans &amp; Cooper (2012)</a>, <a href="https://ntrs.nasa.gov/citations/19910006812" target="_blank" rel="noopener">Hubbard &amp; Shepherd (1990, NASA)</a>, <a href="https://webstore.iec.ch/publication/2977" target="_blank" rel="noopener">IEC 61672-1</a>, <a href="https://www.iso.org/standard/13813.html" target="_blank" rel="noopener">ISO 7196</a>, <a href="https://tethys.pnnl.gov/sites/default/files/publications/RSG-2016-Report.pdf" target="_blank" rel="noopener">RSG (2016)</a>, <a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson et al. (2026)</a> en <a href="https://publications.tno.nl/publication/34644559/QRWhHojF/TNO-2025-R10988.pdf" target="_blank" rel="noopener">TNO-2025-R10988</a>. Kaartlagen © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-contributors, tegels via <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>/<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a>, gerenderd met <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a>. Geocodering via de <a href="https://www.pdok.nl/introductie/-/article/pdok-locatieserver" target="_blank" rel="noopener">PDOK Locatieserver</a> (Kadaster). Uitsluitend voor beleidsmatige illustratie — geen formele akoestische beoordeling.
   <div class="footer-copyright">© 2026 Athena. Alle rechten voorbehouden.</div>
 </footer>
 

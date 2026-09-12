@@ -403,7 +403,7 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 
 .readout-mini { display: flex; flex-direction: column; gap: var(--space-2); background: var(--color-primary-highlight); border-radius: var(--radius-lg); padding: var(--space-5); }
 .readout-mini .rm-title { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--color-primary); }
-.readout-mini .rm-val { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: 700; color: var(--color-primary); line-height: 1; }
+.readout-mini .rm-val { font-family: var(--font-mono); font-size: var(--text-xl); font-weight: 700; color: var(--color-primary); line-height: 1.1; overflow-wrap: break-word; word-break: break-word; letter-spacing: -0.01em; }
 .readout-mini .rm-sub { font-size: var(--text-xs); color: var(--color-text-muted); }
 
 /* Methodology accordion */
