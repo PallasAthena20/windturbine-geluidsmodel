@@ -121,13 +121,34 @@ function lpAt(d, x, categoryKey, lwCat, state) {
   return base + addonAt(d, state).total;
 }
 
+// Absolute worst case: alle versterkende factoren tegelijk (nacht, scenario 'worst', curtailment actief) —
+// onafhankelijk van de huidige UI-selectie, gebruikt voor de methodologische kanttekening in Module 2.
+function computeAbsoluteWorstCaseTotal(d) {
+  const f = SCENARIO_FACTORS.worst;
+  const shear = f.shear; // windschering/inversie telt alleen 's nachts, hier per definitie 's nachts
+  const wake = wakeAtDistance(d, f.wake);
+  const am = f.am;
+  const curt = CURTAILMENT_FACTORS.worst;
+  return shear + wake + am + curt;
+}
+
 // ---------- App state ----------
 const state = {
   lwa: 106.0, windBearing: 0, daynight: 'dag', scenario: 'best', curtailment: false,
   category: 'hoorbaar', turbines: [], selectedTurbineId: null,
   cumDistance: 500, cumShowReceptors: false,
 };
-const DISTANCES = [500, 700, 900, 1100, 1300, 1500, 2000, 5000];
+const DISTANCES = [500, 900, 1300, 1500, 2000, 5000];
+// Vaste kleur per afstandsring — toont uitsluitend de afstand tot de turbine,
+// NIET het geluidsniveau. De dB-waarde per afstand/richting staat in de datatabel.
+const RING_COLORS = {
+  500: '#2f8f5b',   // groen
+  900: '#c9a227',   // geel
+  1300: '#b83b33',  // rood
+  1500: '#3b6fb5',  // blauw
+  2000: '#7d4fb5',  // paars
+  5000: '#d9863b',  // oranje
+};
 const DIR_LABELS = { N: 'het noorden', NE: 'het noordoosten', E: 'het oosten', SE: 'het zuidoosten', S: 'het zuiden', SW: 'het zuidwesten', W: 'het westen', NW: 'het noordwesten' };
 const OPPOSITE_LABEL = { N: 'zuiden', NE: 'zuidwesten', E: 'westen', SE: 'noordwesten', S: 'noorden', SW: 'noordoosten', W: 'oosten', NW: 'zuidoosten' };
 const MAX_TURBINES = 8;
@@ -149,9 +170,9 @@ const curtailmentRow = document.getElementById('curtailment-row');
 const curtailmentCheck = document.getElementById('curtailment-check');
 const scenarioList = document.getElementById('scenario-list');
 const factorRows = document.getElementById('factor-rows');
-const legendBar = document.getElementById('legend-bar');
-const legendTicks = document.getElementById('legend-ticks');
+const ringLegend = document.getElementById('ring-legend');
 const legendCaption = document.getElementById('legend-caption');
+const worstCaseReadout = document.getElementById('worst-case-readout');
 const dataTableBody = document.getElementById('data-table-body');
 const dataTableHead = document.getElementById('data-table-head');
 const dataTableTitle = document.getElementById('data-table-title');
@@ -259,14 +280,10 @@ function colorForDb(db, domainMin, domainMax) {
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
-function buildLegend() {
+function buildRingLegend() {
   const cat = CATEGORY[state.category];
-  const stops = COLOR_STOPS.map(s => colorForDb(cat.domainMin + s.t * (cat.domainMax - cat.domainMin), cat.domainMin, cat.domainMax));
-  legendBar.style.background = `linear-gradient(to right, ${stops.join(',')})`;
-  const n = 6;
-  const ticks = Array.from({ length: n }, (_, i) => Math.round(cat.domainMin + (i / (n - 1)) * (cat.domainMax - cat.domainMin)));
-  legendTicks.innerHTML = ticks.map(v => `<span>${v}</span>`).join('');
-  legendCaption.textContent = `${cat.label} (${cat.unit}) — lichter/koeler = stiller, donkerder/warmer = luider`;
+  ringLegend.innerHTML = DISTANCES.map(d => `<span class="ring-legend-item"><span class="ring-swatch" style="border-color:${RING_COLORS[d]}"></span>${d} m</span>`).join('');
+  legendCaption.textContent = `Ringkleur toont de afstand tot de turbine (niet het geluidsniveau) — de ${cat.label.toLowerCase()} (${cat.unit}) per afstand en richting staat in de tabel hiernaast.`;
 }
 
 // ---------- Geo helpers ----------
@@ -458,27 +475,24 @@ function selectTurbine(id) {
 }
 
 function ringsForTurbine(turbine, lwCat) {
-  const downwindBearing = (state.windBearing + 180) % 360;
   const cat = CATEGORY[state.category];
-  const polylines = [];
+  const circles = [];
   [...DISTANCES].reverse().forEach(d => {
-    for (let s = 0; s < RING_SEGMENTS; s++) {
-      const a1 = (s / RING_SEGMENTS) * 360, a2 = ((s + 1) / RING_SEGMENTS) * 360;
-      const mid = (a1 + a2) / 2;
-      const x = xFromAngle(mid, downwindBearing);
-      const db = lpAt(d, x, state.category, lwCat, state);
-      const pts = [];
-      for (let k = 0; k <= ARC_SUBSTEPS; k++) {
-        const bear = a1 + (a2 - a1) * (k / ARC_SUBSTEPS);
-        pts.push(destPoint(turbine.lat, turbine.lng, bear, d));
-      }
-      polylines.push(L.polyline(pts, {
-        color: colorForDb(db, cat.domainMin, cat.domainMax),
-        weight: 2.5, opacity: 0.85, lineCap: 'butt', interactive: false, renderer: mapRenderer,
-      }));
-    }
+    const down = lpAt(d, 1, state.category, lwCat, state);
+    const cross = lpAt(d, 0, state.category, lwCat, state);
+    const up = lpAt(d, -1, state.category, lwCat, state);
+    const circle = L.circle([turbine.lat, turbine.lng], {
+      radius: d,
+      color: RING_COLORS[d],
+      weight: 2.5, opacity: 0.85, fill: false, interactive: true, renderer: mapRenderer,
+    });
+    circle.bindTooltip(
+      `<div class="ring-tooltip"><strong>${d} m</strong><br>Downwind: ${down.toFixed(1)} ${cat.unit}<br>Zijwind: ${cross.toFixed(1)} ${cat.unit}<br>Upwind: ${up.toFixed(1)} ${cat.unit}</div>`,
+      { sticky: true, direction: 'top', className: 'ring-tooltip-wrap' }
+    );
+    circles.push(circle);
   });
-  return polylines;
+  return circles;
 }
 
 function renderAllTurbineRings() {
@@ -489,6 +503,14 @@ function renderAllTurbineRings() {
     group.clearLayers();
     ringsForTurbine(turbine, lwCat).forEach(pl => group.addLayer(pl));
   });
+}
+
+function updateWorstCaseReadout() {
+  if (!worstCaseReadout) return;
+  const wc500 = computeAbsoluteWorstCaseTotal(500);
+  const wc1300 = computeAbsoluteWorstCaseTotal(1300);
+  const wc2000 = computeAbsoluteWorstCaseTotal(2000);
+  worstCaseReadout.innerHTML = `<strong>Absolute worst case (nacht, alle factoren tegelijk, curtailment actief):</strong> de toeslag loopt op tot <strong>+${wc500.toFixed(1)} dB</strong> op 500 m, <strong>+${wc1300.toFixed(1)} dB</strong> op 1300 m en <strong>+${wc2000.toFixed(1)} dB</strong> op 2000 m zodra het torenzog-effect is uitgedoofd. Dit is een bewust conservatieve bovengrens voor toetsing, geen te verwachten gemiddelde nacht.`;
 }
 
 // ---------- Rendering ----------
@@ -541,7 +563,8 @@ function render() {
   miniScenario.textContent = scenarioLabels[state.scenario];
   miniSub.textContent = `${state.daynight === 'dag' ? 'Dag' : 'Nacht'} · Wind uit ${state.windDir}${state.curtailment && state.scenario !== 'best' ? ' · curtailment actief' : ''} · ${state.turbines.length} turbine${state.turbines.length === 1 ? '' : 's'}`;
 
-  buildLegend();
+  buildRingLegend();
+  updateWorstCaseReadout();
 
   // turbine count / empty hint
   turbineCountEl.textContent = `${state.turbines.length} / ${MAX_TURBINES} turbines geplaatst`;
