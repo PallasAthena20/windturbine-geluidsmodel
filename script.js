@@ -147,11 +147,11 @@ const state = {
   lwa: 106.0, windBearing: 0, daynight: 'dag', scenario: 'best', curtailment: false,
   category: 'hoorbaar', turbines: [], selectedTurbineId: null,
   cumDistance: 500, cumShowReceptors: false,
-  normPreset: 'oud', normCustomLden: 47, normCustomLnight: 41,
-  // Module 3a: volledig eigen turbine-invoer, dag/nacht en normselectie — onafhankelijk van
-  // Module 2/3/5 hierboven (alleen state.category/scenario/curtailment/windBearing/lwa zijn gedeeld).
+  normPreset: 'oud', normCustomLnight: 41,
+  // Module 3a: volledig eigen turbine-invoer en dag/nacht — onafhankelijk van Module 2/5 hierboven.
+  // state.category is BEWUST gedeeld met Module 3 (zie category-tabs-3a), net als scenario/curtailment/windBearing/lwa.
   turbines3a: [], selectedTurbineId3a: null, daynight3a: 'dag',
-  normPreset3a: 'oud', normCustomLden3a: 47, normCustomLnight3a: 41,
+  normPreset3a: 'oud', normCustomLnight3a: 41,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' heeft geen vaste waarden; die komen uit state.normCustomLden/Lnight.
@@ -161,23 +161,17 @@ const NORM_PRESETS = {
 };
 function getActiveNorm() {
   if (state.normPreset === 'eigen') {
-    return { lden: state.normCustomLden, lnight: state.normCustomLnight, label: 'Eigen/lokale norm' };
+    return { lnight: state.normCustomLnight, label: 'Eigen/lokale norm' };
   }
   return NORM_PRESETS[state.normPreset];
 }
 function getActiveNorm3a() {
   if (state.normPreset3a === 'eigen') {
-    return { lden: state.normCustomLden3a, lnight: state.normCustomLnight3a, label: 'Eigen/lokale norm' };
+    return { lnight: state.normCustomLnight3a, label: 'Eigen/lokale norm' };
   }
   return NORM_PRESETS[state.normPreset3a];
 }
-// Indicatieve Lden-benadering: standaard dag/avond/nacht-weging (12/4/8 uur, avond +5 dB, nacht +10 dB),
-// met de avondperiode benaderd op het dagniveau omdat dit model geen apart avondscenario kent.
-function ldenApprox(lday, lnight) {
-  const levening = lday;
-  const lin = (12 / 24) * Math.pow(10, lday / 10) + (4 / 24) * Math.pow(10, (levening + 5) / 10) + (8 / 24) * Math.pow(10, (lnight + 10) / 10);
-  return 10 * Math.log10(lin);
-}
+// Lden-benadering is voor nu verwijderd (zie module-callouts) — toetsing gebeurt rechtstreeks op Lnight.
 const DISTANCES = [500, 900, 1300, 1500, 2000, 5000];
 // Vaste kleur per afstandsring — toont uitsluitend de afstand tot de turbine,
 // NIET het geluidsniveau. De dB-waarde per afstand/richting staat in de datatabel.
@@ -215,9 +209,7 @@ const legendCaption = document.getElementById('legend-caption');
 const worstCaseReadout = document.getElementById('worst-case-readout');
 const dataTableBody = document.getElementById('data-table-body');
 const normPresetSelect = document.getElementById('norm-preset-select');
-const normCustomLdenField = document.getElementById('norm-custom-lden-field');
 const normCustomLnightField = document.getElementById('norm-custom-lnight-field');
-const normCustomLdenInput = document.getElementById('norm-custom-lden');
 const normCustomLnightInput = document.getElementById('norm-custom-lnight');
 const normContextCallout = document.getElementById('norm-context-callout');
 const normTableBody = document.getElementById('norm-table-body');
@@ -225,13 +217,7 @@ if (normPresetSelect) {
   normPresetSelect.addEventListener('change', () => {
     state.normPreset = normPresetSelect.value;
     const isCustom = state.normPreset === 'eigen';
-    normCustomLdenField.style.display = isCustom ? '' : 'none';
     normCustomLnightField.style.display = isCustom ? '' : 'none';
-    render();
-  });
-  normCustomLdenInput.addEventListener('input', () => {
-    state.normCustomLden = parseFloat(normCustomLdenInput.value);
-    if (Number.isNaN(state.normCustomLden)) state.normCustomLden = 47;
     render();
   });
   normCustomLnightInput.addEventListener('input', () => {
@@ -264,15 +250,18 @@ const cumDistanceSelect = document.getElementById('cum-distance-select');
 const cumShowReceptorsCheck = document.getElementById('cum-show-receptors');
 const cumTableBody = document.getElementById('cum-table-body');
 const cumCallout = document.getElementById('cum-callout');
+const normTableTitle = document.getElementById('norm-table-title');
+const normAweightNote = document.getElementById('norm-aweight-note');
 
 // ---------- Module 3a DOM refs ----------
 const m3aContextCallout = document.getElementById('m3a-context-callout');
+const categoryTabs3a = document.getElementById('category-tabs-3a');
 const daynightToggle3a = document.getElementById('daynight-toggle-3a');
 const normPresetSelect3a = document.getElementById('norm-preset-select-3a');
-const normCustomLdenField3a = document.getElementById('norm-custom-lden-field-3a');
 const normCustomLnightField3a = document.getElementById('norm-custom-lnight-field-3a');
-const normCustomLdenInput3a = document.getElementById('norm-custom-lden-3a');
 const normCustomLnightInput3a = document.getElementById('norm-custom-lnight-3a');
+const normTableTitle3a = document.getElementById('norm-table-title-3a');
+const normAweightNote3a = document.getElementById('norm-aweight-note-3a');
 const locTabs3a = document.querySelectorAll('[data-loc-tab-3a]');
 const locFieldAdres3a = document.getElementById('loc-field-adres-3a');
 const locFieldCoords3a = document.getElementById('loc-field-coords-3a');
@@ -343,15 +332,26 @@ curtailmentCheck.addEventListener('change', () => { state.curtailment = curtailm
 // ---------- Bronvermogen slider ----------
 lwaInput.addEventListener('input', () => { state.lwa = parseFloat(lwaInput.value); render(); });
 
-// ---------- Category tabs ----------
-categoryTabs.querySelectorAll('.cat-tab').forEach(btn => {
-  btn.addEventListener('click', () => {
-    categoryTabs.querySelectorAll('.cat-tab').forEach(b => b.setAttribute('aria-pressed', 'false'));
-    btn.setAttribute('aria-pressed', 'true');
-    state.category = btn.dataset.category;
-    render();
+// ---------- Category tabs (Module 3 en Module 3a delen state.category en blijven onderling gesynchroniseerd) ----------
+function bindCategoryTabs(el) {
+  if (!el) return;
+  el.querySelectorAll('.cat-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.category = btn.dataset.category;
+      render();
+    });
   });
-});
+}
+bindCategoryTabs(categoryTabs);
+bindCategoryTabs(categoryTabs3a);
+function syncCategoryTabButtons() {
+  [categoryTabs, categoryTabs3a].forEach(el => {
+    if (!el) return;
+    el.querySelectorAll('.cat-tab').forEach(b => {
+      b.setAttribute('aria-pressed', b.dataset.category === state.category ? 'true' : 'false');
+    });
+  });
+}
 
 // ---------- Color scale ----------
 const COLOR_STOPS = [
@@ -626,28 +626,37 @@ function renderNormModule() {
   if (!normTableBody) return;
   const n = state.turbines.length;
   const norm = getActiveNorm();
+  const cat = CATEGORY[state.category];
+  if (normTableTitle) normTableTitle.textContent = `Toetsing geselecteerde turbine (${cat.label.toLowerCase()}, ${cat.unit})`;
+  if (normAweightNote) {
+    if (state.category === 'hoorbaar') {
+      normAweightNote.style.display = 'none';
+    } else {
+      normAweightNote.style.display = '';
+      normAweightNote.innerHTML = `De wettelijke norm is gedefinieerd in <strong>dB(A)</strong> (het hoorbare, A-gewogen geluid). Voor ${cat.shortLabel.toLowerCase()} geluid vervalt de A-weging en wordt hier getoetst in <strong>${cat.unit}</strong> — er bestaat geen formeel vastgestelde, direct vergelijkbare grenswaarde in deze eenheid; de hierboven gekozen dB(A)-norm dient uitsluitend als indicatief referentiepunt.`;
+    }
+  }
   if (n === 0) {
     normContextCallout.textContent = 'Plaats minstens één turbine in Module 3 om te toetsen.';
   } else if (n <= 2) {
-    normContextCallout.innerHTML = `${n} turbine${n === 1 ? '' : 's'} geplaatst: bij 1–2 turbines blijven de oude landelijke normen (47 dB Lden / 41 dB Lnight) <strong>formeel van toepassing</strong>.`;
+    normContextCallout.innerHTML = `${n} turbine${n === 1 ? '' : 's'} geplaatst: bij 1–2 turbines blijft de oude landelijke norm (41 dB Lnight) <strong>formeel van toepassing</strong>.`;
   } else {
     normContextCallout.innerHTML = `${n} turbines geplaatst: bij 3 of meer turbines gelden sinds de Delfzijluitspraak (2021) <strong>geen landelijke normen meer</strong> — het bevoegd gezag moet zelf een norm motiveren. De hier gekozen waarde is een referentie, geen automatisch geldende wettelijke norm.`;
   }
 
   const selected = state.turbines.find(t => t.id === state.selectedTurbineId);
   if (!selected) {
-    normTableBody.innerHTML = `<tr><td colspan="6" class="empty-row">Plaats een turbine op de kaart in Module 3 om te toetsen.</td></tr>`;
+    normTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Plaats een turbine op de kaart in Module 3 om te toetsen.</td></tr>`;
     return;
   }
 
-  const lwCat = computeCategoryLw(state.lwa).hoorbaar;
+  const lwCat = computeCategoryLw(state.lwa)[state.category];
   const dayState = Object.assign({}, state, { daynight: 'dag' });
   const nightState = Object.assign({}, state, { daynight: 'nacht' });
 
   normTableBody.innerHTML = DISTANCES.map(d => {
-    const lday = lpAt(d, 1, 'hoorbaar', lwCat, dayState);
-    const lnight = lpAt(d, 1, 'hoorbaar', lwCat, nightState);
-    const lden = ldenApprox(lday, lnight);
+    const lday = lpAt(d, 1, state.category, lwCat, dayState);
+    const lnight = lpAt(d, 1, state.category, lwCat, nightState);
 
     let lnightCell;
     if (norm.lnight != null) {
@@ -658,16 +667,7 @@ function renderNormModule() {
       lnightCell = `<td class="norm-na">n.v.t.</td>`;
     }
 
-    let ldenCell;
-    if (norm.lden != null) {
-      const exceed = lden > norm.lden;
-      const diff = (lden - norm.lden);
-      ldenCell = `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${exceed ? 'Overschrijding' : 'Binnen norm'} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)} dB)</td>`;
-    } else {
-      ldenCell = `<td class="norm-na">n.v.t.</td>`;
-    }
-
-    return `<tr><td>${d} m</td><td>${lday.toFixed(1)}</td><td>${lnight.toFixed(1)}</td><td>${lden.toFixed(1)}</td>${lnightCell}${ldenCell}</tr>`;
+    return `<tr><td>${d} m</td><td>${lday.toFixed(1)}</td><td>${lnight.toFixed(1)}</td>${lnightCell}</tr>`;
   }).join('');
 }
 
@@ -686,6 +686,7 @@ function updateWorstCaseReadout() {
 
 // ---------- Rendering ----------
 function render() {
+  syncCategoryTabButtons();
   lwaReadout.textContent = state.lwa.toFixed(1);
   outLwa.textContent = state.lwa.toFixed(1) + ' dB(A)';
 
@@ -997,7 +998,7 @@ function renderCumulativeModule(catLw) {
 // onafhankelijk van Module 3/2/5 hierboven.
 // ============================================================
 let map3a, mapRenderer3a, turbineLayer3a, tileLayer3a, turbineArrowLayer3a;
-const turbineContourGroups3a = new Map(); // id -> L.LayerGroup met L.polygon-contouren
+const turbineRingGroups3a = new Map(); // id -> L.LayerGroup met L.circle-ringen op vaste afstand
 const turbineMarkers3a = new Map();
 const turbineWindArrows3a = new Map();
 let nextTurbine3aId = 1;
@@ -1029,6 +1030,24 @@ function updateWindArrowRotations3a() {
   });
 }
 
+// Kompasroos linksboven op de kaart, in de eigen merkkleur i.p.v. het groen uit het referentiebeeld.
+const CompassRoseControl = L.Control.extend({
+  options: { position: 'topleft' },
+  onAdd: function () {
+    const div = L.DomUtil.create('div', 'compass-rose-ctrl');
+    div.innerHTML = `<svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
+      <circle cx="20" cy="20" r="17.5" fill="var(--color-surface)" stroke="var(--color-primary)" stroke-width="2"/>
+      <path d="M20 6 L24 20 L20 34 L16 20 Z" fill="var(--color-primary)"/>
+      <text x="20" y="11" text-anchor="middle" font-size="7" font-weight="700" fill="var(--color-primary)">N</text>
+      <text x="20" y="33.5" text-anchor="middle" font-size="6" fill="var(--color-text-secondary)">Z</text>
+      <text x="5.5" y="22.5" text-anchor="middle" font-size="6" fill="var(--color-text-secondary)">W</text>
+      <text x="34.5" y="22.5" text-anchor="middle" font-size="6" fill="var(--color-text-secondary)">O</text>
+    </svg>`;
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+  },
+});
+
 function initMap3a() {
   if (!document.getElementById('turbine-map-3a')) return;
   mapRenderer3a = L.canvas({ padding: 0.4 });
@@ -1036,10 +1055,12 @@ function initMap3a() {
     center: [52.15, 5.3],
     zoom: 7,
     minZoom: 6,
-    maxZoom: 15,
+    maxZoom: 18,
     renderer: mapRenderer3a,
-    zoomControl: true,
+    zoomControl: false,
   });
+  L.control.zoom({ position: 'topright' }).addTo(map3a);
+  new CompassRoseControl({ position: 'topleft' }).addTo(map3a);
   turbineArrowLayer3a = L.layerGroup().addTo(map3a);
   turbineLayer3a = L.layerGroup().addTo(map3a);
   applyMapTileTheme3a();
@@ -1058,20 +1079,21 @@ function initMap3a() {
   });
 }
 
-// Grijze basemap (Esri "Light Gray Canvas") i.p.v. de OSM-stratenkaart van Module 3 — neutraal
-// grijstintenkaartbeeld zodat de gekleurde contouren beter opvallen. Bron: Esri/HERE/Garmin/OpenStreetMap-
-// contributors. (CARTO Positron-tegels gaven bij server-side/headless requests een "KEY REQUIRED"-
-// placeholder omdat CARTO die laag inmiddels achter een API-key heeft gezet — Esri's kosteloze canvaslaag
-// werkt zonder key en is daarom als vervanging gebruikt.)
+// Lichte MapLibre GL/OpenFreeMap "positron"-kaart (dezelfde stijl als het andere tool) i.p.v. de
+// eerdere Esri-grijskaart. De maplibre-gl-leaflet-plugin plaatst de GL-laag standaard in Leaflet's
+// tilePane, dus de bestaande donkere-modus-CSS-filter op .leaflet-tile-pane (zie style.css) werkt
+// automatisch door, zonder de laag opnieuw te moeten opbouwen bij het wisselen van thema.
 function applyMapTileTheme3a() {
   if (!map3a) return;
-  if (tileLayer3a) map3a.removeLayer(tileLayer3a);
-  tileLayer3a = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-    attribution: '&copy; <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-contributors',
-    maxZoom: 16,
-  });
-  tileLayer3a.addTo(map3a);
-  tileLayer3a.setZIndex(0);
+  if (!tileLayer3a) {
+    tileLayer3a = L.maplibreGL({
+      style: 'https://tiles.openfreemap.org/styles/positron',
+      attributionControl: {
+        customAttribution: 'MapLibre | <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> \u00a9 <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+      },
+    });
+    tileLayer3a.addTo(map3a);
+  }
   const mapEl = document.getElementById('turbine-map-3a');
   if (mapEl) mapEl.classList.toggle('map-dark-filter', currentTheme === 'dark');
 }
@@ -1130,7 +1152,7 @@ function addTurbine3a(lat, lng) {
   turbineWindArrows3a.set(id, arrowMarker);
 
   const group = L.layerGroup().addTo(map3a);
-  turbineContourGroups3a.set(id, group);
+  turbineRingGroups3a.set(id, group);
 
   selectTurbine3a(id);
   render();
@@ -1141,8 +1163,8 @@ function removeTurbine3a(id) {
   if (marker) { turbineLayer3a.removeLayer(marker); turbineMarkers3a.delete(id); }
   const arrowMarker = turbineWindArrows3a.get(id);
   if (arrowMarker) { turbineArrowLayer3a.removeLayer(arrowMarker); turbineWindArrows3a.delete(id); }
-  const group = turbineContourGroups3a.get(id);
-  if (group) { map3a.removeLayer(group); turbineContourGroups3a.delete(id); }
+  const group = turbineRingGroups3a.get(id);
+  if (group) { map3a.removeLayer(group); turbineRingGroups3a.delete(id); }
   state.turbines3a = state.turbines3a.filter(t => t.id !== id);
   if (state.selectedTurbineId3a === id) {
     state.selectedTurbineId3a = state.turbines3a.length ? state.turbines3a[state.turbines3a.length - 1].id : null;
@@ -1151,8 +1173,8 @@ function removeTurbine3a(id) {
 }
 
 function clearAllTurbines3a() {
-  turbineContourGroups3a.forEach(g => map3a.removeLayer(g));
-  turbineContourGroups3a.clear();
+  turbineRingGroups3a.forEach(g => map3a.removeLayer(g));
+  turbineRingGroups3a.clear();
   turbineMarkers3a.forEach(m => turbineLayer3a.removeLayer(m));
   turbineMarkers3a.clear();
   turbineWindArrows3a.forEach(m => turbineArrowLayer3a.removeLayer(m));
@@ -1168,68 +1190,38 @@ function selectTurbine3a(id) {
   render();
 }
 
-// ---------- Isofoon-contouren: hoekafhankelijke afstandsoplossing i.p.v. cirkels ----------
-// lpAt(r, x, ...) is voor vaste x monotoon niet-stijgend in r. Voor elke richting x geldt bovendien
-// lpAt(d, x, ...) <= lpAt(d, 1, ...) (downwind straalt het verst uit), dus de gezochte straal voor
-// het downwind-referentieniveau op afstand d ligt in elke richting altijd binnen [iets, d] — bisectie
-// op [rMin, d] is dus voor alle 360° veilig en toereikend.
-function bisectRadiusForLevel(targetLevel, x, categoryKey, lwCat, synthState, rMax) {
-  let lo = 5, hi = rMax;
-  const levelHi = lpAt(hi, x, categoryKey, lwCat, synthState);
-  const levelLo = lpAt(lo, x, categoryKey, lwCat, synthState);
-  if (levelHi >= targetLevel) return hi; // exact downwind (x=1): het doelniveau wordt precies op d bereikt
-  if (levelLo <= targetLevel) return lo; // doelniveau al voorbij de dichtstbijzijnde grens (zeldzaam randgeval)
-  for (let i = 0; i < 22; i++) {
-    const mid = (lo + hi) / 2;
-    const levelMid = lpAt(mid, x, categoryKey, lwCat, synthState);
-    if (levelMid > targetLevel) lo = mid; else hi = mid;
-  }
-  return (lo + hi) / 2;
-}
-
-const CONTOUR_STEPS_3A = 36; // 10° hoekresolutie — vloeiend genoeg voor de langgerekte/samengeperste vorm
-function contourPolygonPoints(turbine, targetLevel, categoryKey, lwCat, synthState, downwindBearingDeg, rMax) {
-  const points = [];
-  for (let i = 0; i < CONTOUR_STEPS_3A; i++) {
-    const bearingDeg = (360 / CONTOUR_STEPS_3A) * i;
-    const x = xFromAngle(bearingDeg, downwindBearingDeg);
-    const r = bisectRadiusForLevel(targetLevel, x, categoryKey, lwCat, synthState, rMax);
-    points.push(destPoint(turbine.lat, turbine.lng, bearingDeg, r));
-  }
-  return points;
-}
-
-function contoursForTurbine3a(turbine, lwCat) {
+// ---------- Afstandsringen (zelfde patroon als Module 3's ringsForTurbine/renderAllTurbineRings) ----------
+function ringsForTurbine3a(turbine, lwCat) {
   const cat = CATEGORY[state.category];
-  const downwindBearing = (state.windBearing + 180) % 360;
-  // De contourVORM volgt de dag/nacht-instelling van Module 3a zelf; scenario/curtailment/wind blijven gedeeld.
+  // De dB-waarde bij hover volgt de dag/nacht-instelling van Module 3a zelf; scenario/curtailment/wind blijven gedeeld met Module 3.
   const synthState = { scenario: state.scenario, daynight: state.daynight3a, curtailment: state.curtailment, windBearing: state.windBearing };
-  const polygons = [];
+  const circles = [];
   [...DISTANCES].reverse().forEach(d => {
-    const targetLevel = lpAt(d, 1, state.category, lwCat, synthState);
-    const points = contourPolygonPoints(turbine, targetLevel, state.category, lwCat, synthState, downwindBearing, d);
-    const polygon = L.polygon(points, {
-      color: RING_COLORS[d], weight: 2.5, opacity: 0.85, fill: false, interactive: true, renderer: mapRenderer3a,
-    });
+    const down = lpAt(d, 1, state.category, lwCat, synthState);
     const cross = lpAt(d, 0, state.category, lwCat, synthState);
     const up = lpAt(d, -1, state.category, lwCat, synthState);
-    polygon.bindTooltip(
-      `<div class="ring-tooltip"><strong>Contour ${d} m (downwind-referentie)</strong><br>Downwind: ${targetLevel.toFixed(1)} ${cat.unit}<br>Zijwind: ${cross.toFixed(1)} ${cat.unit}<br>Upwind: ${up.toFixed(1)} ${cat.unit}</div>`,
+    const circle = L.circle([turbine.lat, turbine.lng], {
+      radius: d,
+      color: RING_COLORS[d],
+      weight: 2.5, opacity: 0.85, fill: false, interactive: true, renderer: mapRenderer3a,
+    });
+    circle.bindTooltip(
+      `<div class="ring-tooltip"><strong>${d} m</strong><br>Downwind: ${down.toFixed(1)} ${cat.unit}<br>Zijwind: ${cross.toFixed(1)} ${cat.unit}<br>Upwind: ${up.toFixed(1)} ${cat.unit}</div>`,
       { sticky: true, direction: 'top', className: 'ring-tooltip-wrap' }
     );
-    polygons.push(polygon);
+    circles.push(circle);
   });
-  return polygons;
+  return circles;
 }
 
-function renderAllTurbineContours3a() {
+function renderAllTurbineRings3a() {
   if (!map3a) return;
   const lwCat = computeCategoryLw(state.lwa)[state.category];
   state.turbines3a.forEach(turbine => {
-    const group = turbineContourGroups3a.get(turbine.id);
+    const group = turbineRingGroups3a.get(turbine.id);
     if (!group) return;
     group.clearLayers();
-    contoursForTurbine3a(turbine, lwCat).forEach(pl => group.addLayer(pl));
+    ringsForTurbine3a(turbine, lwCat).forEach(pl => group.addLayer(pl));
   });
 }
 
@@ -1238,7 +1230,7 @@ function buildRingLegend3a() {
   const cat = CATEGORY[state.category];
   ringLegend3a.innerHTML = DISTANCES.map(d => `<span class="ring-legend-item"><span class="ring-swatch" style="border-color:${RING_COLORS[d]}"></span>${d} m</span>`).join('');
   if (legendCaption3a) {
-    legendCaption3a.textContent = `Contourkleur toont het geluidsniveau op de downwind-referentieafstand (${cat.label.toLowerCase()}, ${cat.unit}) \u2014 de vorm van de contour zelf toont hoe ver dat niveau reikt per windrichting.`;
+    legendCaption3a.textContent = `Ringkleur toont de afstand tot de turbine (niet het geluidsniveau) \u2014 de ${cat.label.toLowerCase()} (${cat.unit}) per afstand en richting staat in de tabel hiernaast.`;
   }
 }
 
@@ -1246,11 +1238,21 @@ function renderNormTable3a() {
   if (!normTableBody3a) return;
   const n = state.turbines3a.length;
   const norm = getActiveNorm3a();
+  const cat = CATEGORY[state.category];
+  if (normTableTitle3a) normTableTitle3a.textContent = `Toetsing geselecteerde turbine (${cat.label.toLowerCase()}, ${cat.unit})`;
+  if (normAweightNote3a) {
+    if (state.category === 'hoorbaar') {
+      normAweightNote3a.style.display = 'none';
+    } else {
+      normAweightNote3a.style.display = '';
+      normAweightNote3a.innerHTML = `De wettelijke norm is gedefinieerd in <strong>dB(A)</strong> (het hoorbare, A-gewogen geluid). Voor ${cat.shortLabel.toLowerCase()} geluid vervalt de A-weging en wordt hier getoetst in <strong>${cat.unit}</strong> \u2014 er bestaat geen formeel vastgestelde, direct vergelijkbare grenswaarde in deze eenheid; de hierboven gekozen dB(A)-norm dient uitsluitend als indicatief referentiepunt.`;
+    }
+  }
   if (m3aContextCallout) {
     if (n === 0) {
       m3aContextCallout.textContent = 'Plaats minstens \u00e9\u00e9n turbine hierboven om te toetsen.';
     } else if (n <= 2) {
-      m3aContextCallout.innerHTML = `${n} turbine${n === 1 ? '' : 's'} geplaatst: bij 1\u20132 turbines blijven de oude landelijke normen (47 dB Lden / 41 dB Lnight) <strong>formeel van toepassing</strong>.`;
+      m3aContextCallout.innerHTML = `${n} turbine${n === 1 ? '' : 's'} geplaatst: bij 1\u20132 turbines blijft de oude landelijke norm (41 dB Lnight) <strong>formeel van toepassing</strong>.`;
     } else {
       m3aContextCallout.innerHTML = `${n} turbines geplaatst: bij 3 of meer turbines gelden sinds de Delfzijluitspraak (2021) <strong>geen landelijke normen meer</strong> \u2014 het bevoegd gezag moet zelf een norm motiveren. De hier gekozen waarde is een referentie, geen automatisch geldende wettelijke norm.`;
     }
@@ -1258,18 +1260,17 @@ function renderNormTable3a() {
 
   const selected = state.turbines3a.find(t => t.id === state.selectedTurbineId3a);
   if (!selected) {
-    normTableBody3a.innerHTML = `<tr><td colspan="6" class="empty-row">Plaats een turbine op de kaart hierboven om te toetsen.</td></tr>`;
+    normTableBody3a.innerHTML = `<tr><td colspan="4" class="empty-row">Plaats een turbine op de kaart hierboven om te toetsen.</td></tr>`;
     return;
   }
 
-  const lwCat = computeCategoryLw(state.lwa).hoorbaar;
+  const lwCat = computeCategoryLw(state.lwa)[state.category];
   const dayState = Object.assign({}, state, { daynight: 'dag' });
   const nightState = Object.assign({}, state, { daynight: 'nacht' });
 
   normTableBody3a.innerHTML = DISTANCES.map(d => {
-    const lday = lpAt(d, 1, 'hoorbaar', lwCat, dayState);
-    const lnight = lpAt(d, 1, 'hoorbaar', lwCat, nightState);
-    const lden = ldenApprox(lday, lnight);
+    const lday = lpAt(d, 1, state.category, lwCat, dayState);
+    const lnight = lpAt(d, 1, state.category, lwCat, nightState);
 
     let lnightCell;
     if (norm.lnight != null) {
@@ -1280,16 +1281,7 @@ function renderNormTable3a() {
       lnightCell = `<td class="norm-na">n.v.t.</td>`;
     }
 
-    let ldenCell;
-    if (norm.lden != null) {
-      const exceed = lden > norm.lden;
-      const diff = (lden - norm.lden);
-      ldenCell = `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${exceed ? 'Overschrijding' : 'Binnen norm'} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)} dB)</td>`;
-    } else {
-      ldenCell = `<td class="norm-na">n.v.t.</td>`;
-    }
-
-    return `<tr><td>${d} m</td><td>${lday.toFixed(1)}</td><td>${lnight.toFixed(1)}</td><td>${lden.toFixed(1)}</td>${lnightCell}${ldenCell}</tr>`;
+    return `<tr><td>${d} m</td><td>${lday.toFixed(1)}</td><td>${lnight.toFixed(1)}</td>${lnightCell}</tr>`;
   }).join('');
 }
 
@@ -1310,7 +1302,7 @@ function renderModule3a() {
   updateEmptyHint3a();
 
   renderNormTable3a();
-  renderAllTurbineContours3a();
+  renderAllTurbineRings3a();
 }
 
 // ---------- Module 3a: dag/nacht-toggle ----------
@@ -1328,13 +1320,7 @@ if (normPresetSelect3a) {
   normPresetSelect3a.addEventListener('change', () => {
     state.normPreset3a = normPresetSelect3a.value;
     const isCustom = state.normPreset3a === 'eigen';
-    normCustomLdenField3a.style.display = isCustom ? '' : 'none';
     normCustomLnightField3a.style.display = isCustom ? '' : 'none';
-    render();
-  });
-  normCustomLdenInput3a.addEventListener('input', () => {
-    state.normCustomLden3a = parseFloat(normCustomLdenInput3a.value);
-    if (Number.isNaN(state.normCustomLden3a)) state.normCustomLden3a = 47;
     render();
   });
   normCustomLnightInput3a.addEventListener('input', () => {
