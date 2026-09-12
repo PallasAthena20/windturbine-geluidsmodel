@@ -199,6 +199,7 @@ const addressInput = document.getElementById('address-input');
 const addressSuggestions = document.getElementById('address-suggestions');
 const latInput = document.getElementById('lat-input');
 const lngInput = document.getElementById('lng-input');
+const pickOnMapBtn = document.getElementById('pick-on-map-btn');
 const addTurbineBtn = document.getElementById('add-turbine-btn');
 const locStatus = document.getElementById('loc-status');
 const m3WindIndicator = document.getElementById('m3-wind-indicator');
@@ -386,11 +387,16 @@ function initMap() {
   applyMapTileTheme();
 
   map.on('click', (e) => {
+    if (!pickModeArmed) return;
     if (state.turbines.length >= MAX_TURBINES) {
       flashEmptyHint(`Maximaal ${MAX_TURBINES} turbines geplaatst. Verwijder er eerst een via de kaart of "Wis alle turbines".`);
+      setPickMode(false);
       return;
     }
-    addTurbine(e.latlng.lat, e.latlng.lng);
+    latInput.value = e.latlng.lat.toFixed(4);
+    lngInput.value = e.latlng.lng.toFixed(4);
+    setPickMode(false);
+    setLocStatus(`Locatie gekozen op de kaart: ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}. Klik op "Turbine toevoegen" om te bevestigen.`, 'success');
   });
 }
 
@@ -406,12 +412,29 @@ function flashEmptyHint(msg) {
 
 function updateEmptyHint() {
   if (state.turbines.length === 0) {
-    emptyMapHint.textContent = 'Klik op de kaart om een windturbine te plaatsen (max. ' + MAX_TURBINES + ').';
+    emptyMapHint.textContent = 'Zoek een adres, voer co\u00f6rdinaten in, of klik op "Of wijs de locatie aan op de kaart" om een windturbine te plaatsen (max. ' + MAX_TURBINES + ').';
     emptyMapHint.classList.add('visible');
   } else {
     emptyMapHint.classList.remove('visible');
   }
 }
+
+let pickModeArmed = false;
+const PICK_HINT = 'Klik op de kaart om de turbinelocatie te kiezen\u2026';
+function setPickMode(on) {
+  pickModeArmed = on;
+  pickOnMapBtn.setAttribute('aria-pressed', String(on));
+  document.getElementById('turbine-map').classList.toggle('pick-armed', on);
+  if (on) {
+    setLocStatus(PICK_HINT);
+  } else if (locStatus.textContent === PICK_HINT) {
+    setLocStatus('');
+  }
+}
+pickOnMapBtn.addEventListener('click', () => setPickMode(!pickModeArmed));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && pickModeArmed) setPickMode(false);
+});
 
 function applyMapTileTheme() {
   if (!map) return;
@@ -642,6 +665,7 @@ locTabs.forEach(btn => {
     locFieldAdres.hidden = activeLocTab !== 'adres';
     locFieldCoords.hidden = activeLocTab !== 'coords';
     addressSuggestions.hidden = true;
+    if (pickModeArmed) setPickMode(false);
     setLocStatus('');
   });
 });
