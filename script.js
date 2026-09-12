@@ -146,7 +146,27 @@ const state = {
   lwa: 106.0, windBearing: 0, daynight: 'dag', scenario: 'best', curtailment: false,
   category: 'hoorbaar', turbines: [], selectedTurbineId: null,
   cumDistance: 500, cumShowReceptors: false,
+  normPreset: 'oud', normCustomLden: 47, normCustomLnight: 41,
 };
+// Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
+// 'eigen' heeft geen vaste waarden; die komen uit state.normCustomLden/Lnight.
+const NORM_PRESETS = {
+  oud: { lden: 47, lnight: 41, label: 'Oude landelijke norm (Activiteitenbesluit/-regeling)' },
+  who: { lden: 45, lnight: null, label: 'WHO-advieswaarde' },
+};
+function getActiveNorm() {
+  if (state.normPreset === 'eigen') {
+    return { lden: state.normCustomLden, lnight: state.normCustomLnight, label: 'Eigen/lokale norm' };
+  }
+  return NORM_PRESETS[state.normPreset];
+}
+// Indicatieve Lden-benadering: standaard dag/avond/nacht-weging (12/4/8 uur, avond +5 dB, nacht +10 dB),
+// met de avondperiode benaderd op het dagniveau omdat dit model geen apart avondscenario kent.
+function ldenApprox(lday, lnight) {
+  const levening = lday;
+  const lin = (12 / 24) * Math.pow(10, lday / 10) + (4 / 24) * Math.pow(10, (levening + 5) / 10) + (8 / 24) * Math.pow(10, (lnight + 10) / 10);
+  return 10 * Math.log10(lin);
+}
 const DISTANCES = [500, 900, 1300, 1500, 2000, 5000];
 // Vaste kleur per afstandsring — toont uitsluitend de afstand tot de turbine,
 // NIET het geluidsniveau. De dB-waarde per afstand/richting staat in de datatabel.
@@ -183,6 +203,32 @@ const ringLegend = document.getElementById('ring-legend');
 const legendCaption = document.getElementById('legend-caption');
 const worstCaseReadout = document.getElementById('worst-case-readout');
 const dataTableBody = document.getElementById('data-table-body');
+const normPresetSelect = document.getElementById('norm-preset-select');
+const normCustomLdenField = document.getElementById('norm-custom-lden-field');
+const normCustomLnightField = document.getElementById('norm-custom-lnight-field');
+const normCustomLdenInput = document.getElementById('norm-custom-lden');
+const normCustomLnightInput = document.getElementById('norm-custom-lnight');
+const normContextCallout = document.getElementById('norm-context-callout');
+const normTableBody = document.getElementById('norm-table-body');
+if (normPresetSelect) {
+  normPresetSelect.addEventListener('change', () => {
+    state.normPreset = normPresetSelect.value;
+    const isCustom = state.normPreset === 'eigen';
+    normCustomLdenField.style.display = isCustom ? '' : 'none';
+    normCustomLnightField.style.display = isCustom ? '' : 'none';
+    render();
+  });
+  normCustomLdenInput.addEventListener('input', () => {
+    state.normCustomLden = parseFloat(normCustomLdenInput.value);
+    if (Number.isNaN(state.normCustomLden)) state.normCustomLden = 47;
+    render();
+  });
+  normCustomLnightInput.addEventListener('input', () => {
+    state.normCustomLnight = parseFloat(normCustomLnightInput.value);
+    if (Number.isNaN(state.normCustomLnight)) state.normCustomLnight = 41;
+    render();
+  });
+}
 const dataTableHead = document.getElementById('data-table-head');
 const dataTableTitle = document.getElementById('data-table-title');
 const miniScenario = document.getElementById('mini-scenario');
@@ -537,6 +583,55 @@ function renderAllTurbineRings() {
   });
 }
 
+function renderNormModule() {
+  if (!normTableBody) return;
+  const n = state.turbines.length;
+  const norm = getActiveNorm();
+  if (n === 0) {
+    normContextCallout.textContent = 'Plaats minstens één turbine in Module 3 om te toetsen.';
+  } else if (n <= 2) {
+    normContextCallout.innerHTML = `${n} turbine${n === 1 ? '' : 's'} geplaatst: bij 1–2 turbines blijven de oude landelijke normen (47 dB Lden / 41 dB Lnight) <strong>formeel van toepassing</strong>.`;
+  } else {
+    normContextCallout.innerHTML = `${n} turbines geplaatst: bij 3 of meer turbines gelden sinds de Delfzijluitspraak (2021) <strong>geen landelijke normen meer</strong> — het bevoegd gezag moet zelf een norm motiveren. De hier gekozen waarde is een referentie, geen automatisch geldende wettelijke norm.`;
+  }
+
+  const selected = state.turbines.find(t => t.id === state.selectedTurbineId);
+  if (!selected) {
+    normTableBody.innerHTML = `<tr><td colspan="6" class="empty-row">Plaats een turbine op de kaart in Module 3 om te toetsen.</td></tr>`;
+    return;
+  }
+
+  const lwCat = computeCategoryLw(state.lwa).hoorbaar;
+  const dayState = Object.assign({}, state, { daynight: 'dag' });
+  const nightState = Object.assign({}, state, { daynight: 'nacht' });
+
+  normTableBody.innerHTML = DISTANCES.map(d => {
+    const lday = lpAt(d, 1, 'hoorbaar', lwCat, dayState);
+    const lnight = lpAt(d, 1, 'hoorbaar', lwCat, nightState);
+    const lden = ldenApprox(lday, lnight);
+
+    let lnightCell;
+    if (norm.lnight != null) {
+      const exceed = lnight > norm.lnight;
+      const diff = (lnight - norm.lnight);
+      lnightCell = `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${exceed ? 'Overschrijding' : 'Binnen norm'} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)} dB)</td>`;
+    } else {
+      lnightCell = `<td class="norm-na">n.v.t.</td>`;
+    }
+
+    let ldenCell;
+    if (norm.lden != null) {
+      const exceed = lden > norm.lden;
+      const diff = (lden - norm.lden);
+      ldenCell = `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${exceed ? 'Overschrijding' : 'Binnen norm'} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)} dB)</td>`;
+    } else {
+      ldenCell = `<td class="norm-na">n.v.t.</td>`;
+    }
+
+    return `<tr><td>${d} m</td><td>${lday.toFixed(1)}</td><td>${lnight.toFixed(1)}</td><td>${lden.toFixed(1)}</td>${lnightCell}${ldenCell}</tr>`;
+  }).join('');
+}
+
 function updateWorstCaseReadout() {
   if (!worstCaseReadout) return;
   const wc500 = computeAbsoluteWorstCaseTotal(500);
@@ -643,6 +738,7 @@ function render() {
 
   renderAllTurbineRings();
   renderCumulativeModule(catLw);
+  renderNormModule();
 }
 
 // ---------- Locatie toevoegen: adreszoeker (PDOK Locatieserver) & coordinaten ----------
