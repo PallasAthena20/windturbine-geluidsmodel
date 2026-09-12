@@ -509,6 +509,20 @@
     <div class="method-callout">
       <h3>Herkomst van de hinderpercentages</h3>
       <p><strong>Matrix-opzet:</strong> het ring/woningen-scenario (best/middel/worst case — welke afstand en dus hoeveel woningen/bewoners blootstaan) staat los van het hinderpercentage (9/30/46% — welk deel van die bewoners naar schatting hinder ondervindt). Dit wordt nu bovendien apart gedaan per geluidscategorie: hoorbaar, laagfrequent en infrasoon hebben elk hun eigen overschrijdingsring, eigen woningtelling en eigen bewonersaantal, en op elk van die drie bewonersaantallen worden alle drie de hinderpercentages toegepast. Per scenario levert dat 3 categorieën × 3 hinderpercentages = 9 uitkomsten op, en over de drie scenario's samen 27 combinaties (zie kaarten en tabel hieronder) — niet alleen de gepaarde combinatie best×9%, middel×30%, worst×46% op enkel het hoorbaar-gebied.</p>
+      <p><strong>Rekenvoorbeeld (best case, hoorbaar geluid):</strong> de vier stappen in de praktijk, met de eerste rij uit de tabel hierboven als voorbeeld.</p>
+      <ol class="m8-example-steps">
+        <li><strong>Overschrijdingsring bepalen</strong> — bij het best-case scenario overschrijdt hoorbaar geluid (dB(A)) de Lnight-norm tot <strong>≤ 500 m</strong> van de turbine (Module 5, hier automatisch bepaald).</li>
+        <li><strong>Woningen tellen</strong> — binnen die 500 m-cirkel staan bijvoorbeeld <strong>18</strong> BAG-adressen.</li>
+        <li><strong>Omrekenen naar bewoners</strong> — <code>18 woningen × 2,10 personen/huishouden = 37,8 → afgerond 38 bewoners</code>.</li>
+        <li><strong>Hinder per percentage</strong> — diezelfde 38 bewoners worden met alle drie de percentages vermenigvuldigd, niet met slechts één:
+          <ul>
+            <li><code>38 × 9% = 3,4 → 3 bewoners</code> (RIVM-basisscenario)</li>
+            <li><code>38 × 30% = 11,4 → 11 bewoners</code> (tussenscenario)</li>
+            <li><code>38 × 46% = 17,5 → 17 bewoners</code> (Pawlaczyk-Łuszczyńska e.a.)</li>
+          </ul>
+        </li>
+      </ol>
+      <p>Deze vier stappen worden onafhankelijk herhaald voor laagfrequent en infrasoon geluid — die hebben elk hun eigen (doorgaans grotere) ring en dus een ander woningen- en bewonersaantal — en voor de scenario's middel en worst case. Dat geeft in totaal 3 scenario's × 3 categorieën × 3 hinderpercentages = <strong>27 uitkomsten</strong>, precies de matrix die de kaarten en de tabel hierboven laten zien.</p>
       <p><strong>9% — RIVM-basisscenario (best):</strong> bij de oude landelijke norm van 47 dB Lden rapporteert het RIVM ca. 8–9% ernstige hinder binnenshuis, in lijn met TNO-onderzoek uit 2008. Bron: <a href="https://www.rivm.nl/sites/default/files/2026-02/Factsheet-gezondheidseffecten-van-windturbinegeluid.pdf" target="_blank" rel="noopener">RIVM, Factsheet gezondheidseffecten van windturbinegeluid</a>.</p>
       <p><strong>30% — tussenscenario (middel):</strong> een indicatieve middenwaarde tussen het RIVM-basisscenario en het kritische scenario hieronder, niet ontleend aan één specifieke studie — bedoeld om de bandbreedte tussen best en worst case te illustreren.</p>
       <p><strong>46% — kritisch scenario (worst), Pawlaczyk-Łuszczyńska e.a. (2018):</strong> in een veldonderzoek op 204–1.726 m van de dichtstbijzijnde turbine (gemeten niveaus 33–50 dB(A)) beoordeelde 46% van de omwonenden het geluid als hinderlijk of zeer hinderlijk. Bron: <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC6121431/" target="_blank" rel="noopener">Pawlaczyk-Łuszczyńska et al. (2018), International Journal of Environmental Research and Public Health</a>.</p>
