@@ -510,7 +510,7 @@ function updateWorstCaseReadout() {
   const wc500 = computeAbsoluteWorstCaseTotal(500);
   const wc1300 = computeAbsoluteWorstCaseTotal(1300);
   const wc2000 = computeAbsoluteWorstCaseTotal(2000);
-  worstCaseReadout.innerHTML = `<strong>Absolute worst case (nacht, alle factoren tegelijk, curtailment actief):</strong> de toeslag loopt op tot <strong>+${wc500.toFixed(1)} dB</strong> op 500 m, <strong>+${wc1300.toFixed(1)} dB</strong> op 1300 m en <strong>+${wc2000.toFixed(1)} dB</strong> op 2000 m zodra het torenzog-effect is uitgedoofd. Dit is een bewust conservatieve bovengrens voor toetsing, geen te verwachten gemiddelde nacht.`;
+  worstCaseReadout.innerHTML = `<strong>Absolute worst case (nacht, alle factoren tegelijk, curtailment actief):</strong> de toeslag loopt op tot <strong>+${wc500.toFixed(1)} dB</strong> op 500 m, <strong>+${wc1300.toFixed(1)} dB</strong> op 1300 m en <strong>+${wc2000.toFixed(1)} dB</strong> op 2000 m zodra het torenzog-effect is uitgedoofd. Dit is een bewust conservatieve bovengrens voor toetsing, geen te verwachten gemiddelde nacht — en volgens de onafhankelijke literatuurcheck hierboven waarschijnlijk zelfs nog een overschatting, omdat windschering, torenzog en AM voor een deel dezelfde fysieke oorzaak delen in plaats van drie losstaande effecten te zijn.`;
 }
 
 // ---------- Rendering ----------
