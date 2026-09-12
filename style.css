@@ -235,6 +235,10 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .factor-row .f-val { font-family: var(--font-mono); font-weight: 700; }
 .factor-row.total { border-bottom: none; padding-top: var(--space-3); font-weight: 700; }
 .factor-row.total .f-val { color: var(--color-primary); font-size: var(--text-lg); }
+.factor-row.group-source { padding-left: var(--space-4); font-size: var(--text-xs); opacity: 0.7; }
+.factor-row.group-max { font-style: italic; }
+.factor-row.group-max .f-label { color: var(--color-text); }
+.factor-row.group-max .f-val { color: var(--color-primary); }
 
 /* Module 3 */
 .m3-layout { display: grid; grid-template-columns: 1fr 380px; gap: var(--space-10); align-items: start; }

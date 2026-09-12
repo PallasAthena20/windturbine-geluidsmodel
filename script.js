@@ -105,13 +105,26 @@ function wakeAtDistance(d, base) {
   return base * Math.min(1, fade);
 }
 
-function addonAt(d, state) {
-  const f = SCENARIO_FACTORS[state.scenario];
-  const shear = state.daynight === 'nacht' ? f.shear : 0;
+// Windschering/inversie, torenzog en amplitudemodulatie (AM) zijn volgens de onafhankelijke
+// vakliteratuur (Bowdler/IOA-submission; VTT-onderzoeksrapport 2011; Van den Berg, JSV 2004)
+// grotendeels dezelfde onderliggende fysica: torenzog is een van de mechanismen van AM, en
+// windschering/stabiele atmosfeer is de meteorologische aanjager van diezelfde AM. Deze drie
+// worden daarom niet meer bij elkaar opgeteld, maar er wordt het maximum van genomen — de
+// aanname dat het dominante mechanisme het effect al grotendeels beschrijft. Curtailment/
+// stall-afregeling is als enige factor een operationele/vergunningskeuze, geen weersomstandigheid,
+// en telt daarom wel gewoon los bovenop.
+function combinedFactors(d, scenarioKey, daynight, curtailmentActive) {
+  const f = SCENARIO_FACTORS[scenarioKey];
+  const shear = daynight === 'nacht' ? f.shear : 0;
   const wake = wakeAtDistance(d, f.wake);
   const am = f.am;
-  const curt = (state.curtailment && state.scenario !== 'best') ? (CURTAILMENT_FACTORS[state.scenario] || 0) : 0;
-  return { shear, wake, am, curt, total: shear + wake + am + curt };
+  const groupMax = Math.max(shear, wake, am);
+  const curt = (curtailmentActive && scenarioKey !== 'best') ? (CURTAILMENT_FACTORS[scenarioKey] || 0) : 0;
+  return { shear, wake, am, groupMax, curt, total: groupMax + curt };
+}
+
+function addonAt(d, state) {
+  return combinedFactors(d, state.scenario, state.daynight, state.curtailment);
 }
 
 function lpAt(d, x, categoryKey, lwCat, state) {
@@ -124,12 +137,8 @@ function lpAt(d, x, categoryKey, lwCat, state) {
 // Absolute worst case: alle versterkende factoren tegelijk (nacht, scenario 'worst', curtailment actief) —
 // onafhankelijk van de huidige UI-selectie, gebruikt voor de methodologische kanttekening in Module 2.
 function computeAbsoluteWorstCaseTotal(d) {
-  const f = SCENARIO_FACTORS.worst;
-  const shear = f.shear; // windschering/inversie telt alleen 's nachts, hier per definitie 's nachts
-  const wake = wakeAtDistance(d, f.wake);
-  const am = f.am;
-  const curt = CURTAILMENT_FACTORS.worst;
-  return shear + wake + am + curt;
+  // 's nachts, scenario 'worst', curtailment actief — zie combinedFactors() voor de max-i.p.v.-som-logica.
+  return combinedFactors(d, 'worst', 'nacht', true).total;
 }
 
 // ---------- App state ----------
@@ -510,7 +519,12 @@ function updateWorstCaseReadout() {
   const wc500 = computeAbsoluteWorstCaseTotal(500);
   const wc1300 = computeAbsoluteWorstCaseTotal(1300);
   const wc2000 = computeAbsoluteWorstCaseTotal(2000);
-  worstCaseReadout.innerHTML = `<strong>Absolute worst case (nacht, alle factoren tegelijk, curtailment actief):</strong> de toeslag loopt op tot <strong>+${wc500.toFixed(1)} dB</strong> op 500 m, <strong>+${wc1300.toFixed(1)} dB</strong> op 1300 m en <strong>+${wc2000.toFixed(1)} dB</strong> op 2000 m zodra het torenzog-effect is uitgedoofd. Dit is een bewust conservatieve bovengrens voor toetsing, geen te verwachten gemiddelde nacht — en volgens de onafhankelijke literatuurcheck hierboven waarschijnlijk zelfs nog een overschatting, omdat windschering, torenzog en AM voor een deel dezelfde fysieke oorzaak delen in plaats van drie losstaande effecten te zijn.`;
+  const allEqual = Math.abs(wc500 - wc1300) < 0.05 && Math.abs(wc1300 - wc2000) < 0.05;
+  if (allEqual) {
+    worstCaseReadout.innerHTML = `<strong>Absolute worst case (nacht, maximum i.p.v. som, curtailment actief):</strong> de toeslag is nu een vlakke <strong>+${wc500.toFixed(1)} dB</strong>, ongeacht de afstand tot de turbine (500–2000 m). Windschering, torenzog en AM worden niet meer opgeteld maar er wordt het maximum van genomen — hier domineert windschering (12 dB) de andere twee, en windschering dooft (in lijn met Van den Berg, JSV 2004) niet uit met afstand. Curtailment (2 dB) telt als enige factor nog wel apart mee. Dit blijft een bewust conservatieve bovengrens voor toetsing, geen te verwachten gemiddelde nacht.`;
+  } else {
+    worstCaseReadout.innerHTML = `<strong>Absolute worst case (nacht, maximum i.p.v. som, curtailment actief):</strong> de toeslag loopt op tot <strong>+${wc500.toFixed(1)} dB</strong> op 500 m, <strong>+${wc1300.toFixed(1)} dB</strong> op 1300 m en <strong>+${wc2000.toFixed(1)} dB</strong> op 2000 m. Windschering, torenzog en AM worden niet meer opgeteld maar er wordt het maximum van genomen, om dubbeltelling van overlappende fysica te voorkomen; curtailment telt als enige factor apart mee. Dit blijft een bewust conservatieve bovengrens voor toetsing, geen te verwachten gemiddelde nacht.`;
+  }
 }
 
 // ---------- Rendering ----------
@@ -547,14 +561,15 @@ function render() {
     curtailmentRow.classList.remove('disabled');
   }
 
-  // factor breakdown
+  // factor breakdown — windschering/torenzog/AM worden NIET meer opgeteld (overlappende fysica),
+  // in plaats daarvan wordt het maximum van de drie meegeteld; curtailment blijft wel optelbaar.
   const f = addonAt(500, state);
-  const wakeNote = SCENARIO_FACTORS[state.scenario].wake;
   factorRows.innerHTML = `
-    <div class="factor-row"><span class="f-label">Windschering / inversie (alleen nacht)</span><span class="f-val">${state.daynight === 'nacht' ? '+' + SCENARIO_FACTORS[state.scenario].shear : '0'} dB</span></div>
-    <div class="factor-row"><span class="f-label">Toren-/gondelzog (≤1000 m, dooft uit tot 2000 m)</span><span class="f-val">+${wakeNote} dB</span></div>
-    <div class="factor-row"><span class="f-label">Amplitudemodulatie (AM/OAM)</span><span class="f-val">+${SCENARIO_FACTORS[state.scenario].am} dB</span></div>
-    <div class="factor-row"><span class="f-label">Curtailment/stall-afregeling ${state.curtailment && state.scenario !== 'best' ? '(actief)' : '(niet actief)'}</span><span class="f-val">+${f.curt} dB</span></div>
+    <div class="factor-row group-source"><span class="f-label">Windschering / inversie (alleen nacht)</span><span class="f-val">+${f.shear.toFixed(1)} dB</span></div>
+    <div class="factor-row group-source"><span class="f-label">Toren-/gondelzog (≤1000 m, dooft uit tot 2000 m)</span><span class="f-val">+${f.wake.toFixed(1)} dB</span></div>
+    <div class="factor-row group-source"><span class="f-label">Amplitudemodulatie (AM/OAM)</span><span class="f-val">+${f.am.toFixed(1)} dB</span></div>
+    <div class="factor-row group-max"><span class="f-label">↳ meegeteld: hoogste van deze drie (geen som — overlappende fysica)</span><span class="f-val">+${f.groupMax.toFixed(1)} dB</span></div>
+    <div class="factor-row"><span class="f-label">Curtailment/stall-afregeling ${state.curtailment && state.scenario !== 'best' ? '(actief)' : '(niet actief)'}</span><span class="f-val">+${f.curt.toFixed(1)} dB</span></div>
     <div class="factor-row total"><span class="f-label">Totaal op 500 m</span><span class="f-val">+${f.total.toFixed(1)} dB</span></div>
   `;
 
