@@ -153,6 +153,8 @@ const state = {
   normPreset3a: 'oud', normCustomLnight3a: 41,
   // Module 7: shear-capacity-verkenner (Van Hooijdonk e.a. 2015 / Bosveld e.a. 2020) — zie script.js §M7.
   m7Ugeo: 9, m7Cloud: 'half', m7ApplyToM6: false,
+  // Module 8: woningen (BAG) → bewoners → geschatte hinder per scenario — zie script.js §M8.
+  m8HouseholdSize: 2.10, m8AddressData: null, m8Fetching: false, m8Error: null,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' heeft geen vaste waarden; die komen uit state.normCustomLden/Lnight.
@@ -320,6 +322,17 @@ if (m7CloudTabs) {
 }
 const m7ApplyM6Check = document.getElementById('m7-apply-m6-check');
 if (m7ApplyM6Check) m7ApplyM6Check.addEventListener('change', () => { state.m7ApplyToM6 = m7ApplyM6Check.checked; render(); });
+
+const m8HouseholdInput = document.getElementById('m8-household-size');
+if (m8HouseholdInput) {
+  m8HouseholdInput.addEventListener('input', () => {
+    const v = parseFloat(m8HouseholdInput.value);
+    state.m8HouseholdSize = Number.isNaN(v) ? 2.10 : v;
+    render();
+  });
+}
+const m8FetchBtnEl = document.getElementById('m8-fetch-btn');
+if (m8FetchBtnEl) m8FetchBtnEl.addEventListener('click', () => { m8RunFetch(); });
 
 // ---------- Bronvermogen slider ----------
 lwaInput.addEventListener('input', () => { state.lwa = parseFloat(lwaInput.value); render(); });
@@ -525,6 +538,7 @@ function render() {
   renderModule3a();
   renderModule6();
   renderModule7();
+  renderModule8();
 }
 
 // ---------- Locatie toevoegen: adreszoeker (PDOK Locatieserver) & coordinaten ----------
@@ -1410,6 +1424,243 @@ function renderModule7() {
     applyNote.textContent = state.m7ApplyToM6
       ? `Actief: Module 6 gebruikt nu ${(sc.pWsbl * 100).toFixed(0)}/${(sc.pVsbl * 100).toFixed(0)} in plaats van 50/50 voor de middel/worst-verdeling.`
       : `Niet actief: Module 6 gebruikt nog de standaard 50/50-verdeling. Vink aan om de bovenstaande verhouding door te voeren.`;
+  }
+}
+
+
+// ============================================================
+// Module 8 — woningen (BAG) → bewoners → geschatte hinder per scenario
+// ============================================================
+
+// Hinderpercentages per scenario — zie module-callout in index.html voor bronnen:
+// best = RIVM-basisscenario (47 dB Lden, ~8-9% ernstige hinder binnenshuis),
+// middel = illustratieve tussenwaarde, worst = Pawlaczyk-Łuszczyńska e.a. (2018).
+const M8_HINDER_PCT = { best: 9, middel: 30, worst: 46 };
+const M8_HINDER_SOURCE_LABEL = {
+  best: 'RIVM-basisscenario',
+  middel: 'Tussenscenario (illustratief)',
+  worst: 'Pawlaczyk-Łuszczyńska e.a. (2018)',
+};
+const M8_SCENARIO_LABEL = { best: 'Best case', middel: 'Middel', worst: 'Worst case' };
+const M8_FETCH_RADIUS = 5000; // = grootste vaste ring uit Module 3; dekt alle scenario/categorie-combinaties
+const M8_MAX_PAGES = 20; // veiligheidsgrens: 20 × limit=1000 = max 20.000 adressen per turbine
+
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// Bepaalt, voor het gegeven scenario/categorie, de verste van de zes vaste ringen (Module 3)
+// waar de downwind-nachtwaarde de actieve Lnight-norm (Module 5) nog overschrijdt.
+// Hergebruikt lpAt()/getActiveNorm() zodat dit altijd meeloopt met lwa/norm/curtailment-wijzigingen.
+function m8ExceedanceRadius(scenarioKey, categoryKey) {
+  const norm = getActiveNorm();
+  if (norm.lnight == null) return null; // bv. WHO-preset heeft geen Lnight-waarde
+  const lwCat = computeCategoryLw(state.lwa)[categoryKey];
+  const nightState = { scenario: scenarioKey, daynight: 'nacht', curtailment: state.curtailment, windBearing: state.windBearing };
+  let radius = null;
+  DISTANCES.forEach((d) => {
+    const lnight = lpAt(d, 1, categoryKey, lwCat, nightState);
+    if (lnight > norm.lnight) radius = d;
+  });
+  return radius;
+}
+
+async function m8FetchAddressesForTurbine(turbine, radiusM) {
+  const lat = turbine.lat, lng = turbine.lng;
+  const dLat = radiusM / 111320;
+  const dLon = radiusM / (111320 * Math.cos((lat * Math.PI) / 180));
+  const bbox = [(lng - dLon).toFixed(6), (lat - dLat).toFixed(6), (lng + dLon).toFixed(6), (lat + dLat).toFixed(6)].join(',');
+  let url = `https://api.pdok.nl/kadaster/bag/ogc/v2/collections/adres/items?bbox=${bbox}&limit=1000&f=json`;
+  const out = [];
+  let pages = 0;
+  let truncated = false;
+  while (url && pages < M8_MAX_PAGES) {
+    let res;
+    try {
+      res = await fetch(url);
+    } catch (e) {
+      truncated = true;
+      break;
+    }
+    if (!res.ok) { truncated = true; break; }
+    const data = await res.json();
+    (data.features || []).forEach((f) => {
+      const p = f.properties || {};
+      const coords = f.geometry && f.geometry.coordinates;
+      if (!coords) return;
+      out.push({ id: p.adresseerbaar_object_identificatie || p.identificatie, lon: coords[0], lat: coords[1] });
+    });
+    const next = (data.links || []).find((l) => l.rel === 'next');
+    url = next ? next.href : null;
+    pages++;
+  }
+  if (url) truncated = true; // loop afgebroken op paginalimiet, niet omdat er geen 'next' meer was
+  return { addresses: out, truncated };
+}
+
+function m8TurbineSnapshot() {
+  return state.turbines3a.map((t) => `${t.id}:${t.lat.toFixed(5)},${t.lng.toFixed(5)}`).join('|');
+}
+
+async function m8RunFetch() {
+  const n = state.turbines3a.length;
+  if (n === 0) {
+    state.m8Error = 'Plaats minstens één turbine op de kaart in Module 3 om woningen op te halen.';
+    renderModule8();
+    return;
+  }
+  state.m8Fetching = true;
+  state.m8Error = null;
+  renderModule8();
+  try {
+    const byTurbine = new Map();
+    let anyTruncated = false;
+    for (const t of state.turbines3a) {
+      const { addresses, truncated } = await m8FetchAddressesForTurbine(t, M8_FETCH_RADIUS);
+      byTurbine.set(t.id, addresses);
+      if (truncated) anyTruncated = true;
+    }
+    state.m8AddressData = {
+      byTurbine,
+      turbineSnapshot: m8TurbineSnapshot(),
+      truncated: anyTruncated,
+      fetchedAt: new Date(),
+    };
+  } catch (e) {
+    state.m8Error = 'Ophalen van BAG-adressen bij PDOK is mislukt. Probeer het later opnieuw.';
+  } finally {
+    state.m8Fetching = false;
+    renderModule8();
+  }
+}
+
+// Telt unieke BAG-adresobjecten binnen `radius` meter van minstens één geplaatste turbine.
+function m8CountUnique(radius) {
+  if (!state.m8AddressData || radius == null) return 0;
+  const seen = new Set();
+  state.turbines3a.forEach((t) => {
+    const addrs = state.m8AddressData.byTurbine.get(t.id) || [];
+    addrs.forEach((a) => {
+      const d = haversineMeters(t.lat, t.lng, a.lat, a.lon);
+      if (d <= radius) {
+        seen.add(a.id || `${a.lat.toFixed(6)},${a.lon.toFixed(6)}`);
+      }
+    });
+  });
+  return seen.size;
+}
+
+function m8RingLabel(radius) {
+  return radius == null ? 'geen overschrijding' : `≤ ${radius} m`;
+}
+
+function renderModule8() {
+  const contextCallout = document.getElementById('m8-context-callout');
+  const fetchStatus = document.getElementById('m8-fetch-status');
+  const fetchBtn = document.getElementById('m8-fetch-btn');
+  const householdInput = document.getElementById('m8-household-size');
+  const grid = document.getElementById('m8-grid');
+  const tableBody = document.getElementById('m8-table-body');
+  if (!grid) return;
+
+  const n = state.turbines3a.length;
+  if (householdInput && document.activeElement !== householdInput) {
+    householdInput.value = state.m8HouseholdSize;
+  }
+
+  if (contextCallout) {
+    if (n === 0) {
+      contextCallout.textContent = 'Plaats minstens één turbine op de kaart in Module 3 om deze module te gebruiken.';
+    } else {
+      contextCallout.innerHTML = `${n} turbine${n === 1 ? '' : 's'} geplaatst. Overschrijdingsafstanden gebruiken de huidige norm van Module 5 (<strong>${getActiveNorm().label}</strong>) en het huidige bronvermogen van Module 1.`;
+    }
+  }
+
+  if (fetchBtn) fetchBtn.disabled = state.m8Fetching || n === 0;
+
+  const norm = getActiveNorm();
+  const normHasLnight = norm.lnight != null;
+
+  if (fetchStatus) {
+    fetchStatus.className = 'hint';
+    if (!normHasLnight) {
+      fetchStatus.textContent = `De geselecteerde norm (${norm.label}) heeft geen Lnight-waarde — overschrijdingsafstand kan hiermee niet worden bepaald. Kies een andere norm bij Module 5.`;
+      fetchStatus.classList.add('m8-status-error');
+    } else if (state.m8Fetching) {
+      fetchStatus.textContent = `Bezig met ophalen van BAG-adressen rond ${n} turbine${n === 1 ? '' : 's'} (tot ${M8_FETCH_RADIUS} m)...`;
+    } else if (state.m8Error) {
+      fetchStatus.textContent = state.m8Error;
+      fetchStatus.classList.add('m8-status-error');
+    } else if (state.m8AddressData) {
+      const totalUnique = m8CountUnique(M8_FETCH_RADIUS);
+      const stale = state.m8AddressData.turbineSnapshot !== m8TurbineSnapshot();
+      const when = state.m8AddressData.fetchedAt.toLocaleTimeString('nl-NL');
+      let txt = `${totalUnique} unieke BAG-adressen gevonden binnen ${M8_FETCH_RADIUS} m van de geplaatste turbine(s) (opgehaald om ${when}).`;
+      if (state.m8AddressData.truncated) txt += ' Let op: het aantal pagina\u2019s is afgekapt op de veiligheidsgrens — het werkelijke aantal kan hoger liggen.';
+      if (stale) txt += ' Turbines zijn gewijzigd sinds deze ophaling — klik opnieuw op "Woningen ophalen (BAG)" voor actuele aantallen.';
+      fetchStatus.textContent = txt;
+      fetchStatus.classList.add(stale ? 'm8-status-error' : 'm8-status-ok');
+    } else {
+      fetchStatus.textContent = n > 0 ? 'Nog geen BAG-gegevens opgehaald — klik op "Woningen ophalen (BAG)".' : '';
+    }
+  }
+
+  const rows = ['best', 'middel', 'worst'].map((scenario) => {
+    const ringHoorbaar = normHasLnight ? m8ExceedanceRadius(scenario, 'hoorbaar') : null;
+    const ringLfg = normHasLnight ? m8ExceedanceRadius(scenario, 'laagfrequent') : null;
+    const hasData = !!state.m8AddressData;
+    const housesHoorbaar = hasData ? m8CountUnique(ringHoorbaar) : null;
+    const housesLfg = hasData ? m8CountUnique(ringLfg) : null;
+    const people = housesHoorbaar != null ? housesHoorbaar * state.m8HouseholdSize : null;
+    const hinderPct = M8_HINDER_PCT[scenario];
+    const hinderPeople = people != null ? people * (hinderPct / 100) : null;
+    return { scenario, ringHoorbaar, ringLfg, housesHoorbaar, housesLfg, people, hinderPct, hinderPeople };
+  });
+
+  grid.innerHTML = rows
+    .map((r) => {
+      const dash = '—';
+      return `
+      <div class="m8-card m8-${r.scenario}">
+        <span class="m8-card-title">${M8_SCENARIO_LABEL[r.scenario]}</span>
+        <div class="m8-row"><span class="m8-row-label">Overschrijding hoorbaar (dB(A))</span><span class="m8-row-value">${m8RingLabel(r.ringHoorbaar)}</span></div>
+        <div class="m8-row"><span class="m8-row-label">Woningen in dat gebied (BAG)</span><span class="m8-row-value">${r.housesHoorbaar != null ? r.housesHoorbaar.toLocaleString('nl-NL') : dash}</span></div>
+        <div class="m8-row"><span class="m8-row-label">Overschrijding LFG (dB(Lin))</span><span class="m8-row-value">${m8RingLabel(r.ringLfg)}</span></div>
+        <div class="m8-row"><span class="m8-row-label">Woningen in dat gebied (BAG)</span><span class="m8-row-value">${r.housesLfg != null ? r.housesLfg.toLocaleString('nl-NL') : dash}</span></div>
+        <div class="m8-row"><span class="m8-row-label">Geschat aantal bewoners</span><span class="m8-row-value">${r.people != null ? Math.round(r.people).toLocaleString('nl-NL') : dash}</span></div>
+        <div class="m8-hinder-block">
+          <span class="m8-hinder-value">${r.hinderPeople != null ? Math.round(r.hinderPeople).toLocaleString('nl-NL') : dash}</span>
+          <span class="m8-hinder-label">bewoners met geschatte hinder (${r.hinderPct}% — ${M8_HINDER_SOURCE_LABEL[r.scenario]})</span>
+        </div>
+      </div>`;
+    })
+    .join('');
+
+  if (tableBody) {
+    if (n === 0) {
+      tableBody.innerHTML = `<tr><td colspan="8" class="empty-row">Plaats een turbine op de kaart en klik op "Woningen ophalen (BAG)".</td></tr>`;
+    } else {
+      tableBody.innerHTML = rows
+        .map((r) => {
+          const dash = '—';
+          return `<tr>
+          <td>${M8_SCENARIO_LABEL[r.scenario]}</td>
+          <td>${m8RingLabel(r.ringHoorbaar)}</td>
+          <td>${r.housesHoorbaar != null ? r.housesHoorbaar.toLocaleString('nl-NL') : dash}</td>
+          <td>${m8RingLabel(r.ringLfg)}</td>
+          <td>${r.housesLfg != null ? r.housesLfg.toLocaleString('nl-NL') : dash}</td>
+          <td>${r.people != null ? Math.round(r.people).toLocaleString('nl-NL') : dash}</td>
+          <td>${r.hinderPct}%</td>
+          <td><strong>${r.hinderPeople != null ? Math.round(r.hinderPeople).toLocaleString('nl-NL') : dash}</strong></td>
+        </tr>`;
+        })
+        .join('');
+    }
   }
 }
 
