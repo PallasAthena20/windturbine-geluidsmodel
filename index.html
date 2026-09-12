@@ -253,6 +253,108 @@
     </div>
   </section>
 
+  <!-- MODULE 3A -->
+  <section class="module" id="module-3a">
+    <div class="module-head">
+      <span class="module-num">Module 3a</span>
+      <h2>Herbouwde kaart — contouren en normtoetsing</h2>
+    </div>
+    <p class="module-desc">Deze module herbouwt de kaart uit Module 3, met drie wijzigingen: de cirkels op vaste afstand zijn vervangen door <strong>asymmetrische contouren</strong> (isofonen) — de fysiek afgeleide vorm van een lijn met gelijk geluidsniveau, langgerekt downwind en samengeperst upwind, in plaats van cirkels op vaste afstand — de ondergrond is een neutrale <strong>grijze kaart</strong> in plaats van de OSM-stratenkaart, en de windpijl heeft een neutrale kleur die niet meer botst met de kleuren van de contouren. Turbines plaats je hier opnieuw en onafhankelijk van Module 3 (adres, coördinaten of aanwijzen op de kaart), en dag/nacht en de te toetsen norm stel je hier apart in, los van Module 2 en Module 5. Categorie volgt de actieve tab in Module 3.</p>
+
+    <p class="callout" id="m3a-context-callout"></p>
+
+    <div class="cum-controls">
+      <div class="cum-field">
+        <label>Dag / nacht (bepaalt de contourvorm op de kaart)</label>
+        <div class="pill-toggle" id="daynight-toggle-3a">
+          <button data-val="dag" aria-pressed="true" type="button">☀ Dag</button>
+          <button data-val="nacht" aria-pressed="false" type="button">☾ Nacht</button>
+        </div>
+      </div>
+      <div class="cum-field">
+        <label for="norm-preset-select-3a">Te toetsen norm</label>
+        <select id="norm-preset-select-3a">
+          <option value="oud">Oude landelijke norm — 47 dB Lden / 41 dB Lnight</option>
+          <option value="who">WHO-advieswaarde — 45 dB Lden (geen Lnight-waarde)</option>
+          <option value="eigen">Eigen/lokale norm — zelf invullen</option>
+        </select>
+      </div>
+      <div class="cum-field" id="norm-custom-lden-field-3a" style="display:none;">
+        <label for="norm-custom-lden-3a">Eigen Lden-norm (dB)</label>
+        <input type="number" id="norm-custom-lden-3a" value="47" step="0.5" min="30" max="60">
+      </div>
+      <div class="cum-field" id="norm-custom-lnight-field-3a" style="display:none;">
+        <label for="norm-custom-lnight-3a">Eigen Lnight-norm (dB)</label>
+        <input type="number" id="norm-custom-lnight-3a" value="41" step="0.5" min="25" max="55">
+      </div>
+    </div>
+
+    <div class="m3-layout">
+      <div class="map-wrap">
+        <div class="location-panel">
+          <div class="loc-tabs" role="tablist" aria-label="Locatie invoermethode (module 3a)">
+            <button type="button" class="loc-tab" data-loc-tab-3a="adres" aria-pressed="true">Zoeken op adres/plaats</button>
+            <button type="button" class="loc-tab" data-loc-tab-3a="coords" aria-pressed="false">Coördinaten invoeren</button>
+          </div>
+          <div class="loc-row">
+            <div class="loc-field" id="loc-field-adres-3a">
+              <div class="address-search">
+                <input type="text" id="address-input-3a" placeholder="Bijv. Cattenbroek, Montfoort of een postcode" autocomplete="off" aria-label="Zoek een adres of plaats">
+                <ul class="address-suggestions" id="address-suggestions-3a" role="listbox" hidden></ul>
+              </div>
+            </div>
+            <div class="loc-field" id="loc-field-coords-3a" hidden>
+              <div class="coords-inputs-row">
+                <input type="number" id="lat-input-3a" step="0.0001" placeholder="Breedtegraad, bv. 52.1500" aria-label="Breedtegraad (lat)">
+                <input type="number" id="lng-input-3a" step="0.0001" placeholder="Lengtegraad, bv. 5.3000" aria-label="Lengtegraad (lon)">
+              </div>
+              <button type="button" class="pick-on-map-btn" id="pick-on-map-btn-3a" aria-pressed="false">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s7-7.58 7-12a7 7 0 1 0-14 0c0 4.42 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                Of wijs de locatie aan op de kaart
+              </button>
+            </div>
+            <button type="button" class="add-turbine-btn" id="add-turbine-btn-3a">+ Turbine toevoegen</button>
+          </div>
+          <p class="loc-status" id="loc-status-3a" role="status" aria-live="polite"></p>
+        </div>
+        <div class="map-toolbar">
+          <span class="turbine-count" id="turbine-count-3a">0 / 8 turbines geplaatst</span>
+          <span class="wind-indicator" id="m3a-wind-indicator"></span>
+          <button type="button" class="clear-btn" id="clear-turbines-3a">Wis alle turbines</button>
+        </div>
+        <div class="map-container">
+          <div id="turbine-map-3a" role="img" aria-label="Grijze kaart van Nederland met asymmetrische geluidscontouren rond geplaatste windturbines"></div>
+          <div class="empty-map-hint" id="empty-map-hint-3a">Zoek een adres, voer coördinaten in, of klik op "Of wijs de locatie aan op de kaart" om een windturbine te plaatsen (max. 8).</div>
+        </div>
+        <div class="legend">
+          <div class="ring-legend" id="ring-legend-3a"></div>
+          <p class="legend-caption" id="legend-caption-3a">Contourkleur toont het geluidsniveau op de downwind-referentieafstand (niet de fysieke afstand) — de vorm van de contour zelf toont hoe ver dat niveau reikt per windrichting.</p>
+        </div>
+      </div>
+
+      <div class="side-col">
+        <div class="readout-mini">
+          <span class="rm-title">Huidig scenario</span>
+          <span class="rm-val" id="mini-scenario-3a">Best case</span>
+          <span class="rm-sub" id="mini-sub-3a">Dag · Wind uit N · 0 turbines</span>
+        </div>
+
+        <div class="data-table-card">
+          <h3>Toetsing geselecteerde turbine (hoorbaar geluid, dB(A))</h3>
+          <div class="cum-result-wrap">
+            <table class="data-table norm-table">
+              <thead>
+                <tr><th>Afstand</th><th>Dag (dB(A))</th><th>Nacht (dB(A))</th><th>Lden-benadering* (dB)</th><th>Toetsing Lnight</th><th>Toetsing Lden</th></tr>
+              </thead>
+              <tbody id="norm-table-body-3a"><tr><td colspan="6" class="empty-row">Plaats een turbine op de kaart om te toetsen.</td></tr></tbody>
+            </table>
+          </div>
+          <p class="callout" id="norm-lden-callout-3a">* Zelfde indicatieve Lden-benadering als Module 5 (zie daar voor de formule en beperkingen), hier berekend voor de dag/nacht-instelling hierboven t.o.v. de hier gekozen norm.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- MODULE 4 -->
   <section class="module" id="module-4">
     <div class="module-head">
@@ -379,7 +481,7 @@
 </main>
 
 <footer>
-  Interactief model · gebaseerd op de bijgevoegde position papers "Geluidpropagatie windturbines" en "Laagfrequent geluid en windturbines", <a href="https://www.uknown.co.uk/wp-content/uploads/2016/01/AV1300R02_Evans_Cooper_2012.pdf" target="_blank" rel="noopener">Evans &amp; Cooper (2012)</a>, <a href="https://ntrs.nasa.gov/citations/19910006812" target="_blank" rel="noopener">Hubbard &amp; Shepherd (1990, NASA)</a>, <a href="https://webstore.iec.ch/publication/2977" target="_blank" rel="noopener">IEC 61672-1</a>, <a href="https://www.iso.org/standard/13813.html" target="_blank" rel="noopener">ISO 7196</a>, <a href="https://tethys.pnnl.gov/sites/default/files/publications/RSG-2016-Report.pdf" target="_blank" rel="noopener">RSG (2016)</a>, <a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson et al. (2026)</a> en <a href="https://publications.tno.nl/publication/34644559/QRWhHojF/TNO-2025-R10988.pdf" target="_blank" rel="noopener">TNO-2025-R10988</a>. Kaartlagen © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-contributors, tegels via <a href="https://www.openstreetmap.fr/" target="_blank" rel="noopener">OpenStreetMap France</a>. Geocodering via de <a href="https://www.pdok.nl/introductie/-/article/pdok-locatieserver" target="_blank" rel="noopener">PDOK Locatieserver</a> (Kadaster). Uitsluitend voor beleidsmatige illustratie — geen formele akoestische beoordeling.
+  Interactief model · gebaseerd op de bijgevoegde position papers "Geluidpropagatie windturbines" en "Laagfrequent geluid en windturbines", <a href="https://www.uknown.co.uk/wp-content/uploads/2016/01/AV1300R02_Evans_Cooper_2012.pdf" target="_blank" rel="noopener">Evans &amp; Cooper (2012)</a>, <a href="https://ntrs.nasa.gov/citations/19910006812" target="_blank" rel="noopener">Hubbard &amp; Shepherd (1990, NASA)</a>, <a href="https://webstore.iec.ch/publication/2977" target="_blank" rel="noopener">IEC 61672-1</a>, <a href="https://www.iso.org/standard/13813.html" target="_blank" rel="noopener">ISO 7196</a>, <a href="https://tethys.pnnl.gov/sites/default/files/publications/RSG-2016-Report.pdf" target="_blank" rel="noopener">RSG (2016)</a>, <a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson et al. (2026)</a> en <a href="https://publications.tno.nl/publication/34644559/QRWhHojF/TNO-2025-R10988.pdf" target="_blank" rel="noopener">TNO-2025-R10988</a>. Kaartlagen © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-contributors, tegels via <a href="https://www.openstreetmap.fr/" target="_blank" rel="noopener">OpenStreetMap France</a> (module 3) en © <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>, HERE, Garmin (module 3a, grijze basemap). Geocodering via de <a href="https://www.pdok.nl/introductie/-/article/pdok-locatieserver" target="_blank" rel="noopener">PDOK Locatieserver</a> (Kadaster). Uitsluitend voor beleidsmatige illustratie — geen formele akoestische beoordeling.
   <div class="footer-copyright">© 2026 Athena. Alle rechten voorbehouden.</div>
 </footer>
 

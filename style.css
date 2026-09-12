@@ -241,7 +241,8 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .factor-row.group-max .f-val { color: var(--color-primary); }
 
 /* Module 3 */
-.m3-layout { display: grid; grid-template-columns: 1fr 380px; gap: var(--space-10); align-items: start; }
+.m3-layout { display: grid; grid-template-columns: 1fr 380px; gap: var(--space-10); align-items: start; min-width: 0; }
+.m3-layout > * { min-width: 0; }
 @media (max-width: 980px) { .m3-layout { grid-template-columns: 1fr; } }
 
 /* Category tabs */
@@ -322,9 +323,10 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .uw-tag { color: var(--color-success); font-weight: 700; }
 
 .map-container { position: relative; border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--color-border); }
-#turbine-map { width: 100%; height: 520px; background: var(--color-surface-2); }
+#turbine-map, #turbine-map-3a { width: 100%; height: 520px; background: var(--color-surface-2); }
 #turbine-map.map-dark-filter .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.85); }
-@media (max-width: 640px) { #turbine-map { height: 420px; } }
+#turbine-map-3a.map-dark-filter .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.9); }
+@media (max-width: 640px) { #turbine-map, #turbine-map-3a { height: 420px; } }
 
 .empty-map-hint {
   position: absolute; left: 50%; bottom: var(--space-4); transform: translateX(-50%);
@@ -360,8 +362,9 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .method-callout a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
 .method-callout .worst-case-readout { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px dashed var(--color-border); font-size: var(--text-sm); }
 
-.side-col { display: flex; flex-direction: column; gap: var(--space-6); }
-.data-table-card { background: var(--color-surface-offset); border-radius: var(--radius-lg); padding: var(--space-5); }
+.side-col { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
+.side-col > * { min-width: 0; }
+.data-table-card { background: var(--color-surface-offset); border-radius: var(--radius-lg); padding: var(--space-5); min-width: 0; }
 .data-table-card h3 { font-size: var(--text-sm); font-weight: 700; margin-bottom: var(--space-3); }
 .data-table { font-size: var(--text-xs); }
 .data-table th, .data-table td { padding: var(--space-2) var(--space-2); text-align: right; }
@@ -392,9 +395,13 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 
 /* ============ Module 4: cumulatie ============ */
 .cum-controls { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-5); flex-wrap: wrap; margin-bottom: var(--space-5); background: var(--color-surface-offset); border-radius: var(--radius-lg); padding: var(--space-5); }
-.cum-field { display: flex; flex-direction: column; gap: var(--space-2); }
+.cum-field { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; flex: 1 1 220px; max-width: 100%; }
 .cum-field label { font-size: var(--text-sm); font-weight: 600; }
-.cum-field select, .cum-field input[type="number"] { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border: 1.5px solid var(--color-border); background: var(--color-surface-2); color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm); min-width: 12ch; }
+.cum-field select, .cum-field input[type="number"] { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border: 1.5px solid var(--color-border); background: var(--color-surface-2); color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm); min-width: 12ch; width: 100%; max-width: 100%; box-sizing: border-box; }
+@media (max-width: 640px) {
+  .cum-controls { flex-direction: column; align-items: stretch; }
+  .cum-field { flex: 1 1 auto; }
+}
 .cum-toggle { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
 .cum-toggle input { width: 1.1em; height: 1.1em; accent-color: var(--color-primary); }
 .cum-result-wrap { background: var(--color-surface-offset); border-radius: var(--radius-lg); padding: var(--space-5); }

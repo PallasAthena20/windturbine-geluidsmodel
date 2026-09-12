@@ -16,6 +16,7 @@ let currentTheme = matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 
       ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
       : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
     applyMapTileTheme();
+    applyMapTileTheme3a();
     render();
   });
 })();
@@ -147,6 +148,10 @@ const state = {
   category: 'hoorbaar', turbines: [], selectedTurbineId: null,
   cumDistance: 500, cumShowReceptors: false,
   normPreset: 'oud', normCustomLden: 47, normCustomLnight: 41,
+  // Module 3a: volledig eigen turbine-invoer, dag/nacht en normselectie — onafhankelijk van
+  // Module 2/3/5 hierboven (alleen state.category/scenario/curtailment/windBearing/lwa zijn gedeeld).
+  turbines3a: [], selectedTurbineId3a: null, daynight3a: 'dag',
+  normPreset3a: 'oud', normCustomLden3a: 47, normCustomLnight3a: 41,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' heeft geen vaste waarden; die komen uit state.normCustomLden/Lnight.
@@ -159,6 +164,12 @@ function getActiveNorm() {
     return { lden: state.normCustomLden, lnight: state.normCustomLnight, label: 'Eigen/lokale norm' };
   }
   return NORM_PRESETS[state.normPreset];
+}
+function getActiveNorm3a() {
+  if (state.normPreset3a === 'eigen') {
+    return { lden: state.normCustomLden3a, lnight: state.normCustomLnight3a, label: 'Eigen/lokale norm' };
+  }
+  return NORM_PRESETS[state.normPreset3a];
 }
 // Indicatieve Lden-benadering: standaard dag/avond/nacht-weging (12/4/8 uur, avond +5 dB, nacht +10 dB),
 // met de avondperiode benaderd op het dagniveau omdat dit model geen apart avondscenario kent.
@@ -253,6 +264,34 @@ const cumDistanceSelect = document.getElementById('cum-distance-select');
 const cumShowReceptorsCheck = document.getElementById('cum-show-receptors');
 const cumTableBody = document.getElementById('cum-table-body');
 const cumCallout = document.getElementById('cum-callout');
+
+// ---------- Module 3a DOM refs ----------
+const m3aContextCallout = document.getElementById('m3a-context-callout');
+const daynightToggle3a = document.getElementById('daynight-toggle-3a');
+const normPresetSelect3a = document.getElementById('norm-preset-select-3a');
+const normCustomLdenField3a = document.getElementById('norm-custom-lden-field-3a');
+const normCustomLnightField3a = document.getElementById('norm-custom-lnight-field-3a');
+const normCustomLdenInput3a = document.getElementById('norm-custom-lden-3a');
+const normCustomLnightInput3a = document.getElementById('norm-custom-lnight-3a');
+const locTabs3a = document.querySelectorAll('[data-loc-tab-3a]');
+const locFieldAdres3a = document.getElementById('loc-field-adres-3a');
+const locFieldCoords3a = document.getElementById('loc-field-coords-3a');
+const addressInput3a = document.getElementById('address-input-3a');
+const addressSuggestions3a = document.getElementById('address-suggestions-3a');
+const latInput3a = document.getElementById('lat-input-3a');
+const lngInput3a = document.getElementById('lng-input-3a');
+const pickOnMapBtn3a = document.getElementById('pick-on-map-btn-3a');
+const addTurbineBtn3a = document.getElementById('add-turbine-btn-3a');
+const locStatus3a = document.getElementById('loc-status-3a');
+const turbineCount3a = document.getElementById('turbine-count-3a');
+const m3aWindIndicator = document.getElementById('m3a-wind-indicator');
+const clearTurbinesBtn3a = document.getElementById('clear-turbines-3a');
+const emptyMapHint3a = document.getElementById('empty-map-hint-3a');
+const ringLegend3a = document.getElementById('ring-legend-3a');
+const legendCaption3a = document.getElementById('legend-caption-3a');
+const miniScenario3a = document.getElementById('mini-scenario-3a');
+const miniSub3a = document.getElementById('mini-sub-3a');
+const normTableBody3a = document.getElementById('norm-table-body-3a');
 
 // ---------- Static: octave table ----------
 (function fillOctaveTable() {
@@ -739,6 +778,7 @@ function render() {
   renderAllTurbineRings();
   renderCumulativeModule(catLw);
   renderNormModule();
+  renderModule3a();
 }
 
 // ---------- Locatie toevoegen: adreszoeker (PDOK Locatieserver) & coordinaten ----------
@@ -950,7 +990,502 @@ function renderCumulativeModule(catLw) {
   }
 }
 
+// ============================================================
+// Module 3a — herbouwde kaart: asymmetrische isofoon-contouren,
+// grijze basemap (CARTO Positron) en een neutrale windpijlkleur.
+// Volledig eigen turbine-invoer, dag/nacht-toggle en normselectie,
+// onafhankelijk van Module 3/2/5 hierboven.
+// ============================================================
+let map3a, mapRenderer3a, turbineLayer3a, tileLayer3a, turbineArrowLayer3a;
+const turbineContourGroups3a = new Map(); // id -> L.LayerGroup met L.polygon-contouren
+const turbineMarkers3a = new Map();
+const turbineWindArrows3a = new Map();
+let nextTurbine3aId = 1;
+
+// Eén neutrale, donkere kleur i.p.v. rood/groen — vorm (pijlpunt vs. open cirkel) blijft het
+// enige onderscheid tussen downwind en upwind, zodat de pijl niet meer visueel botst met
+// de zes RING_COLORS (groen/geel/rood/blauw/paars/oranje) van de contouren.
+const WIND_ARROW_COLOR_3A = '#334155';
+function windArrowIcon3a() {
+  const c = WIND_ARROW_SIZE / 2;
+  return L.divIcon({
+    className: 'wind-arrow-icon',
+    html: `<div class="wind-arrow-rotate"><svg width="${WIND_ARROW_SIZE}" height="${WIND_ARROW_SIZE}" viewBox="0 0 ${WIND_ARROW_SIZE} ${WIND_ARROW_SIZE}">
+      <line x1="${c}" y1="${c}" x2="${c}" y2="8" stroke="${WIND_ARROW_COLOR_3A}" stroke-width="3" stroke-linecap="round"/>
+      <path d="M${c} 8 L${c - 6} 19 L${c + 6} 19 Z" fill="${WIND_ARROW_COLOR_3A}"/>
+      <line x1="${c}" y1="${c}" x2="${c}" y2="${WIND_ARROW_SIZE - 8}" stroke="${WIND_ARROW_COLOR_3A}" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3.5" opacity="0.55"/>
+      <circle cx="${c}" cy="${WIND_ARROW_SIZE - 8}" r="4.5" fill="none" stroke="${WIND_ARROW_COLOR_3A}" stroke-width="2.2"/>
+    </svg></div>`,
+    iconSize: [WIND_ARROW_SIZE, WIND_ARROW_SIZE],
+    iconAnchor: [WIND_ARROW_SIZE / 2, WIND_ARROW_SIZE / 2],
+  });
+}
+function updateWindArrowRotations3a() {
+  const downwindBearing = (state.windBearing + 180) % 360;
+  turbineWindArrows3a.forEach(marker => {
+    const el = marker.getElement();
+    const inner = el && el.querySelector('.wind-arrow-rotate');
+    if (inner) inner.style.transform = `rotate(${downwindBearing}deg)`;
+  });
+}
+
+function initMap3a() {
+  if (!document.getElementById('turbine-map-3a')) return;
+  mapRenderer3a = L.canvas({ padding: 0.4 });
+  map3a = L.map('turbine-map-3a', {
+    center: [52.15, 5.3],
+    zoom: 7,
+    minZoom: 6,
+    maxZoom: 15,
+    renderer: mapRenderer3a,
+    zoomControl: true,
+  });
+  turbineArrowLayer3a = L.layerGroup().addTo(map3a);
+  turbineLayer3a = L.layerGroup().addTo(map3a);
+  applyMapTileTheme3a();
+
+  map3a.on('click', (e) => {
+    if (!pickModeArmed3a) return;
+    if (state.turbines3a.length >= MAX_TURBINES) {
+      flashEmptyHint3a(`Maximaal ${MAX_TURBINES} turbines geplaatst. Verwijder er eerst een via de kaart of "Wis alle turbines".`);
+      setPickMode3a(false);
+      return;
+    }
+    latInput3a.value = e.latlng.lat.toFixed(4);
+    lngInput3a.value = e.latlng.lng.toFixed(4);
+    setPickMode3a(false);
+    setLocStatus3a(`Locatie gekozen op de kaart: ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}. Klik op "Turbine toevoegen" om te bevestigen.`, 'success');
+  });
+}
+
+// Grijze basemap (Esri "Light Gray Canvas") i.p.v. de OSM-stratenkaart van Module 3 — neutraal
+// grijstintenkaartbeeld zodat de gekleurde contouren beter opvallen. Bron: Esri/HERE/Garmin/OpenStreetMap-
+// contributors. (CARTO Positron-tegels gaven bij server-side/headless requests een "KEY REQUIRED"-
+// placeholder omdat CARTO die laag inmiddels achter een API-key heeft gezet — Esri's kosteloze canvaslaag
+// werkt zonder key en is daarom als vervanging gebruikt.)
+function applyMapTileTheme3a() {
+  if (!map3a) return;
+  if (tileLayer3a) map3a.removeLayer(tileLayer3a);
+  tileLayer3a = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-contributors',
+    maxZoom: 16,
+  });
+  tileLayer3a.addTo(map3a);
+  tileLayer3a.setZIndex(0);
+  const mapEl = document.getElementById('turbine-map-3a');
+  if (mapEl) mapEl.classList.toggle('map-dark-filter', currentTheme === 'dark');
+}
+
+function flashEmptyHint3a(msg) {
+  emptyMapHint3a.textContent = msg;
+  emptyMapHint3a.classList.add('visible', 'warn');
+  clearTimeout(flashEmptyHint3a._t);
+  flashEmptyHint3a._t = setTimeout(() => {
+    emptyMapHint3a.classList.remove('warn');
+    updateEmptyHint3a();
+  }, 2600);
+}
+
+function updateEmptyHint3a() {
+  if (state.turbines3a.length === 0) {
+    emptyMapHint3a.textContent = 'Zoek een adres, voer co\u00f6rdinaten in, of klik op "Of wijs de locatie aan op de kaart" om een windturbine te plaatsen (max. ' + MAX_TURBINES + ').';
+    emptyMapHint3a.classList.add('visible');
+  } else {
+    emptyMapHint3a.classList.remove('visible');
+  }
+}
+
+let pickModeArmed3a = false;
+function setPickMode3a(on) {
+  pickModeArmed3a = on;
+  pickOnMapBtn3a.setAttribute('aria-pressed', String(on));
+  const mapEl = document.getElementById('turbine-map-3a');
+  if (mapEl) mapEl.classList.toggle('pick-armed', on);
+  if (on) {
+    setLocStatus3a(PICK_HINT);
+  } else if (locStatus3a.textContent === PICK_HINT) {
+    setLocStatus3a('');
+  }
+}
+pickOnMapBtn3a.addEventListener('click', () => setPickMode3a(!pickModeArmed3a));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && pickModeArmed3a) setPickMode3a(false);
+});
+
+function addTurbine3a(lat, lng) {
+  const id = nextTurbine3aId++;
+  const turbine = { id, lat, lng };
+  state.turbines3a.push(turbine);
+
+  const marker = L.marker([lat, lng], { icon: turbineIcon(false) }).addTo(turbineLayer3a);
+  marker.bindPopup(`<div class="turbine-popup"><strong>Turbine #${id}</strong><br><button type="button" class="popup-remove-btn-3a" data-remove-id-3a="${id}">Verwijder deze turbine</button></div>`);
+  marker.on('click', () => { selectTurbine3a(id); });
+  marker.on('popupopen', () => {
+    const btn = document.querySelector(`.popup-remove-btn-3a[data-remove-id-3a="${id}"]`);
+    if (btn) btn.addEventListener('click', () => { removeTurbine3a(id); map3a.closePopup(); });
+  });
+  turbineMarkers3a.set(id, marker);
+
+  const arrowMarker = L.marker([lat, lng], { icon: windArrowIcon3a(), interactive: false, keyboard: false }).addTo(turbineArrowLayer3a);
+  turbineWindArrows3a.set(id, arrowMarker);
+
+  const group = L.layerGroup().addTo(map3a);
+  turbineContourGroups3a.set(id, group);
+
+  selectTurbine3a(id);
+  render();
+}
+
+function removeTurbine3a(id) {
+  const marker = turbineMarkers3a.get(id);
+  if (marker) { turbineLayer3a.removeLayer(marker); turbineMarkers3a.delete(id); }
+  const arrowMarker = turbineWindArrows3a.get(id);
+  if (arrowMarker) { turbineArrowLayer3a.removeLayer(arrowMarker); turbineWindArrows3a.delete(id); }
+  const group = turbineContourGroups3a.get(id);
+  if (group) { map3a.removeLayer(group); turbineContourGroups3a.delete(id); }
+  state.turbines3a = state.turbines3a.filter(t => t.id !== id);
+  if (state.selectedTurbineId3a === id) {
+    state.selectedTurbineId3a = state.turbines3a.length ? state.turbines3a[state.turbines3a.length - 1].id : null;
+  }
+  render();
+}
+
+function clearAllTurbines3a() {
+  turbineContourGroups3a.forEach(g => map3a.removeLayer(g));
+  turbineContourGroups3a.clear();
+  turbineMarkers3a.forEach(m => turbineLayer3a.removeLayer(m));
+  turbineMarkers3a.clear();
+  turbineWindArrows3a.forEach(m => turbineArrowLayer3a.removeLayer(m));
+  turbineWindArrows3a.clear();
+  state.turbines3a = [];
+  state.selectedTurbineId3a = null;
+  render();
+}
+
+function selectTurbine3a(id) {
+  state.selectedTurbineId3a = id;
+  turbineMarkers3a.forEach((marker, mid) => marker.setIcon(turbineIcon(mid === id)));
+  render();
+}
+
+// ---------- Isofoon-contouren: hoekafhankelijke afstandsoplossing i.p.v. cirkels ----------
+// lpAt(r, x, ...) is voor vaste x monotoon niet-stijgend in r. Voor elke richting x geldt bovendien
+// lpAt(d, x, ...) <= lpAt(d, 1, ...) (downwind straalt het verst uit), dus de gezochte straal voor
+// het downwind-referentieniveau op afstand d ligt in elke richting altijd binnen [iets, d] — bisectie
+// op [rMin, d] is dus voor alle 360° veilig en toereikend.
+function bisectRadiusForLevel(targetLevel, x, categoryKey, lwCat, synthState, rMax) {
+  let lo = 5, hi = rMax;
+  const levelHi = lpAt(hi, x, categoryKey, lwCat, synthState);
+  const levelLo = lpAt(lo, x, categoryKey, lwCat, synthState);
+  if (levelHi >= targetLevel) return hi; // exact downwind (x=1): het doelniveau wordt precies op d bereikt
+  if (levelLo <= targetLevel) return lo; // doelniveau al voorbij de dichtstbijzijnde grens (zeldzaam randgeval)
+  for (let i = 0; i < 22; i++) {
+    const mid = (lo + hi) / 2;
+    const levelMid = lpAt(mid, x, categoryKey, lwCat, synthState);
+    if (levelMid > targetLevel) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+const CONTOUR_STEPS_3A = 36; // 10° hoekresolutie — vloeiend genoeg voor de langgerekte/samengeperste vorm
+function contourPolygonPoints(turbine, targetLevel, categoryKey, lwCat, synthState, downwindBearingDeg, rMax) {
+  const points = [];
+  for (let i = 0; i < CONTOUR_STEPS_3A; i++) {
+    const bearingDeg = (360 / CONTOUR_STEPS_3A) * i;
+    const x = xFromAngle(bearingDeg, downwindBearingDeg);
+    const r = bisectRadiusForLevel(targetLevel, x, categoryKey, lwCat, synthState, rMax);
+    points.push(destPoint(turbine.lat, turbine.lng, bearingDeg, r));
+  }
+  return points;
+}
+
+function contoursForTurbine3a(turbine, lwCat) {
+  const cat = CATEGORY[state.category];
+  const downwindBearing = (state.windBearing + 180) % 360;
+  // De contourVORM volgt de dag/nacht-instelling van Module 3a zelf; scenario/curtailment/wind blijven gedeeld.
+  const synthState = { scenario: state.scenario, daynight: state.daynight3a, curtailment: state.curtailment, windBearing: state.windBearing };
+  const polygons = [];
+  [...DISTANCES].reverse().forEach(d => {
+    const targetLevel = lpAt(d, 1, state.category, lwCat, synthState);
+    const points = contourPolygonPoints(turbine, targetLevel, state.category, lwCat, synthState, downwindBearing, d);
+    const polygon = L.polygon(points, {
+      color: RING_COLORS[d], weight: 2.5, opacity: 0.85, fill: false, interactive: true, renderer: mapRenderer3a,
+    });
+    const cross = lpAt(d, 0, state.category, lwCat, synthState);
+    const up = lpAt(d, -1, state.category, lwCat, synthState);
+    polygon.bindTooltip(
+      `<div class="ring-tooltip"><strong>Contour ${d} m (downwind-referentie)</strong><br>Downwind: ${targetLevel.toFixed(1)} ${cat.unit}<br>Zijwind: ${cross.toFixed(1)} ${cat.unit}<br>Upwind: ${up.toFixed(1)} ${cat.unit}</div>`,
+      { sticky: true, direction: 'top', className: 'ring-tooltip-wrap' }
+    );
+    polygons.push(polygon);
+  });
+  return polygons;
+}
+
+function renderAllTurbineContours3a() {
+  if (!map3a) return;
+  const lwCat = computeCategoryLw(state.lwa)[state.category];
+  state.turbines3a.forEach(turbine => {
+    const group = turbineContourGroups3a.get(turbine.id);
+    if (!group) return;
+    group.clearLayers();
+    contoursForTurbine3a(turbine, lwCat).forEach(pl => group.addLayer(pl));
+  });
+}
+
+function buildRingLegend3a() {
+  if (!ringLegend3a) return;
+  const cat = CATEGORY[state.category];
+  ringLegend3a.innerHTML = DISTANCES.map(d => `<span class="ring-legend-item"><span class="ring-swatch" style="border-color:${RING_COLORS[d]}"></span>${d} m</span>`).join('');
+  if (legendCaption3a) {
+    legendCaption3a.textContent = `Contourkleur toont het geluidsniveau op de downwind-referentieafstand (${cat.label.toLowerCase()}, ${cat.unit}) \u2014 de vorm van de contour zelf toont hoe ver dat niveau reikt per windrichting.`;
+  }
+}
+
+function renderNormTable3a() {
+  if (!normTableBody3a) return;
+  const n = state.turbines3a.length;
+  const norm = getActiveNorm3a();
+  if (m3aContextCallout) {
+    if (n === 0) {
+      m3aContextCallout.textContent = 'Plaats minstens \u00e9\u00e9n turbine hierboven om te toetsen.';
+    } else if (n <= 2) {
+      m3aContextCallout.innerHTML = `${n} turbine${n === 1 ? '' : 's'} geplaatst: bij 1\u20132 turbines blijven de oude landelijke normen (47 dB Lden / 41 dB Lnight) <strong>formeel van toepassing</strong>.`;
+    } else {
+      m3aContextCallout.innerHTML = `${n} turbines geplaatst: bij 3 of meer turbines gelden sinds de Delfzijluitspraak (2021) <strong>geen landelijke normen meer</strong> \u2014 het bevoegd gezag moet zelf een norm motiveren. De hier gekozen waarde is een referentie, geen automatisch geldende wettelijke norm.`;
+    }
+  }
+
+  const selected = state.turbines3a.find(t => t.id === state.selectedTurbineId3a);
+  if (!selected) {
+    normTableBody3a.innerHTML = `<tr><td colspan="6" class="empty-row">Plaats een turbine op de kaart hierboven om te toetsen.</td></tr>`;
+    return;
+  }
+
+  const lwCat = computeCategoryLw(state.lwa).hoorbaar;
+  const dayState = Object.assign({}, state, { daynight: 'dag' });
+  const nightState = Object.assign({}, state, { daynight: 'nacht' });
+
+  normTableBody3a.innerHTML = DISTANCES.map(d => {
+    const lday = lpAt(d, 1, 'hoorbaar', lwCat, dayState);
+    const lnight = lpAt(d, 1, 'hoorbaar', lwCat, nightState);
+    const lden = ldenApprox(lday, lnight);
+
+    let lnightCell;
+    if (norm.lnight != null) {
+      const exceed = lnight > norm.lnight;
+      const diff = (lnight - norm.lnight);
+      lnightCell = `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${exceed ? 'Overschrijding' : 'Binnen norm'} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)} dB)</td>`;
+    } else {
+      lnightCell = `<td class="norm-na">n.v.t.</td>`;
+    }
+
+    let ldenCell;
+    if (norm.lden != null) {
+      const exceed = lden > norm.lden;
+      const diff = (lden - norm.lden);
+      ldenCell = `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${exceed ? 'Overschrijding' : 'Binnen norm'} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)} dB)</td>`;
+    } else {
+      ldenCell = `<td class="norm-na">n.v.t.</td>`;
+    }
+
+    return `<tr><td>${d} m</td><td>${lday.toFixed(1)}</td><td>${lnight.toFixed(1)}</td><td>${lden.toFixed(1)}</td>${lnightCell}${ldenCell}</tr>`;
+  }).join('');
+}
+
+function renderModule3a() {
+  if (!document.getElementById('module-3a')) return;
+
+  if (m3aWindIndicator) {
+    m3aWindIndicator.innerHTML = `Wind uit ${state.windDir} \u00b7 pijlpunt = downwind \u00b7 open cirkel = upwind`;
+  }
+  updateWindArrowRotations3a();
+
+  const scenarioLabels3a = { best: 'Best case', middel: 'Middenscenario', worst: 'Worst case' };
+  if (miniScenario3a) miniScenario3a.textContent = scenarioLabels3a[state.scenario];
+  if (miniSub3a) miniSub3a.textContent = `${state.daynight3a === 'dag' ? 'Dag' : 'Nacht'} \u00b7 Wind uit ${state.windDir} \u00b7 ${state.turbines3a.length} turbine${state.turbines3a.length === 1 ? '' : 's'}`;
+
+  buildRingLegend3a();
+  if (turbineCount3a) turbineCount3a.textContent = `${state.turbines3a.length} / ${MAX_TURBINES} turbines geplaatst`;
+  updateEmptyHint3a();
+
+  renderNormTable3a();
+  renderAllTurbineContours3a();
+}
+
+// ---------- Module 3a: dag/nacht-toggle ----------
+daynightToggle3a.querySelectorAll('button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    daynightToggle3a.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    btn.setAttribute('aria-pressed', 'true');
+    state.daynight3a = btn.dataset.val;
+    render();
+  });
+});
+
+// ---------- Module 3a: normselectie ----------
+if (normPresetSelect3a) {
+  normPresetSelect3a.addEventListener('change', () => {
+    state.normPreset3a = normPresetSelect3a.value;
+    const isCustom = state.normPreset3a === 'eigen';
+    normCustomLdenField3a.style.display = isCustom ? '' : 'none';
+    normCustomLnightField3a.style.display = isCustom ? '' : 'none';
+    render();
+  });
+  normCustomLdenInput3a.addEventListener('input', () => {
+    state.normCustomLden3a = parseFloat(normCustomLdenInput3a.value);
+    if (Number.isNaN(state.normCustomLden3a)) state.normCustomLden3a = 47;
+    render();
+  });
+  normCustomLnightInput3a.addEventListener('input', () => {
+    state.normCustomLnight3a = parseFloat(normCustomLnightInput3a.value);
+    if (Number.isNaN(state.normCustomLnight3a)) state.normCustomLnight3a = 41;
+    render();
+  });
+}
+
+// ---------- Module 3a: locatie toevoegen (adres/coördinaten/kaart) ----------
+let activeLocTab3a = 'adres';
+let selectedAddressResult3a = null;
+let addressDebounceTimer3a = null;
+let addressAbortController3a = null;
+
+function setLocStatus3a(message, tone) {
+  locStatus3a.textContent = message || '';
+  locStatus3a.classList.remove('error', 'success');
+  if (tone) locStatus3a.classList.add(tone);
+}
+
+locTabs3a.forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeLocTab3a = btn.getAttribute('data-loc-tab-3a');
+    locTabs3a.forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+    locFieldAdres3a.hidden = activeLocTab3a !== 'adres';
+    locFieldCoords3a.hidden = activeLocTab3a !== 'coords';
+    addressSuggestions3a.hidden = true;
+    if (pickModeArmed3a) setPickMode3a(false);
+    setLocStatus3a('');
+  });
+});
+
+function hideSuggestions3a() {
+  addressSuggestions3a.hidden = true;
+  addressSuggestions3a.innerHTML = '';
+}
+
+addressInput3a.addEventListener('input', () => {
+  selectedAddressResult3a = null;
+  const q = addressInput3a.value.trim();
+  clearTimeout(addressDebounceTimer3a);
+  if (q.length < 2) { hideSuggestions3a(); return; }
+  addressDebounceTimer3a = setTimeout(() => fetchAddressSuggestions3a(q), 300);
+});
+
+addressInput3a.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const firstItem = addressSuggestions3a.querySelector('li');
+    if (firstItem) firstItem.click();
+    else addTurbineBtn3a.click();
+  } else if (e.key === 'Escape') {
+    hideSuggestions3a();
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#module-3a .address-search')) hideSuggestions3a();
+});
+
+async function fetchAddressSuggestions3a(query) {
+  if (addressAbortController3a) addressAbortController3a.abort();
+  addressAbortController3a = new AbortController();
+  try {
+    const url = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/suggest?q=${encodeURIComponent(query)}&fq=type:(woonplaats OR adres OR postcode OR weg)&rows=6`;
+    const res = await fetch(url, { signal: addressAbortController3a.signal });
+    if (!res.ok) throw new Error('PDOK suggest mislukt');
+    const data = await res.json();
+    const docs = (data.response && data.response.docs) || [];
+    if (!docs.length) {
+      addressSuggestions3a.innerHTML = '<li class="no-result">Geen resultaten gevonden.</li>';
+      addressSuggestions3a.hidden = false;
+      return;
+    }
+    addressSuggestions3a.innerHTML = docs.map(d => `<li role="option" data-id="${d.id}" data-label="${d.weergavenaam.replace(/"/g, '&quot;')}">${d.weergavenaam}</li>`).join('');
+    addressSuggestions3a.hidden = false;
+    addressSuggestions3a.querySelectorAll('li[data-id]').forEach(li => {
+      li.addEventListener('click', () => selectAddressSuggestion3a(li.dataset.id, li.dataset.label));
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    addressSuggestions3a.innerHTML = '<li class="no-result">Zoeken via PDOK is mislukt. Probeer het opnieuw.</li>';
+    addressSuggestions3a.hidden = false;
+  }
+}
+
+async function selectAddressSuggestion3a(id, label) {
+  hideSuggestions3a();
+  addressInput3a.value = label;
+  setLocStatus3a('Locatie ophalen\u2026');
+  try {
+    const res = await fetch(`https://api.pdok.nl/bzk/locatieserver/search/v3_1/lookup?id=${encodeURIComponent(id)}`);
+    if (!res.ok) throw new Error('PDOK lookup mislukt');
+    const data = await res.json();
+    const doc = data.response && data.response.docs && data.response.docs[0];
+    if (!doc || !doc.centroide_ll) throw new Error('Geen co\u00f6rdinaten gevonden');
+    const match = /POINT\(([-0-9.]+) ([-0-9.]+)\)/.exec(doc.centroide_ll);
+    if (!match) throw new Error('Onbekend co\u00f6rdinatenformaat');
+    const lng = parseFloat(match[1]);
+    const lat = parseFloat(match[2]);
+    selectedAddressResult3a = { lat, lng, label };
+    setLocStatus3a(`Gevonden: ${label}. Klik op "Turbine toevoegen".`, 'success');
+  } catch (err) {
+    selectedAddressResult3a = null;
+    setLocStatus3a('Kon geen co\u00f6rdinaten ophalen voor deze locatie. Probeer het opnieuw.', 'error');
+  }
+}
+
+addTurbineBtn3a.addEventListener('click', () => {
+  if (state.turbines3a.length >= MAX_TURBINES) {
+    setLocStatus3a(`Maximaal ${MAX_TURBINES} turbines geplaatst. Verwijder er eerst een.`, 'error');
+    return;
+  }
+
+  let lat, lng, label;
+  if (activeLocTab3a === 'adres') {
+    if (!selectedAddressResult3a || selectedAddressResult3a.label !== addressInput3a.value) {
+      setLocStatus3a('Kies eerst een locatie uit de suggesties hierboven.', 'error');
+      return;
+    }
+    ({ lat, lng, label } = selectedAddressResult3a);
+  } else {
+    lat = parseFloat(latInput3a.value);
+    lng = parseFloat(lngInput3a.value);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      setLocStatus3a('Vul zowel een geldige breedtegraad als lengtegraad in.', 'error');
+      return;
+    }
+    label = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  }
+
+  if (!withinNetherlands(lat, lng)) {
+    setLocStatus3a('Deze co\u00f6rdinaten liggen buiten Nederland (ongeveer lat 50,4\u201353,8 \u00b7 lon 2,9\u20137,4).', 'error');
+    return;
+  }
+
+  addTurbine3a(lat, lng);
+  map3a.flyTo([lat, lng], Math.max(map3a.getZoom(), 11), { duration: 0.6 });
+  setLocStatus3a(`Turbine toegevoegd bij ${label}.`, 'success');
+
+  addressInput3a.value = '';
+  selectedAddressResult3a = null;
+  latInput3a.value = '';
+  lngInput3a.value = '';
+});
+
+clearTurbinesBtn3a.addEventListener('click', clearAllTurbines3a);
+
 // ---------- Wire up turbine controls & init ----------
 clearTurbinesBtn.addEventListener('click', clearAllTurbines);
 initMap();
+initMap3a();
 render();
