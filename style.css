@@ -479,6 +479,9 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .m8-card.m8-middel { border-left-color: #d69e2e; }
 .m8-card.m8-worst { border-left-color: var(--color-error); }
 .m8-card-title { display: block; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-faint); font-weight: 700; margin-bottom: var(--space-3); }
+.m8-cat-block { padding: var(--space-3) 0; border-top: 1px solid var(--color-border); }
+.m8-cat-block:first-of-type { border-top: none; padding-top: 0; }
+.m8-cat-title { display: block; font-size: var(--text-sm); font-weight: 700; color: var(--color-text); margin-bottom: var(--space-2); }
 .m8-row { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px dashed var(--color-border); font-size: var(--text-sm); }
 .m8-row:last-of-type { border-bottom: none; }
 .m8-row-label { color: var(--color-text-muted); }

@@ -1611,73 +1611,84 @@ function renderModule8() {
     }
   }
 
-  const rows = ['best', 'middel', 'worst'].map((scenario) => {
-    const ringHoorbaar = normHasLnight ? m8ExceedanceRadius(scenario, 'hoorbaar') : null;
-    const ringLfg = normHasLnight ? m8ExceedanceRadius(scenario, 'laagfrequent') : null;
-    const ringInfrasoon = normHasLnight ? m8ExceedanceRadius(scenario, 'infrasoon') : null;
-    const hasData = !!state.m8AddressData;
-    const housesHoorbaar = hasData ? m8CountUnique(ringHoorbaar) : null;
-    const housesLfg = hasData ? m8CountUnique(ringLfg) : null;
-    const housesInfrasoon = hasData ? m8CountUnique(ringInfrasoon) : null;
-    const people = housesHoorbaar != null ? housesHoorbaar * state.m8HouseholdSize : null;
-    const hinderResults = M8_HINDER_SCENARIOS.map((h) => ({
+  const CATEGORY_META = [
+    { key: 'hoorbaar', label: 'Hoorbaar (dB(A))' },
+    { key: 'laagfrequent', label: 'Laagfrequent (dB(Lin))' },
+    { key: 'infrasoon', label: 'Infrasoon (dB(G), indicatief)' },
+  ];
+
+  const hasData = !!state.m8AddressData;
+  const hinderFor = (people) =>
+    M8_HINDER_SCENARIOS.map((h) => ({
       pct: h.pct,
       label: h.label,
       people: people != null ? people * (h.pct / 100) : null,
     }));
-    return { scenario, ringHoorbaar, ringLfg, ringInfrasoon, housesHoorbaar, housesLfg, housesInfrasoon, people, hinderResults };
+
+  const rows = ['best', 'middel', 'worst'].map((scenario) => {
+    const categories = CATEGORY_META.map((meta) => {
+      const ring = normHasLnight ? m8ExceedanceRadius(scenario, meta.key) : null;
+      const houses = hasData ? m8CountUnique(ring) : null;
+      const people = houses != null ? houses * state.m8HouseholdSize : null;
+      return { key: meta.key, label: meta.label, ring, houses, people, hinder: hinderFor(people) };
+    });
+    return { scenario, categories };
   });
 
   grid.innerHTML = rows
     .map((r) => {
       const dash = '—';
+      const catBlocks = r.categories
+        .map(
+          (c) => `
+        <div class="m8-cat-block">
+          <span class="m8-cat-title">${c.label}</span>
+          <div class="m8-row"><span class="m8-row-label">Overschrijdingsring</span><span class="m8-row-value">${m8RingLabel(c.ring)}</span></div>
+          <div class="m8-row"><span class="m8-row-label">Woningen in dat gebied (BAG)</span><span class="m8-row-value">${c.houses != null ? c.houses.toLocaleString('nl-NL') : dash}</span></div>
+          <div class="m8-row"><span class="m8-row-label">Geschat aantal bewoners</span><span class="m8-row-value">${c.people != null ? Math.round(c.people).toLocaleString('nl-NL') : dash}</span></div>
+          <div class="m8-hinder-matrix">
+            <span class="m8-hinder-matrix-title">Geschatte hinder bij elk percentage</span>
+            ${c.hinder
+              .map(
+                (h) => `<div class="m8-hinder-row">
+              <span class="m8-hinder-pct">${h.pct}% <em>(${h.label})</em></span>
+              <span class="m8-hinder-num">${h.people != null ? Math.round(h.people).toLocaleString('nl-NL') : dash}</span>
+            </div>`
+              )
+              .join('')}
+          </div>
+        </div>`
+        )
+        .join('');
       return `
       <div class="m8-card m8-${r.scenario}">
         <span class="m8-card-title">${M8_SCENARIO_LABEL[r.scenario]}</span>
-        <div class="m8-row"><span class="m8-row-label">Overschrijding hoorbaar (dB(A))</span><span class="m8-row-value">${m8RingLabel(r.ringHoorbaar)}</span></div>
-        <div class="m8-row"><span class="m8-row-label">Woningen in dat gebied (BAG)</span><span class="m8-row-value">${r.housesHoorbaar != null ? r.housesHoorbaar.toLocaleString('nl-NL') : dash}</span></div>
-        <div class="m8-row"><span class="m8-row-label">Overschrijding LFG (dB(Lin))</span><span class="m8-row-value">${m8RingLabel(r.ringLfg)}</span></div>
-        <div class="m8-row"><span class="m8-row-label">Woningen in dat gebied (BAG)</span><span class="m8-row-value">${r.housesLfg != null ? r.housesLfg.toLocaleString('nl-NL') : dash}</span></div>
-        <div class="m8-row"><span class="m8-row-label">Overschrijding infrasoon (dB(G), indicatief)</span><span class="m8-row-value">${m8RingLabel(r.ringInfrasoon)}</span></div>
-        <div class="m8-row"><span class="m8-row-label">Woningen in dat gebied (BAG)</span><span class="m8-row-value">${r.housesInfrasoon != null ? r.housesInfrasoon.toLocaleString('nl-NL') : dash}</span></div>
-        <div class="m8-row"><span class="m8-row-label">Geschat aantal bewoners</span><span class="m8-row-value">${r.people != null ? Math.round(r.people).toLocaleString('nl-NL') : dash}</span></div>
-        <div class="m8-hinder-matrix">
-          <span class="m8-hinder-matrix-title">Geschatte hinder bij elk percentage</span>
-          ${r.hinderResults
-            .map(
-              (h) => `<div class="m8-hinder-row">
-            <span class="m8-hinder-pct">${h.pct}% <em>(${h.label})</em></span>
-            <span class="m8-hinder-num">${h.people != null ? Math.round(h.people).toLocaleString('nl-NL') : dash}</span>
-          </div>`
-            )
-            .join('')}
-        </div>
+        ${catBlocks}
       </div>`;
     })
     .join('');
 
   if (tableBody) {
     if (n === 0) {
-      tableBody.innerHTML = `<tr><td colspan="11" class="empty-row">Plaats een turbine op de kaart en klik op "Woningen ophalen (BAG)".</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="8" class="empty-row">Plaats een turbine op de kaart en klik op "Woningen ophalen (BAG)".</td></tr>`;
     } else {
+      const dash = '—';
       tableBody.innerHTML = rows
-        .map((r) => {
-          const dash = '—';
-          const hinderCells = r.hinderResults
-            .map((h) => `<td>${h.people != null ? Math.round(h.people).toLocaleString('nl-NL') : dash}</td>`)
-            .join('');
-          return `<tr>
-          <td>${M8_SCENARIO_LABEL[r.scenario]}</td>
-          <td>${m8RingLabel(r.ringHoorbaar)}</td>
-          <td>${r.housesHoorbaar != null ? r.housesHoorbaar.toLocaleString('nl-NL') : dash}</td>
-          <td>${m8RingLabel(r.ringLfg)}</td>
-          <td>${r.housesLfg != null ? r.housesLfg.toLocaleString('nl-NL') : dash}</td>
-          <td>${m8RingLabel(r.ringInfrasoon)}</td>
-          <td>${r.housesInfrasoon != null ? r.housesInfrasoon.toLocaleString('nl-NL') : dash}</td>
-          <td>${r.people != null ? Math.round(r.people).toLocaleString('nl-NL') : dash}</td>
-          ${hinderCells}
-        </tr>`;
-        })
+        .flatMap((r) =>
+          r.categories.map((c, idx) => {
+            const hinderCells = c.hinder
+              .map((h) => `<td>${h.people != null ? Math.round(h.people).toLocaleString('nl-NL') : dash}</td>`)
+              .join('');
+            return `<tr>
+            <td>${idx === 0 ? M8_SCENARIO_LABEL[r.scenario] : ''}</td>
+            <td>${c.label}</td>
+            <td>${m8RingLabel(c.ring)}</td>
+            <td>${c.houses != null ? c.houses.toLocaleString('nl-NL') : dash}</td>
+            <td>${c.people != null ? Math.round(c.people).toLocaleString('nl-NL') : dash}</td>
+            ${hinderCells}
+          </tr>`;
+          })
+        )
         .join('');
     }
   }
