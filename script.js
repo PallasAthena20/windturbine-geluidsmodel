@@ -1435,12 +1435,13 @@ function renderModule7() {
 // Hinderpercentages per scenario — zie module-callout in index.html voor bronnen:
 // best = RIVM-basisscenario (47 dB Lden, ~8-9% ernstige hinder binnenshuis),
 // middel = illustratieve tussenwaarde, worst = Pawlaczyk-Łuszczyńska e.a. (2018).
-const M8_HINDER_PCT = { best: 9, middel: 30, worst: 46 };
-const M8_HINDER_SOURCE_LABEL = {
-  best: 'RIVM-basisscenario',
-  middel: 'Tussenscenario (illustratief)',
-  worst: 'Pawlaczyk-Łuszczyńska e.a. (2018)',
-};
+// De hinderpercentages zijn ONAFHANKELIJK van het ring/woningen-scenario (best/middel/worst) —
+// elk ring-scenario wordt getoetst tegen alle drie de hinderpercentages, resulterend in een 3x3-matrix.
+const M8_HINDER_SCENARIOS = [
+  { key: 'best', pct: 9, label: 'RIVM-basisscenario' },
+  { key: 'middel', pct: 30, label: 'Tussenscenario (illustratief)' },
+  { key: 'worst', pct: 46, label: 'Pawlaczyk-Łuszczyńska e.a. (2018)' },
+];
 const M8_SCENARIO_LABEL = { best: 'Best case', middel: 'Middel', worst: 'Worst case' };
 const M8_FETCH_RADIUS = 5000; // = grootste vaste ring uit Module 3; dekt alle scenario/categorie-combinaties
 const M8_MAX_PAGES = 20; // veiligheidsgrens: 20 × limit=1000 = max 20.000 adressen per turbine
@@ -1619,9 +1620,12 @@ function renderModule8() {
     const housesLfg = hasData ? m8CountUnique(ringLfg) : null;
     const housesInfrasoon = hasData ? m8CountUnique(ringInfrasoon) : null;
     const people = housesHoorbaar != null ? housesHoorbaar * state.m8HouseholdSize : null;
-    const hinderPct = M8_HINDER_PCT[scenario];
-    const hinderPeople = people != null ? people * (hinderPct / 100) : null;
-    return { scenario, ringHoorbaar, ringLfg, ringInfrasoon, housesHoorbaar, housesLfg, housesInfrasoon, people, hinderPct, hinderPeople };
+    const hinderResults = M8_HINDER_SCENARIOS.map((h) => ({
+      pct: h.pct,
+      label: h.label,
+      people: people != null ? people * (h.pct / 100) : null,
+    }));
+    return { scenario, ringHoorbaar, ringLfg, ringInfrasoon, housesHoorbaar, housesLfg, housesInfrasoon, people, hinderResults };
   });
 
   grid.innerHTML = rows
@@ -1637,9 +1641,16 @@ function renderModule8() {
         <div class="m8-row"><span class="m8-row-label">Overschrijding infrasoon (dB(G), indicatief)</span><span class="m8-row-value">${m8RingLabel(r.ringInfrasoon)}</span></div>
         <div class="m8-row"><span class="m8-row-label">Woningen in dat gebied (BAG)</span><span class="m8-row-value">${r.housesInfrasoon != null ? r.housesInfrasoon.toLocaleString('nl-NL') : dash}</span></div>
         <div class="m8-row"><span class="m8-row-label">Geschat aantal bewoners</span><span class="m8-row-value">${r.people != null ? Math.round(r.people).toLocaleString('nl-NL') : dash}</span></div>
-        <div class="m8-hinder-block">
-          <span class="m8-hinder-value">${r.hinderPeople != null ? Math.round(r.hinderPeople).toLocaleString('nl-NL') : dash}</span>
-          <span class="m8-hinder-label">bewoners met geschatte hinder (${r.hinderPct}% — ${M8_HINDER_SOURCE_LABEL[r.scenario]})</span>
+        <div class="m8-hinder-matrix">
+          <span class="m8-hinder-matrix-title">Geschatte hinder bij elk percentage</span>
+          ${r.hinderResults
+            .map(
+              (h) => `<div class="m8-hinder-row">
+            <span class="m8-hinder-pct">${h.pct}% <em>(${h.label})</em></span>
+            <span class="m8-hinder-num">${h.people != null ? Math.round(h.people).toLocaleString('nl-NL') : dash}</span>
+          </div>`
+            )
+            .join('')}
         </div>
       </div>`;
     })
@@ -1647,11 +1658,14 @@ function renderModule8() {
 
   if (tableBody) {
     if (n === 0) {
-      tableBody.innerHTML = `<tr><td colspan="10" class="empty-row">Plaats een turbine op de kaart en klik op "Woningen ophalen (BAG)".</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="11" class="empty-row">Plaats een turbine op de kaart en klik op "Woningen ophalen (BAG)".</td></tr>`;
     } else {
       tableBody.innerHTML = rows
         .map((r) => {
           const dash = '—';
+          const hinderCells = r.hinderResults
+            .map((h) => `<td>${h.people != null ? Math.round(h.people).toLocaleString('nl-NL') : dash}</td>`)
+            .join('');
           return `<tr>
           <td>${M8_SCENARIO_LABEL[r.scenario]}</td>
           <td>${m8RingLabel(r.ringHoorbaar)}</td>
@@ -1661,8 +1675,7 @@ function renderModule8() {
           <td>${m8RingLabel(r.ringInfrasoon)}</td>
           <td>${r.housesInfrasoon != null ? r.housesInfrasoon.toLocaleString('nl-NL') : dash}</td>
           <td>${r.people != null ? Math.round(r.people).toLocaleString('nl-NL') : dash}</td>
-          <td>${r.hinderPct}%</td>
-          <td><strong>${r.hinderPeople != null ? Math.round(r.hinderPeople).toLocaleString('nl-NL') : dash}</strong></td>
+          ${hinderCells}
         </tr>`;
         })
         .join('');
