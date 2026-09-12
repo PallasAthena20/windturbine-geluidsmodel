@@ -1613,13 +1613,15 @@ function renderModule8() {
   const rows = ['best', 'middel', 'worst'].map((scenario) => {
     const ringHoorbaar = normHasLnight ? m8ExceedanceRadius(scenario, 'hoorbaar') : null;
     const ringLfg = normHasLnight ? m8ExceedanceRadius(scenario, 'laagfrequent') : null;
+    const ringInfrasoon = normHasLnight ? m8ExceedanceRadius(scenario, 'infrasoon') : null;
     const hasData = !!state.m8AddressData;
     const housesHoorbaar = hasData ? m8CountUnique(ringHoorbaar) : null;
     const housesLfg = hasData ? m8CountUnique(ringLfg) : null;
+    const housesInfrasoon = hasData ? m8CountUnique(ringInfrasoon) : null;
     const people = housesHoorbaar != null ? housesHoorbaar * state.m8HouseholdSize : null;
     const hinderPct = M8_HINDER_PCT[scenario];
     const hinderPeople = people != null ? people * (hinderPct / 100) : null;
-    return { scenario, ringHoorbaar, ringLfg, housesHoorbaar, housesLfg, people, hinderPct, hinderPeople };
+    return { scenario, ringHoorbaar, ringLfg, ringInfrasoon, housesHoorbaar, housesLfg, housesInfrasoon, people, hinderPct, hinderPeople };
   });
 
   grid.innerHTML = rows
@@ -1632,6 +1634,8 @@ function renderModule8() {
         <div class="m8-row"><span class="m8-row-label">Woningen in dat gebied (BAG)</span><span class="m8-row-value">${r.housesHoorbaar != null ? r.housesHoorbaar.toLocaleString('nl-NL') : dash}</span></div>
         <div class="m8-row"><span class="m8-row-label">Overschrijding LFG (dB(Lin))</span><span class="m8-row-value">${m8RingLabel(r.ringLfg)}</span></div>
         <div class="m8-row"><span class="m8-row-label">Woningen in dat gebied (BAG)</span><span class="m8-row-value">${r.housesLfg != null ? r.housesLfg.toLocaleString('nl-NL') : dash}</span></div>
+        <div class="m8-row"><span class="m8-row-label">Overschrijding infrasoon (dB(G), indicatief)</span><span class="m8-row-value">${m8RingLabel(r.ringInfrasoon)}</span></div>
+        <div class="m8-row"><span class="m8-row-label">Woningen in dat gebied (BAG)</span><span class="m8-row-value">${r.housesInfrasoon != null ? r.housesInfrasoon.toLocaleString('nl-NL') : dash}</span></div>
         <div class="m8-row"><span class="m8-row-label">Geschat aantal bewoners</span><span class="m8-row-value">${r.people != null ? Math.round(r.people).toLocaleString('nl-NL') : dash}</span></div>
         <div class="m8-hinder-block">
           <span class="m8-hinder-value">${r.hinderPeople != null ? Math.round(r.hinderPeople).toLocaleString('nl-NL') : dash}</span>
@@ -1643,7 +1647,7 @@ function renderModule8() {
 
   if (tableBody) {
     if (n === 0) {
-      tableBody.innerHTML = `<tr><td colspan="8" class="empty-row">Plaats een turbine op de kaart en klik op "Woningen ophalen (BAG)".</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="10" class="empty-row">Plaats een turbine op de kaart en klik op "Woningen ophalen (BAG)".</td></tr>`;
     } else {
       tableBody.innerHTML = rows
         .map((r) => {
@@ -1654,6 +1658,8 @@ function renderModule8() {
           <td>${r.housesHoorbaar != null ? r.housesHoorbaar.toLocaleString('nl-NL') : dash}</td>
           <td>${m8RingLabel(r.ringLfg)}</td>
           <td>${r.housesLfg != null ? r.housesLfg.toLocaleString('nl-NL') : dash}</td>
+          <td>${m8RingLabel(r.ringInfrasoon)}</td>
+          <td>${r.housesInfrasoon != null ? r.housesInfrasoon.toLocaleString('nl-NL') : dash}</td>
           <td>${r.people != null ? Math.round(r.people).toLocaleString('nl-NL') : dash}</td>
           <td>${r.hinderPct}%</td>
           <td><strong>${r.hinderPeople != null ? Math.round(r.hinderPeople).toLocaleString('nl-NL') : dash}</strong></td>
