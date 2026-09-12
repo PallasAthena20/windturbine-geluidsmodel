@@ -528,3 +528,29 @@ footer { text-align: center; padding: var(--space-10) var(--space-6); color: var
   .compass { width: 170px; height: 170px; }
   .compass-btn { width: 36px; height: 36px; }
 }
+
+/* ---------- Module 9 & 10: kosten- en DALY-kaarten (mirrort .m8-* patroon) ---------- */
+.m9-grid, .m10-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); margin-top: var(--space-4); }
+@media (max-width: 900px) { .m9-grid, .m10-grid { grid-template-columns: 1fr; } }
+.m9-card, .m10-card { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-5); background: var(--color-surface); border-left: 3px solid var(--color-border); min-width: 0; }
+.m9-card.m9-best, .m10-card.m10-best { border-left-color: var(--color-success); }
+.m9-card.m9-middel, .m10-card.m10-middel { border-left-color: #d69e2e; }
+.m9-card.m9-worst, .m10-card.m10-worst { border-left-color: var(--color-error); }
+.m9-card-title, .m10-card-title { display: block; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-faint); font-weight: 700; margin-bottom: var(--space-3); }
+.m9-cat-block, .m10-cat-block { padding: var(--space-3) 0; border-top: 1px solid var(--color-border); }
+.m9-cat-block:first-of-type, .m10-cat-block:first-of-type { border-top: none; padding-top: 0; }
+.m9-cat-title, .m10-cat-title { display: block; font-size: var(--text-sm); font-weight: 700; color: var(--color-text); margin-bottom: var(--space-2); }
+.m9-cost-row, .m10-daly-row { padding: var(--space-2) 0; border-bottom: 1px dashed var(--color-border); }
+.m9-cost-row:last-of-type, .m10-daly-row:last-of-type { border-bottom: none; }
+.m9-cost-pct, .m10-daly-pct { display: block; font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-2); }
+.m9-cost-pct em, .m10-daly-pct em { font-style: normal; color: var(--color-text-faint); }
+.m9-cost-nums, .m10-daly-nums { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+.m9-cost-num, .m10-daly-num { font-family: var(--font-mono); font-weight: 700; font-size: var(--text-base); white-space: nowrap; }
+.m9-cost-num small, .m10-daly-num small { font-family: var(--font-sans, inherit); font-weight: 500; color: var(--color-text-faint); font-size: var(--text-xs); }
+.m9-cost-num.sub, .m10-daly-num.sub { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-muted); }
+.m9-card.m9-best .m9-cost-num:not(.sub), .m10-card.m10-best .m10-daly-num:not(.sub) { color: var(--color-success); }
+.m9-card.m9-middel .m9-cost-num:not(.sub), .m10-card.m10-middel .m10-daly-num:not(.sub) { color: #d69e2e; }
+.m9-card.m9-worst .m9-cost-num:not(.sub), .m10-card.m10-worst .m10-daly-num:not(.sub) { color: var(--color-error); }
+.m10-value-grid { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-2); }
+.m10-value-chip { font-family: var(--font-mono); font-size: 0.72rem; background: var(--color-surface-offset-2); padding: 3px 8px; border-radius: 999px; white-space: nowrap; color: var(--color-text); }
+.m10-value-chip small { font-family: var(--font-sans, inherit); color: var(--color-text-faint); }

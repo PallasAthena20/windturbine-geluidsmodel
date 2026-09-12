@@ -535,6 +535,94 @@
     </div>
   </section>
 
+  <!-- MODULE 9 -->
+  <section class="module" id="module-9">
+    <div class="module-head">
+      <span class="module-num">Module 9</span>
+      <h2>Geschatte zorgkosten van geluidshinder</h2>
+    </div>
+    <p class="module-desc">Deze module hergebruikt de <strong>27 bewonersaantallen</strong> die Module 8 hierboven al berekent (per nacht-scenario × per geluidscategorie × per hinderpercentage) en vermenigvuldigt elk daarvan met een <strong>zorgkosten-kengetal per persoon per jaar</strong>. De rekenmethode — bewoners met hinder × een vast kostenbedrag per persoon per jaar, opgeteld over een gekozen tijdshorizon — is ontleend aan Module 2 ("Geschatte zorgkosten") van het referentiemodel <a href="https://waardedaling-geluidshinder-windturbines.onrender.com/" target="_blank" rel="noopener">waardedaling-geluidshinder-windturbines.onrender.com</a>. Dat model bepaalt de bewonersaantallen zelf via vijf vaste afstanden (500/800/1300/2000/5000 m) en CBS-buurtdata; deze module gebruikt in plaats daarvan de bewonersaantallen die dit model zelf al met de zes eigen ringen (500/900/1300/1500/2000/5000 m, Module 3) en de eigen BAG-telling (Module 8) heeft berekend, zodat er geen tweede, afwijkende woningtelling nodig is.</p>
+
+    <div class="cum-controls">
+      <div class="cum-field">
+        <label for="m9-cost-per-person">Zorgkosten per bewoner per jaar (€)</label>
+        <input type="number" id="m9-cost-per-person" value="609.60" step="0.01" min="0">
+      </div>
+      <div class="cum-field">
+        <label for="m9-horizon">Tijdshorizon (jaren)</label>
+        <input type="number" id="m9-horizon" value="25" step="1" min="1" max="50">
+      </div>
+    </div>
+    <p class="hint">Standaardwaarde €609,60/persoon/jaar en horizon van 25 jaar: overgenomen van het referentiemodel, gebaseerd op <a href="https://doi.org/10.1016/j.ijheh.2023.114273" target="_blank" rel="noopener">Godono et al. (2023), International Journal of Hygiene and Environmental Health</a> — pas beide waarden hieronder aan voor een eigen gevoeligheidsanalyse.</p>
+
+    <div class="m9-grid" id="m9-grid"></div>
+
+    <div class="data-table-card" id="m9-table-card" style="margin-top:var(--space-5);">
+      <h3>Kosten per scenario, categorie en hinderpercentage</h3>
+      <div class="cum-result-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Scenario</th><th>Categorie</th><th>Hinderpercentage</th><th>Bewoners</th><th>Kosten per jaar</th><th>Kosten over horizon</th></tr>
+        </thead>
+        <tbody id="m9-table-body"><tr><td colspan="6" class="empty-row">Plaats een turbine op de kaart in Module 3.</td></tr></tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="method-callout">
+      <h3>Herkomst van het kostenkengetal</h3>
+      <p><strong>Rekenmethode:</strong> <code>Kosten per jaar = bewoners met hinder × €609,60/persoon/jaar</code>, en <code>Kosten over horizon = kosten per jaar × aantal jaren</code>. Dit is letterlijk de rekenmethode van Module 2 van het referentiemodel, hier toegepast op de bewonersaantallen die dit model zelf al berekent.</p>
+      <p><strong>€609,60 per persoon per jaar:</strong> een eerste-orde inschatting van zorg- en gezondheidskosten door slaapverstoring, ontleend aan de dosis-effectrelatie uit <a href="https://doi.org/10.1016/j.ijheh.2023.114273" target="_blank" rel="noopener">Godono et al. (2023), "Association between exposure to wind turbines and sleep disorders: A systematic review and meta-analysis", International Journal of Hygiene and Environmental Health, 254, 114273</a> (34% gemiddelde prevalentie van slaapstoornissen onder omwonenden, 95%-BI 22–47%). Het referentiemodel vermeldt geen aparte publieke bron voor de omrekening van die prevalentie naar dit specifieke eurobedrag — behandel het daarom als een <strong>indicatief, niet extern geverifieerd kengetal</strong>, niet als een officieel vastgesteld schadebedrag.</p>
+      <p><strong>Horizon van 25 jaar:</strong> komt overeen met de gangbare technische/economische levensduur van een windturbine, en dus met de periode waarover de geschatte hinder — en de eraan gekoppelde kosten — zich in de praktijk voordoet.</p>
+    </div>
+
+    <div class="callout m6-limitations">
+      <strong>Beperkingen:</strong> (1) €609,60/persoon/jaar is een eerste-orde inschatting, geen exacte schadeclaim of officieel vastgesteld normbedrag — het referentiemodel geeft hiervoor geen directe, controleerbare bronvermelding. (2) De kosten worden onafhankelijk berekend per hinderpercentage (9/30/46%) en per categorie (hoorbaar/laagfrequent/infrasoon); ze zijn nadrukkelijk <em>niet</em> optelbaar over hinderpercentages (dat zijn drie alternatieve scenario's, geen drie afzonderlijke groepen) en het optellen over categorieën zou hetzelfde huishouden dubbel kunnen meetellen als het binnen meerdere overschrijdingsringen valt. (3) Kosten schalen lineair met het aantal bewoners; er is geen rekening gehouden met inflatie, discontering over de horizon, of regionale verschillen in zorgkosten. (4) Zoals bij Module 8: de 9/30/46%-hinderpercentages zijn afkomstig uit onderzoek naar hoorbaar geluid en worden hier ook toegepast op laagfrequente en infrasone bewonersaantallen — dat is een aanname, geen gevalideerde extrapolatie. (5) Het referentiemodel gebruikt vijf eigen vaste afstanden en een CBS-buurtgebaseerde woningtelling; deze module herrekent dat bewust niet, maar leunt op de zes ringen en de BAG-telling van dit model zelf (Module 3/8) — de absolute bewonersaantallen kunnen daardoor afwijken van wat het referentiemodel voor dezelfde locatie zou tonen.
+    </div>
+  </section>
+
+  <!-- MODULE 10 -->
+  <section class="module" id="module-10">
+    <div class="module-head">
+      <span class="module-num">Module 10</span>
+      <h2>DALY-berekening: gezondheidsverlies door geluidshinder</h2>
+    </div>
+    <p class="module-desc">Deze module zet dezelfde bewonersaantallen uit Module 8 — en de tijdshorizon van Module 9 hierboven — om in <strong>Disability-Adjusted Life Years (DALY's)</strong>, de internationale WHO-maat voor gezondheidsverlies door ziekte of hinder. De methode is ontleend aan de DALY-module ("Module 3") van het referentiemodel <a href="https://waardedaling-geluidshinder-windturbines.onrender.com/" target="_blank" rel="noopener">waardedaling-geluidshinder-windturbines.onrender.com</a>. <strong>Let op de terminologie:</strong> "best/middel/worst" hieronder verwijst — net als in Module 6–9 — naar het nacht-scenario (welke overschrijdingsafstand), niet naar de drie monetaire DALY-waarden (RIVM/PBL/Zorginstituut Nederland) die verderop apart naast elkaar staan; die twee "drietallen" zijn onafhankelijke concepten.</p>
+
+    <p class="hint">Tijdshorizon: <strong id="m10-horizon-readout">25</strong> jaar — gedeeld met Module 9 hierboven; pas de horizon daar aan om ook deze module bij te werken.</p>
+
+    <div class="m10-grid" id="m10-grid"></div>
+
+    <div class="data-table-card" id="m10-table-card" style="margin-top:var(--space-5);">
+      <h3>DALY's en monetaire waarde per scenario, categorie en hinderpercentage</h3>
+      <div class="cum-result-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Scenario</th><th>Categorie</th><th>Hinderpercentage</th><th>Bewoners</th><th>DALY/jaar</th><th>DALY/horizon</th><th>RIVM €/jaar</th><th>RIVM €/horizon</th><th>PBL €/jaar</th><th>PBL €/horizon</th><th>ZIN €/jaar</th><th>ZIN €/horizon</th></tr>
+        </thead>
+        <tbody id="m10-table-body"><tr><td colspan="12" class="empty-row">Plaats een turbine op de kaart in Module 3.</td></tr></tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="method-callout">
+      <h3>Herkomst van de disability weights en de monetaire DALY-waarden</h3>
+      <p><strong>Rekenmethode:</strong> <code>DALY per jaar = bewoners met hinder × (disability weight slaapverstoring + disability weight ernstige hinder) = bewoners × (0,010 + 0,011) = bewoners × 0,021</code>, en <code>DALY over horizon = DALY per jaar × aantal jaren</code>. Voor de monetaire waarde: <code>waarde per jaar = DALY per jaar × €/DALY</code>, en <code>waarde over horizon = waarde per jaar × aantal jaren</code>.</p>
+      <p><strong>Disability weights (2024):</strong> ernstige slaapverstoring DW = 0,010 (95%-BI 0,006–0,015) en ernstige hinder DW = 0,011 (95%-BI 0,006–0,016). Bron: <a href="https://www.who.int/europe/publications/i/item/WHO-EURO-2024-9196-48968-72969" target="_blank" rel="noopener">WHO Regional Office for Europe (2024), "Disability weights for noise-related health states in the WHO European Region"</a>, gebaseerd op empirisch gemeten waarden uit <a href="https://bmjpublichealth.bmj.com/content/2/1/e000470" target="_blank" rel="noopener">Charalampous et al. (2024), BMJ Public Health</a>. Deze waarden liggen aanmerkelijk lager dan de klassieke WHO (2011)-waarden (0,07/0,03) en de RIVM/Van Kamp (2018)-waarden (0,0175/0,01) die in oudere MKBA's worden gebruikt.</p>
+      <p><strong>Drie monetaire DALY-waarden (Nederland kent geen wettelijk vastgesteld bedrag):</strong></p>
+      <ul class="m8-example-steps" style="list-style:disc;">
+        <li><strong>RIVM — €50.000/DALY:</strong> <a href="https://www.rivm.nl/sites/default/files/2025-02/Werken%20aan%20een%20gezonde%20leefomgeving%20met%20behulp%20van%20maatschappelijke%20kosten-batenanalyses%20(MKBA's).pdf" target="_blank" rel="noopener">RIVM (2025), "Werken aan een gezonde leefomgeving met behulp van MKBA's"</a> (dezelfde publicatie noemt ook een alternatief van €100.000/DALY, dat hier niet wordt gebruikt).</li>
+        <li><strong>PBL — €70.000/DALY:</strong> <a href="https://www.pbl.nl/sites/default/files/downloads/PBL_2012_Gezondheid_in_MKBAs_van_omgevingsbeleid_550051004.pdf" target="_blank" rel="noopener">PBL (2012), "Gezondheid in maatschappelijke kosten-batenanalyses van omgevingsbeleid"</a>.</li>
+        <li><strong>Zorginstituut Nederland — €80.000/DALY:</strong> <a href="https://www.zorginstituutnederland.nl/site/binaries/site-content/collections/documents/2024/11/26/beoordelingskader-kosteneffectiviteit-van-zorg/Beoordelingskader+kosteneffectiviteit+van+zorg.pdf" target="_blank" rel="noopener">Zorginstituut Nederland (2024), "Beoordelingskader kosteneffectiviteit van zorg"</a>.</li>
+      </ul>
+      <p>De drie waarden staan hier bewust <em>naast</em> elkaar in plaats van gekoppeld aan best/middel/worst — het zijn drie officieel gehanteerde maar onderling verschillende referentiebedragen voor dezelfde DALY, geen drie scenario's van toenemende ernst.</p>
+    </div>
+
+    <div class="callout m6-limitations">
+      <strong>Beperkingen:</strong> (1) De DALY-berekening beperkt zich tot slaapverstoring en ernstige hinder; hart- en vaatziekten en vroegtijdig overlijden door geluid zijn bewust <em>niet</em> meegenomen omdat er geen windturbinespecifiek dosis-effectmodel voor bestaat — de uitkomst is daardoor een conservatieve ondergrens van het werkelijke gezondheidsverlies. (2) De disability weights hebben brede 95%-betrouwbaarheidsintervallen (0,006–0,015 en 0,006–0,016); de puntschattingen van 0,010/0,011 verbergen die onzekerheid. (3) Er bestaat geen wettelijk vastgesteld €/DALY-bedrag in Nederland — de drie getoonde waarden (RIVM/PBL/Zorginstituut Nederland) zijn elk uit een andere beleidscontext afkomstig en onderling niet zomaar vergelijkbaar of optelbaar. (4) DALY's en de zorgkosten van Module 9 hierboven meten gedeeltelijk hetzelfde onderliggende gezondheidseffect (slaapverstoring/hinder) via twee verschillende methodieken — ze mogen niet bij elkaar worden opgeteld tot één totale schadepost, dat zou dubbeltelling opleveren. (5) Zoals bij Module 8/9: de onderliggende hinderpercentages (9/30/46%) zijn afkomstig uit onderzoek naar hoorbaar geluid en worden ook toegepast op laagfrequente en infrasone bewonersaantallen, zonder eigen dosis-effectonderbouwing voor die twee categorieën.
+    </div>
+  </section>
+
   <!-- METHODOLOGY -->
   <section class="module" id="methodology">
     <div class="module-head">

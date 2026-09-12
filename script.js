@@ -155,6 +155,8 @@ const state = {
   m7Ugeo: 9, m7Cloud: 'half', m7ApplyToM6: false,
   // Module 8: woningen (BAG) → bewoners → geschatte hinder per scenario — zie script.js §M8.
   m8HouseholdSize: 2.10, m8AddressData: null, m8Fetching: false, m8Error: null,
+  // Module 9/10: kosten- en DALY-berekening op basis van Module 8's bewonersaantallen — zie script.js §M9/§M10.
+  m9CostPerPersonYear: 609.60, m9Horizon: 25,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' heeft geen vaste waarden; die komen uit state.normCustomLden/Lnight.
@@ -333,6 +335,25 @@ if (m8HouseholdInput) {
 }
 const m8FetchBtnEl = document.getElementById('m8-fetch-btn');
 if (m8FetchBtnEl) m8FetchBtnEl.addEventListener('click', () => { m8RunFetch(); });
+
+const m9CostInput = document.getElementById('m9-cost-per-person');
+if (m9CostInput) {
+  m9CostInput.addEventListener('input', () => {
+    const v = parseFloat(m9CostInput.value);
+    state.m9CostPerPersonYear = Number.isNaN(v) ? M9_DEFAULT_COST : v;
+    renderModule9();
+    renderModule10();
+  });
+}
+const m9HorizonInput = document.getElementById('m9-horizon');
+if (m9HorizonInput) {
+  m9HorizonInput.addEventListener('input', () => {
+    const v = parseInt(m9HorizonInput.value, 10);
+    state.m9Horizon = Number.isNaN(v) || v < 1 ? M9_DEFAULT_HORIZON : v;
+    renderModule9();
+    renderModule10();
+  });
+}
 
 // ---------- Bronvermogen slider ----------
 lwaInput.addEventListener('input', () => { state.lwa = parseFloat(lwaInput.value); render(); });
@@ -1560,6 +1581,35 @@ function m8RingLabel(radius) {
   return radius == null ? 'geen overschrijding' : `≤ ${radius} m`;
 }
 
+const M8_CATEGORY_META = [
+  { key: 'hoorbaar', label: 'Hoorbaar (dB(A))' },
+  { key: 'laagfrequent', label: 'Laagfrequent (dB(Lin))' },
+  { key: 'infrasoon', label: 'Infrasoon (dB(G), indicatief)' },
+];
+
+// Bouwt de gedeelde 3 (scenario) × 3 (categorie) × 3 (hinderpercentage) datamatrix die Module 8, 9 en 10
+// alle drie hergebruiken — zo wordt de overschrijdingsring/woningen/bewoners-berekening maar op één plek gedaan.
+function m8ComputeRows() {
+  const norm = getActiveNorm();
+  const normHasLnight = norm.lnight != null;
+  const hasData = !!state.m8AddressData;
+  const hinderFor = (people) =>
+    M8_HINDER_SCENARIOS.map((h) => ({
+      pct: h.pct,
+      label: h.label,
+      people: people != null ? people * (h.pct / 100) : null,
+    }));
+  return ['best', 'middel', 'worst'].map((scenario) => {
+    const categories = M8_CATEGORY_META.map((meta) => {
+      const ring = normHasLnight ? m8ExceedanceRadius(scenario, meta.key) : null;
+      const houses = hasData ? m8CountUnique(ring) : null;
+      const people = houses != null ? houses * state.m8HouseholdSize : null;
+      return { key: meta.key, label: meta.label, ring, houses, people, hinder: hinderFor(people) };
+    });
+    return { scenario, categories };
+  });
+}
+
 function renderModule8() {
   const contextCallout = document.getElementById('m8-context-callout');
   const fetchStatus = document.getElementById('m8-fetch-status');
@@ -1611,29 +1661,7 @@ function renderModule8() {
     }
   }
 
-  const CATEGORY_META = [
-    { key: 'hoorbaar', label: 'Hoorbaar (dB(A))' },
-    { key: 'laagfrequent', label: 'Laagfrequent (dB(Lin))' },
-    { key: 'infrasoon', label: 'Infrasoon (dB(G), indicatief)' },
-  ];
-
-  const hasData = !!state.m8AddressData;
-  const hinderFor = (people) =>
-    M8_HINDER_SCENARIOS.map((h) => ({
-      pct: h.pct,
-      label: h.label,
-      people: people != null ? people * (h.pct / 100) : null,
-    }));
-
-  const rows = ['best', 'middel', 'worst'].map((scenario) => {
-    const categories = CATEGORY_META.map((meta) => {
-      const ring = normHasLnight ? m8ExceedanceRadius(scenario, meta.key) : null;
-      const houses = hasData ? m8CountUnique(ring) : null;
-      const people = houses != null ? houses * state.m8HouseholdSize : null;
-      return { key: meta.key, label: meta.label, ring, houses, people, hinder: hinderFor(people) };
-    });
-    return { scenario, categories };
-  });
+  const rows = m8ComputeRows();
 
   grid.innerHTML = rows
     .map((r) => {
@@ -1688,6 +1716,222 @@ function renderModule8() {
             ${hinderCells}
           </tr>`;
           })
+        )
+        .join('');
+    }
+  }
+
+  renderModule9();
+  renderModule10();
+}
+
+// ==================== MODULE 9: geschatte zorgkosten ====================
+// Hergebruikt de bewonersaantallen die m8ComputeRows() per scenario/categorie/hinderpercentage
+// al berekent (zie Module 8) en past daarop het kostenkengetal toe uit de kostenmodule ("Module 2")
+// van het referentiemodel https://waardedaling-geluidshinder-windturbines.onrender.com/.
+const M9_DEFAULT_COST = 609.60;
+const M9_DEFAULT_HORIZON = 25;
+
+function m9Fmt(n) {
+  return n == null || Number.isNaN(n) ? '—' : Math.round(n).toLocaleString('nl-NL');
+}
+function m9FmtEuro(n) {
+  return n == null || Number.isNaN(n) ? '—' : '€' + Math.round(n).toLocaleString('nl-NL');
+}
+
+function renderModule9() {
+  const grid = document.getElementById('m9-grid');
+  const tableBody = document.getElementById('m9-table-body');
+  if (!grid) return;
+
+  const costInput = document.getElementById('m9-cost-per-person');
+  const horizonInput = document.getElementById('m9-horizon');
+  if (costInput && document.activeElement !== costInput) costInput.value = state.m9CostPerPersonYear;
+  if (horizonInput && document.activeElement !== horizonInput) horizonInput.value = state.m9Horizon;
+
+  const n = state.turbines3a.length;
+  const hasData = !!state.m8AddressData;
+  const rows = m8ComputeRows();
+  const costPerPerson = state.m9CostPerPersonYear;
+  const horizon = state.m9Horizon;
+
+  const withCost = rows.map((r) => ({
+    scenario: r.scenario,
+    categories: r.categories.map((c) => ({
+      ...c,
+      hinder: c.hinder.map((h) => ({
+        ...h,
+        costYear: h.people != null ? h.people * costPerPerson : null,
+        costHorizon: h.people != null ? h.people * costPerPerson * horizon : null,
+      })),
+    })),
+  }));
+
+  if (n === 0 || !hasData) {
+    grid.innerHTML = `<p class="hint">${n === 0 ? 'Plaats minstens één turbine op de kaart in Module 3.' : 'Haal eerst BAG-woninggegevens op bij Module 8 om de kosten te kunnen berekenen.'}</p>`;
+  } else {
+    grid.innerHTML = withCost
+      .map((r) => {
+        const catBlocks = r.categories
+          .map(
+            (c) => `
+          <div class="m9-cat-block">
+            <span class="m9-cat-title">${c.label}</span>
+            <div class="m9-cost-matrix">
+              ${c.hinder
+                .map(
+                  (h) => `<div class="m9-cost-row">
+                <span class="m9-cost-pct">${h.pct}% <em>(${h.label})</em> — ${m9Fmt(h.people)} bewoners</span>
+                <div class="m9-cost-nums">
+                  <span class="m9-cost-num">${m9FmtEuro(h.costYear)} <small>/jaar</small></span>
+                  <span class="m9-cost-num sub">${m9FmtEuro(h.costHorizon)} <small>over ${horizon} jaar</small></span>
+                </div>
+              </div>`
+                )
+                .join('')}
+            </div>
+          </div>`
+          )
+          .join('');
+        return `
+        <div class="m9-card m9-${r.scenario}">
+          <span class="m9-card-title">${M8_SCENARIO_LABEL[r.scenario]}</span>
+          ${catBlocks}
+        </div>`;
+      })
+      .join('');
+  }
+
+  if (tableBody) {
+    if (n === 0 || !hasData) {
+      tableBody.innerHTML = `<tr><td colspan="6" class="empty-row">${n === 0 ? 'Plaats een turbine op de kaart in Module 3.' : 'Haal eerst BAG-gegevens op bij Module 8.'}</td></tr>`;
+    } else {
+      tableBody.innerHTML = withCost
+        .flatMap((r) =>
+          r.categories.flatMap((c) =>
+            c.hinder.map((h, hIdx) => `<tr>
+              <td>${c === r.categories[0] && hIdx === 0 ? M8_SCENARIO_LABEL[r.scenario] : ''}</td>
+              <td>${hIdx === 0 ? c.label : ''}</td>
+              <td>${h.pct}% (${h.label})</td>
+              <td>${m9Fmt(h.people)}</td>
+              <td>${m9FmtEuro(h.costYear)}</td>
+              <td>${m9FmtEuro(h.costHorizon)}</td>
+            </tr>`)
+          )
+        )
+        .join('');
+    }
+  }
+}
+
+// ==================== MODULE 10: DALY-berekening ====================
+// Zet dezelfde bewonersaantallen (Module 8) om in Disability-Adjusted Life Years, met de
+// WHO Europe (2024)-disability-weights en drie Nederlandse monetaire DALY-waarden
+// (RIVM/PBL/Zorginstituut Nederland) — methodologie van de DALY-module ("Module 3") van het
+// referentiemodel https://waardedaling-geluidshinder-windturbines.onrender.com/.
+const M10_DW_SLAAP = 0.010;
+const M10_DW_HINDER = 0.011;
+const M10_VALUES = [
+  { key: 'rivm', label: 'RIVM', euro: 50000 },
+  { key: 'pbl', label: 'PBL', euro: 70000 },
+  { key: 'zin', label: 'Zorginstituut NL', euro: 80000 },
+];
+
+function m10FmtDaly(n) {
+  return n == null || Number.isNaN(n) ? '—' : n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function renderModule10() {
+  const grid = document.getElementById('m10-grid');
+  const tableBody = document.getElementById('m10-table-body');
+  if (!grid) return;
+
+  const horizonReadout = document.getElementById('m10-horizon-readout');
+  const horizon = state.m9Horizon;
+  if (horizonReadout) horizonReadout.textContent = horizon;
+
+  const n = state.turbines3a.length;
+  const hasData = !!state.m8AddressData;
+  const rows = m8ComputeRows();
+  const dwTotal = M10_DW_SLAAP + M10_DW_HINDER;
+
+  const withDaly = rows.map((r) => ({
+    scenario: r.scenario,
+    categories: r.categories.map((c) => ({
+      ...c,
+      hinder: c.hinder.map((h) => {
+        const dalyYear = h.people != null ? h.people * dwTotal : null;
+        const dalyHorizon = dalyYear != null ? dalyYear * horizon : null;
+        const values = M10_VALUES.map((v) => ({
+          ...v,
+          euroYear: dalyYear != null ? dalyYear * v.euro : null,
+          euroHorizon: dalyHorizon != null ? dalyHorizon * v.euro : null,
+        }));
+        return { ...h, dalyYear, dalyHorizon, values };
+      }),
+    })),
+  }));
+
+  if (n === 0 || !hasData) {
+    grid.innerHTML = `<p class="hint">${n === 0 ? 'Plaats minstens één turbine op de kaart in Module 3.' : 'Haal eerst BAG-woninggegevens op bij Module 8 om de DALY-berekening te kunnen maken.'}</p>`;
+  } else {
+    grid.innerHTML = withDaly
+      .map((r) => {
+        const catBlocks = r.categories
+          .map(
+            (c) => `
+          <div class="m10-cat-block">
+            <span class="m10-cat-title">${c.label}</span>
+            <div class="m10-daly-matrix">
+              ${c.hinder
+                .map(
+                  (h) => `<div class="m10-daly-row">
+                <span class="m10-daly-pct">${h.pct}% <em>(${h.label})</em> — ${m9Fmt(h.people)} bewoners</span>
+                <div class="m10-daly-nums">
+                  <span class="m10-daly-num">${m10FmtDaly(h.dalyYear)} DALY <small>/jaar</small></span>
+                  <span class="m10-daly-num sub">${m10FmtDaly(h.dalyHorizon)} DALY <small>over ${horizon} jaar</small></span>
+                </div>
+                <div class="m10-value-grid">
+                  ${h.values.map((v) => `<span class="m10-value-chip">${v.label} ${m9FmtEuro(v.euroHorizon)} <small>(${horizon}j)</small></span>`).join('')}
+                </div>
+              </div>`
+                )
+                .join('')}
+            </div>
+          </div>`
+          )
+          .join('');
+        return `
+        <div class="m10-card m10-${r.scenario}">
+          <span class="m10-card-title">${M8_SCENARIO_LABEL[r.scenario]}</span>
+          ${catBlocks}
+        </div>`;
+      })
+      .join('');
+  }
+
+  if (tableBody) {
+    if (n === 0 || !hasData) {
+      tableBody.innerHTML = `<tr><td colspan="12" class="empty-row">${n === 0 ? 'Plaats een turbine op de kaart in Module 3.' : 'Haal eerst BAG-gegevens op bij Module 8.'}</td></tr>`;
+    } else {
+      tableBody.innerHTML = withDaly
+        .flatMap((r) =>
+          r.categories.flatMap((c) =>
+            c.hinder.map((h, hIdx) => {
+              const valueCells = h.values
+                .flatMap((v) => [`<td>${m9FmtEuro(v.euroYear)}</td>`, `<td>${m9FmtEuro(v.euroHorizon)}</td>`])
+                .join('');
+              return `<tr>
+                <td>${c === r.categories[0] && hIdx === 0 ? M8_SCENARIO_LABEL[r.scenario] : ''}</td>
+                <td>${hIdx === 0 ? c.label : ''}</td>
+                <td>${h.pct}% (${h.label})</td>
+                <td>${m9Fmt(h.people)}</td>
+                <td>${m10FmtDaly(h.dalyYear)}</td>
+                <td>${m10FmtDaly(h.dalyHorizon)}</td>
+                ${valueCells}
+              </tr>`;
+            })
+          )
         )
         .join('');
     }
