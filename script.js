@@ -151,6 +151,8 @@ const state = {
   // state.category is BEWUST gedeeld met Module 3 (zie category-tabs-3a), net als scenario/curtailment/windBearing/lwa.
   turbines3a: [], selectedTurbineId3a: null, daynight3a: 'dag',
   normPreset3a: 'oud', normCustomLnight3a: 41,
+  // Module 7: shear-capacity-verkenner (Van Hooijdonk e.a. 2015 / Bosveld e.a. 2020) — zie script.js §M7.
+  m7Ugeo: 9, m7Cloud: 'half', m7ApplyToM6: false,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' heeft geen vaste waarden; die komen uit state.normCustomLden/Lnight.
@@ -306,6 +308,18 @@ scenarioList.querySelectorAll('.scenario-card').forEach(card => {
 
 // ---------- Curtailment checkbox ----------
 curtailmentCheck.addEventListener('change', () => { state.curtailment = curtailmentCheck.checked; render(); });
+
+// ---------- Module 7: shear-capacity-verkenner ----------
+const m7UgeoInput = document.getElementById('m7-ugeo-input');
+if (m7UgeoInput) m7UgeoInput.addEventListener('input', () => { state.m7Ugeo = parseFloat(m7UgeoInput.value); render(); });
+const m7CloudTabs = document.getElementById('m7-cloud-tabs');
+if (m7CloudTabs) {
+  m7CloudTabs.querySelectorAll('.cat-tab').forEach(btn => {
+    btn.addEventListener('click', () => { state.m7Cloud = btn.dataset.cloud; render(); });
+  });
+}
+const m7ApplyM6Check = document.getElementById('m7-apply-m6-check');
+if (m7ApplyM6Check) m7ApplyM6Check.addEventListener('change', () => { state.m7ApplyToM6 = m7ApplyM6Check.checked; render(); });
 
 // ---------- Bronvermogen slider ----------
 lwaInput.addEventListener('input', () => { state.lwa = parseFloat(lwaInput.value); render(); });
@@ -510,6 +524,7 @@ function render() {
   renderNormModule();
   renderModule3a();
   renderModule6();
+  renderModule7();
 }
 
 // ---------- Locatie toevoegen: adreszoeker (PDOK Locatieserver) & coordinaten ----------
@@ -1070,7 +1085,8 @@ clearTurbinesBtn3a.addEventListener('click', clearAllTurbines3a);
 // Toont hoe vaak (dagen/jaar, dagen/maand) elk nacht-scenario optreedt,
 // gekoppeld aan de turbineposities uit Module 3 (state.turbines3a) en
 // aan de windrichting-instelling (state.windDir/windBearing).
-// Bronnen: Van den Berg (2004, 2008), Bosveld e.a. (2020), Baas e.a. (2009) — zie Verantwoording §5.
+// Bronnen: Van den Berg (2004, 2008), Abraham & Monahan (2019, deel I & II), Baas e.a. (2009) — zie Verantwoording §5.
+// (Module 7 voegt Bosveld e.a. (2020) / Van Hooijdonk e.a. (2015) / Van der Linden e.a. (2017) toe.)
 // ============================================================
 const M6_COAST_POINTS = [
   { name: 'Vlissingen', lat: 51.45, lng: 3.57 },
@@ -1116,12 +1132,15 @@ function m6StablePct(distKm) {
 function m6ScenarioPercentages(lat, lng) {
   const distKm = m6DistanceToCoastKm(lat, lng);
   const stable = m6StablePct(distKm);
-  // Bosveld e.a. (2020): volhardend-wSBL (middel) en volhardend-vSBL (worst) ongeveer even vaak
-  // binnen de stabiele nachten — 50/50 als benadering, geen exacte meting van alle nachten.
-  const middel = stable / 2;
-  const worst = stable / 2;
+  // Abraham & Monahan (2019, deel II): volhardend-wSBL (middel) en volhardend-vSBL (worst) komen bij
+  // Cabauw ongeveer even vaak voor — 50/50 als standaard-benadering, geen exacte meting van alle nachten.
+  // Optioneel vervangen door de shear-capacity-gebaseerde verhouding uit Module 7 (Van Hooijdonk e.a. 2015 /
+  // Bosveld e.a. 2020), als de gebruiker daar de koppeling "toepassen op Module 6" heeft aangezet.
+  const wsblShare = state.m7ApplyToM6 ? m7WsblShare() : 0.5;
+  const middel = stable * wsblShare;
+  const worst = stable * (1 - wsblShare);
   const best = 100 - stable;
-  return { best, middel, worst, distKm, stable };
+  return { best, middel, worst, distKm, stable, wsblShare };
 }
 
 // ---------- Astronomische nachtlengte per maand (voor illustratieve maandverdeling) ----------
@@ -1173,7 +1192,7 @@ function m6ComputeAll() {
   let middelDays = Math.round(pct.middel / 100 * 365);
   let worstDays = 365 - bestDays - middelDays;
   const { nightLen, dayLen } = m6MonthlyDayNightLengths(anchor.lat);
-  // Bosveld e.a. (2020): langere nachten (winter) -> meer volhardend-wSBL ("middel");
+  // Abraham & Monahan (2019, deel II): langere nachten (winter) -> meer volhardend-wSBL ("middel");
   // kortere nachten (zomer) -> meer volhardend-vSBL ("worst"). Best case: gelijk verdeeld
   // over dagen-per-maand (geen sterk seizoenspatroon gedocumenteerd voor de neutrale/goed-gemengde toestand).
   const middelMonthly = m6Normalize(nightLen, middelDays);
@@ -1235,7 +1254,10 @@ function renderModule6() {
   `;
 
   if (explainer) {
-    explainer.textContent = `Stabiele atmosfeer (middel + worst samen): ${pct.stable.toFixed(0)}% van de nachten, geïnterpoleerd tussen 15% (kust, Lutjewad) en 40% (landinwaarts, Cabauw) op basis van de afstand tot de kust — zie Verantwoording §5.`;
+    const splitNote = state.m7ApplyToM6
+      ? `Verdeling middel/worst binnen "stabiel": ${(pct.wsblShare * 100).toFixed(0)}%/${(100 - pct.wsblShare * 100).toFixed(0)}%, overgenomen uit de shear-capacity-schatting in Module 7 (i.p.v. de standaard 50/50).`
+      : `Verdeling middel/worst binnen "stabiel": standaard 50/50 — zie Module 7 voor een alternatieve, shear-capacity-gebaseerde verhouding.`;
+    explainer.textContent = `Stabiele atmosfeer (middel + worst samen): ${pct.stable.toFixed(0)}% van de nachten, geïnterpoleerd tussen 15% (kust, Lutjewad) en 40% (landinwaarts, Cabauw) op basis van de afstand tot de kust — zie Verantwoording §5. ${splitNote}`;
   }
 
   if (monthBody) {
@@ -1272,6 +1294,122 @@ function renderModule6() {
     }).join('');
     const centerLabel = `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:11px;font-weight:700;color:var(--color-text-faint);text-align:center;">${dir}<br><span style="font-size:9px;font-weight:400;">huidig</span></div>`;
     compass.innerHTML = dots + centerLabel;
+  }
+}
+
+// ============================================================
+// Module 7: Bosveld's eigen indeling — shear capacity (Van Hooijdonk e.a. 2015)
+// en de vertaling naar Module 6
+//
+// CORRECTIE t.o.v. eerdere versie: de kwantitatieve claims die hierboven in Module 6
+// stonden (expliciete verwerping van een derde regime, HMM-classificatie, ~50/50-
+// persistentie, transitiestatistieken, sturing door geostrofische wind/bewolking) zijn
+// niet van Bosveld e.a. (2020) zelf, maar van Abraham & Monahan (2019, deel I & II) —
+// zie de correctiebox in de UI en §6 van de Verantwoording. Bosveld e.a. (2020) noemt in
+// hun overzichtsartikel over 50 jaar Cabauw-onderzoek zelf twee andere, eigen
+// classificaties voor wSBL/vSBL: (1) de "shear capacity" SC = U/Umin van Van Hooijdonk
+// e.a. (2015, waarvan Bosveld zelf co-auteur is), en (2) de indeling van heldere nachten
+// naar geostrofische windsnelheid van Van der Linden e.a. (2017). Module 7 gebruikt (1)
+// als interactief model en herkalibreert Umin met de geostrofische-wind-drempels die
+// Abraham & Monahan (2019b) rapporteren per bewolkingsklasse — dat is een eigen synthese,
+// niet een waarde die letterlijk in een van beide papers staat (zie beperkingen).
+// ============================================================
+// Umin per bewolkingsklasse: geen vaste fysieke constante, maar hier gelijkgesteld aan de
+// geostrofische-windsnelheid-drempel die Abraham & Monahan (2019b) rapporteren als scheiding
+// tussen volhardend-wSBL en volhardend-vSBL, per bewolkingsklasse (Cabauw).
+const M7_UMIN_BY_CLOUD = {
+  helder: 12,   // helder (LLCC < 5%): drempel ≈ 12 m/s
+  half: 9.5,    // tussenliggend — eigen interpolatie, geen datapunt uit de literatuur
+  bewolkt: 7,   // bewolkt (LLCC > 95%): drempel ≈ 7 m/s
+};
+const M7_CLOUD_LABELS = { helder: 'Helder (LLCC < 5%)', half: 'Half bewolkt', bewolkt: 'Bewolkt (LLCC > 95%)' };
+const M7_CLOUD_ORDER = ['helder', 'half', 'bewolkt'];
+const M7_LOGISTIC_K = 4; // steilheid van de soft-transition rond SC = 1 — eigen keuze, niet uit de literatuur
+
+function m7ShearCapacity(ugeo, cloud) {
+  const umin = M7_UMIN_BY_CLOUD[cloud] ?? M7_UMIN_BY_CLOUD.half;
+  const sc = ugeo / umin;
+  const pWsbl = 1 / (1 + Math.exp(-M7_LOGISTIC_K * (sc - 1)));
+  return { umin, sc, pWsbl, pVsbl: 1 - pWsbl };
+}
+
+function m7WsblShare() {
+  return m7ShearCapacity(state.m7Ugeo, state.m7Cloud).pWsbl;
+}
+
+function m7ComparisonRows() {
+  const anchor = m6TurbineAnchor();
+  const distKm = m6DistanceToCoastKm(anchor.lat, anchor.lng);
+  const stable = m6StablePct(distKm);
+  const sc = m7ShearCapacity(state.m7Ugeo, state.m7Cloud);
+  const toDays = pct => Math.round(pct / 100 * 365);
+  const defaultMiddelPct = stable / 2, defaultWorstPct = stable / 2;
+  const altMiddelPct = stable * sc.pWsbl, altWorstPct = stable * sc.pVsbl;
+  return {
+    anchor, stable, sc,
+    std: { middelPct: defaultMiddelPct, worstPct: defaultWorstPct, middelDays: toDays(defaultMiddelPct), worstDays: toDays(defaultWorstPct) },
+    alt: { middelPct: altMiddelPct, worstPct: altWorstPct, middelDays: toDays(altMiddelPct), worstDays: toDays(altWorstPct) },
+  };
+}
+
+function renderModule7() {
+  const ugeoReadout = document.getElementById('m7-ugeo-readout');
+  const cloudTabs = document.getElementById('m7-cloud-tabs');
+  const scValue = document.getElementById('m7-sc-value');
+  const uminValue = document.getElementById('m7-umin-value');
+  const probGrid = document.getElementById('m7-prob-grid');
+  const compareBody = document.getElementById('m7-compare-body');
+  const applyCheck = document.getElementById('m7-apply-m6-check');
+  const applyNote = document.getElementById('m7-apply-m6-note');
+  if (!probGrid) return;
+
+  if (ugeoReadout) ugeoReadout.textContent = state.m7Ugeo.toFixed(1) + ' m/s';
+  if (cloudTabs) {
+    cloudTabs.querySelectorAll('.cat-tab').forEach(b => {
+      b.setAttribute('aria-pressed', b.dataset.cloud === state.m7Cloud ? 'true' : 'false');
+    });
+  }
+
+  const cmp = m7ComparisonRows();
+  const { sc } = cmp;
+  if (scValue) scValue.textContent = sc.sc.toFixed(2);
+  if (uminValue) uminValue.textContent = sc.umin.toFixed(1) + ' m/s';
+
+  probGrid.innerHTML = `
+    <div class="m6-pct-card m6-middel">
+      <span class="m6-pct-label">Kans op wSBL (→ middel)</span>
+      <span class="m6-pct-value">${(sc.pWsbl * 100).toFixed(0)}%</span>
+      <span class="m6-pct-days">bij U<sub>geo</sub> = ${state.m7Ugeo.toFixed(1)} m/s, ${M7_CLOUD_LABELS[state.m7Cloud]}</span>
+      <div class="m6-pct-bar"><div class="m6-pct-bar-fill" style="width:${(sc.pWsbl * 100).toFixed(1)}%"></div></div>
+    </div>
+    <div class="m6-pct-card m6-worst">
+      <span class="m6-pct-label">Kans op vSBL (→ worst)</span>
+      <span class="m6-pct-value">${(sc.pVsbl * 100).toFixed(0)}%</span>
+      <span class="m6-pct-days">SC = U<sub>geo</sub>/U<sub>min</sub> = ${sc.sc.toFixed(2)}</span>
+      <div class="m6-pct-bar"><div class="m6-pct-bar-fill" style="width:${(sc.pVsbl * 100).toFixed(1)}%"></div></div>
+    </div>
+  `;
+
+  if (compareBody) {
+    compareBody.innerHTML = `
+      <tr>
+        <td><strong>Standaard Module 6 (50/50)</strong></td>
+        <td class="m6-month-cell">${cmp.std.middelDays}</td>
+        <td class="m6-month-cell">${cmp.std.worstDays}</td>
+      </tr>
+      <tr>
+        <td><strong>Module 7 — shear capacity (${(sc.pWsbl * 100).toFixed(0)}/${(sc.pVsbl * 100).toFixed(0)})</strong></td>
+        <td class="m6-month-cell">${cmp.alt.middelDays}</td>
+        <td class="m6-month-cell">${cmp.alt.worstDays}</td>
+      </tr>
+    `;
+  }
+
+  if (applyCheck) applyCheck.checked = state.m7ApplyToM6;
+  if (applyNote) {
+    applyNote.textContent = state.m7ApplyToM6
+      ? `Actief: Module 6 gebruikt nu ${(sc.pWsbl * 100).toFixed(0)}/${(sc.pVsbl * 100).toFixed(0)} in plaats van 50/50 voor de middel/worst-verdeling.`
+      : `Niet actief: Module 6 gebruikt nog de standaard 50/50-verdeling. Vink aan om de bovenstaande verhouding door te voeren.`;
   }
 }
 
