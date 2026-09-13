@@ -690,6 +690,74 @@
     </div>
   </section>
 
+  <!-- MODULE 11 -->
+  <section class="module" id="module-11">
+    <div class="module-head">
+      <span class="module-num">Module 11</span>
+      <h2>Waardedaling van woningen door windturbines</h2>
+    </div>
+    <p class="module-desc">Deze module berekent de geschatte <strong>waardedaling van woningen</strong> rond de turbines uit Module 3, met de methodologie en het rekenmodel van <a href="https://waardedaling-geluidshinder-windturbines.onrender.com/" target="_blank" rel="noopener">waardedaling-geluidshinder-windturbines.onrender.com</a> ("Module 1" van het referentiemodel), gebaseerd op <a href="https://doi.org/10.1016/j.enpol.2021.112327" target="_blank" rel="noopener">Droës &amp; Koster (2021), "Wind turbines, solar farms, and house prices", Energy Policy 155, 112327</a>. Anders dan Module 8–10 hierboven is deze berekening <strong>niet</strong> gekoppeld aan de best/middel/worst-scenario's van de geluidsberekening: waardedaling door de aanwezigheid van een turbine is een blijvend effect, geen functie van de nachtelijke geluidscondities. Kies hieronder de <strong>tiphoogte-categorie</strong> van de geplaatste turbine(s) — dit is een ander soort categorie dan de hoorbaar/laagfrequent/infrasoon-tabs van Module 3.</p>
+
+    <div class="cat-tabs" id="m11-category-tabs" role="tablist" aria-label="Tiphoogte-categorie">
+      <button type="button" class="cat-tab" data-m11-category="laag" aria-pressed="false">Laag<span class="cat-tab-sub">&lt;50 m tiphoogte · 1 km · −1,0%</span></button>
+      <button type="button" class="cat-tab" data-m11-category="midden" aria-pressed="false">Midden<span class="cat-tab-sub">50–150 m tiphoogte · 2 km · −3,0%</span></button>
+      <button type="button" class="cat-tab" data-m11-category="hoog" aria-pressed="true">Hoog<span class="cat-tab-sub">&gt;150 m tiphoogte · 2 km · −5,4%</span></button>
+    </div>
+
+    <div class="cat-tabs m11-method-tabs" id="m11-method-tabs" role="tablist" aria-label="Berekeningsmethode">
+      <button type="button" class="cat-tab" data-m11-method="vlak" aria-pressed="true">Methode A — vlak percentage<span class="cat-tab-sub">Eén percentage voor de hele invloedscirkel</span></button>
+      <button type="button" class="cat-tab" data-m11-method="band" aria-pressed="false">Methode B — afstandsband<span class="cat-tab-sub">Alleen bij categorie Hoog (Fig. 6)</span></button>
+    </div>
+    <p class="hint" id="m11-method-hint"></p>
+
+    <div class="cum-controls">
+      <div class="cum-field">
+        <label for="m11-woz-input">Gemiddelde WOZ-waarde per woning (€)</label>
+        <input type="number" id="m11-woz-input" value="398000" step="1000" min="0">
+      </div>
+    </div>
+    <p class="hint">Standaardwaarde €398.000: landelijk gemiddelde WOZ-waarde van woningen 2025 (<a href="https://www.cbs.nl/nl-nl/cijfers/detail/85036NED" target="_blank" rel="noopener">CBS StatLine, tabel 85036NED</a>) — pas dit aan naar de lokale/regionale gemiddelde WOZ-waarde voor een preciezere schatting; het referentiemodel gebruikt hiervoor CBS-buurtcijfers per locatie, die deze module niet automatisch ophaalt.</p>
+
+    <p class="hint" id="m11-status"></p>
+
+    <div class="callout m11-totals-highlight" id="m11-totals-callout">
+      <h3>Totalen (dit zijn de kerncijfers)</h3>
+      <div id="m11-totals-text" class="m11-totals-text"></div>
+    </div>
+
+    <div class="m11-kpi-grid" id="m11-kpi-grid"></div>
+
+    <div class="data-table-card" id="m11-table-card" style="margin-top:var(--space-5);">
+      <h3 id="m11-table-title">Uitsplitsing</h3>
+      <div class="cum-result-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Afstand / bereik</th><th>Effect (Droës &amp; Koster)</th><th>Geraakte woningen (BAG)</th><th>Waardedaling totaal</th><th>Eigen risico (NMR ≤4%)</th><th>Compensabele planschade (&gt;4%)</th></tr>
+          </thead>
+          <tbody id="m11-table-body"><tr><td colspan="6" class="empty-row">Plaats een turbine op de kaart in Module 3 en haal de BAG-woningen op in Module 8.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="method-callout">
+      <h3>Herkomst van de percentages en de 4%-splitsing</h3>
+      <p><strong>Bron:</strong> <a href="https://doi.org/10.1016/j.enpol.2021.112327" target="_blank" rel="noopener">M.I. Droës &amp; H.R.A. Koster (2021), "Wind turbines, solar farms, and house prices", Energy Policy, 155, 112327</a>, overgenomen zoals gepresenteerd op het referentiemodel <a href="https://waardedaling-geluidshinder-windturbines.onrender.com/" target="_blank" rel="noopener">waardedaling-geluidshinder-windturbines.onrender.com</a>.</p>
+      <p><strong>Categorie → invloedsradius → vlak effect (Methode A):</strong></p>
+      <ul class="m8-example-steps" style="list-style:disc;">
+        <li><strong>Laag (&lt;50 m):</strong> 1 km, −1,0% — niet significant in de meeste specificaties van het paper, hier indicatief opgenomen.</li>
+        <li><strong>Midden (50–150 m):</strong> 2 km, −3,0% — significant; geen gepubliceerde afstandsbanden voor deze categorie, daarom alleen het vlakke percentage.</li>
+        <li><strong>Hoog (&gt;150 m):</strong> 2 km, −5,4% — het meest robuuste cijfer uit het paper (Fig. 4b, gecontroleerd voor tijdsvariatie).</li>
+      </ul>
+      <p><strong>Afstandsband (Methode B, alleen categorie Hoog, afgelezen van Fig. 6):</strong> 500–1.000 m: −8,3%; 1.000–1.500 m: −6,0%; 1.500–2.000 m: −4,0%; 2.000–2.500 m: −2,5%. Deze percentages zijn van een figuur afgelezen (benadering), geen exacte regressiecoëfficiënten.</p>
+      <p><strong>Toerekening van geraakte woningen:</strong> het referentiemodel bepaalt per CBS-buurt welk oppervlakte-aandeel binnen de invloedscirkel valt en rekent woningen naar rato van dat aandeel toe (dezelfde rekenlogica als TNO (2022), "De impact van windturbines op huizenprijzen"). Deze module gebruikt in plaats daarvan de <strong>unieke BAG-adressen</strong> die dit model zelf al ophaalt in Module 8 — per adres wordt de afstand tot de dichtstbijzijnde geplaatste turbine bepaald; ligt die binnen de invloedsradius (of -band), dan telt het adres mee. Bij overlap van meerdere turbines geldt — net als in het referentiemodel — het <strong>sterkste effect</strong> (kortste afstand), zonder dubbeltelling.</p>
+      <p><strong>4%-normaal maatschappelijk risico (NMR):</strong> volgens vaste jurisprudentie van de <a href="https://www.raadvanstate.nl/@126772/202008065-1-r3/" target="_blank" rel="noopener">Afdeling bestuursrechtspraak van de Raad van State</a> komt waardedaling tot 2–4% voor rekening van de eigenaar als normaal maatschappelijk risico bij planschade. Het referentiemodel — en deze module — hanteert 4% als grens: <code>eigen risico = geraakte woningen × gem. WOZ × min(effect%, 4%)</code>, <code>compensabele planschade = geraakte woningen × gem. WOZ × max(0, effect% − 4%)</code>.</p>
+    </div>
+
+    <div class="callout m6-limitations">
+      <strong>Beperkingen:</strong> (1) Dit model gebruikt de unieke BAG-adressen uit Module 8 (afstand tot de dichtstbijzijnde turbine) in plaats van de CBS-buurtoppervlakte-toerekening van het referentiemodel — bij een ongelijke verdeling van woningen binnen een buurt kan dit tot een ander (doorgaans nauwkeuriger, want adresniveau) aantal leiden dan het referentiemodel voor dezelfde locatie zou tonen. (2) De afstandsband-percentages van Methode B zijn van Fig. 6 van Droës &amp; Koster (2021) afgelezen, geen exacte regressiecoëfficiënten; het paper publiceert geen band onder 500 m, dus adressen binnen 500 m van een Hoog-categorie turbine krijgen hier hetzelfde (hoogste) percentage als de 500–1.000 m-band — een conservatieve benadering, geen gemeten waarde. (3) De categorieën Laag en Midden hebben geen gepubliceerde afstandsbanden; voor die twee categorieën is alleen Methode A (vlak percentage) beschikbaar. (4) De 4%-NMR-drempel is een indicatieve toepassing van vaste bestuursrechtelijke jurisprudentie, geen juridisch bindende vaststelling voor een specifiek geval — de daadwerkelijke tegemoetkoming in planschade wordt per geval bepaald door het bevoegd gezag op basis van een onafhankelijke taxatie. (5) De gemiddelde WOZ-waarde is een door de gebruiker instelbaar, landelijk kengetal (CBS, 2025) — geen lokale WOZ-waarde voor de specifieke buurt(en) rond de geplaatste turbine(s); voor een preciezere schatting dient dit cijfer met een lokale bron te worden vervangen. (6) Zoals bij Module 8: BAG-opvragingen zijn client-side en gelimiteerd op 20 pagina's (20.000 adressen) per turbine — in zeer dichtbebouwd gebied kan dit aantal afgekapt zijn. (7) Het onderliggende onderzoek is uitgevoerd op de Nederlandse woningmarkt tot en met 2019 (transactieprijzen); recentere marktomstandigheden zijn niet in de oorspronkelijke schatting verwerkt.
+    </div>
+  </section>
+
   <!-- METHODOLOGY -->
   <section class="module" id="methodology">
     <div class="module-head">

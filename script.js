@@ -159,6 +159,9 @@ const state = {
   m8HouseholdSize: 2.10, m8AddressData: null, m8Fetching: false, m8Error: null,
   // Module 9/10: kosten- en DALY-berekening op basis van Module 8's bewonersaantallen — zie script.js §M9/§M10.
   m9CostPerPersonYear: 609.60, m9Horizon: 25,
+  // Module 11: waardedaling woningen (Droës & Koster 2021) — zie script.js §M11. Tiphoogte-categorie
+  // is een EIGEN categorie-as, los van state.category (hoorbaar/laagfrequent/infrasoon) van Module 3.
+  m11Category: 'hoog', m11Method: 'vlak', m11Woz: 398000,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' heeft geen vaste waarden; die komen uit state.normCustomLden/Lnight.
@@ -348,6 +351,36 @@ if (m9HorizonInput) {
     state.m9Horizon = Number.isNaN(v) || v < 1 ? M9_DEFAULT_HORIZON : v;
     renderModule9();
     renderModule10();
+  });
+}
+
+// ---------- Module 11: tiphoogte-categorie, methode en WOZ-invoer ----------
+const m11CategoryTabsEl = document.getElementById('m11-category-tabs');
+if (m11CategoryTabsEl) {
+  m11CategoryTabsEl.querySelectorAll('[data-m11-category]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.m11Category = btn.dataset.m11Category;
+      if (state.m11Category !== 'hoog') state.m11Method = 'vlak';
+      renderModule11();
+    });
+  });
+}
+const m11MethodTabsEl = document.getElementById('m11-method-tabs');
+if (m11MethodTabsEl) {
+  m11MethodTabsEl.querySelectorAll('[data-m11-method]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.m11Method === 'band' && state.m11Category !== 'hoog') return;
+      state.m11Method = btn.dataset.m11Method;
+      renderModule11();
+    });
+  });
+}
+const m11WozInput = document.getElementById('m11-woz-input');
+if (m11WozInput) {
+  m11WozInput.addEventListener('input', () => {
+    const v = parseFloat(m11WozInput.value);
+    state.m11Woz = Number.isNaN(v) ? 0 : v;
+    renderModule11();
   });
 }
 
@@ -1826,6 +1859,7 @@ function renderModule8() {
 
   renderModule9();
   renderModule10();
+  renderModule11();
 }
 
 // ==================== MODULE 9: geschatte zorgkosten ====================
@@ -2134,6 +2168,194 @@ function renderModule10() {
           )
         )
         .join('');
+    }
+  }
+}
+
+// ==================== MODULE 11: waardedaling woningen (Droës & Koster 2021) ====================
+// Neemt de percentagetabel en de 4%-NMR-splitsing over van het referentiemodel
+// https://waardedaling-geluidshinder-windturbines.onrender.com/ ("Module 1"), gebaseerd op
+// Droës & Koster (2021), Energy Policy 155, 112327 (https://doi.org/10.1016/j.enpol.2021.112327).
+// Anders dan dat referentiemodel (CBS-buurtoppervlakte-toerekening) gebruikt deze module de unieke
+// BAG-adressen die Module 8 hierboven al ophaalt: per adres wordt de afstand tot de dichtstbijzijnde
+// geplaatste turbine bepaald, zodat bij overlap van meerdere turbines automatisch het sterkste effect
+// (kortste afstand) telt, zonder dubbeltelling — zie de "Herkomst"-callout onder Module 11 in index.html.
+const M11_CATEGORY_META = {
+  laag: { label: 'Laag (<50 m tiphoogte)', radius: 1000, flatPct: 1.0 },
+  midden: { label: 'Midden (50–150 m tiphoogte)', radius: 2000, flatPct: 3.0 },
+  hoog: { label: 'Hoog (>150 m tiphoogte)', radius: 2000, flatPct: 5.4 },
+};
+// Alleen gepubliceerd voor de categorie "Hoog" (Fig. 6 van Droës & Koster 2021) — van de figuur afgelezen.
+const M11_DISTANCE_BANDS = [
+  { lo: 0, hi: 1000, pct: 8.3, label: '≤ 1.000 m' },
+  { lo: 1000, hi: 1500, pct: 6.0, label: '1.000–1.500 m' },
+  { lo: 1500, hi: 2000, pct: 4.0, label: '1.500–2.000 m' },
+  { lo: 2000, hi: 2500, pct: 2.5, label: '2.000–2.500 m' },
+];
+const M11_BAND_MAX_RADIUS = 2500;
+// Vaste jurisprudentie Afdeling bestuursrechtspraak Raad van State: waardedaling tot 2–4% is normaal
+// maatschappelijk risico (NMR) bij planschade. Referentiemodel hanteert 4% als vaste grens.
+const M11_NMR_THRESHOLD = 4.0;
+
+// Retourneert, voor elk unieke BAG-adres binnen het toepasselijke bereik, de afstand tot de
+// DICHTSTBIJZIJNDE geplaatste turbine ("sterkste effect telt, geen dubbeltelling" — zoals in het referentiemodel).
+function m11AddressMinDistances() {
+  if (!state.m8AddressData) return null;
+  const meta = M11_CATEGORY_META[state.m11Category];
+  const useBand = state.m11Category === 'hoog' && state.m11Method === 'band';
+  const maxRadius = useBand ? M11_BAND_MAX_RADIUS : meta.radius;
+  const distByAddr = new Map();
+  state.turbines3a.forEach((t) => {
+    const addrs = state.m8AddressData.byTurbine.get(t.id) || [];
+    addrs.forEach((a) => {
+      const d = haversineMeters(t.lat, t.lng, a.lat, a.lon);
+      if (d <= maxRadius) {
+        const id = a.id || `${a.lat.toFixed(6)},${a.lon.toFixed(6)}`;
+        const prev = distByAddr.get(id);
+        if (prev == null || d < prev) distByAddr.set(id, d);
+      }
+    });
+  });
+  return Array.from(distByAddr.values());
+}
+
+// Bouwt de rij-per-rij uitsplitsing (één rij voor Methode A, vier afstandsbanden voor Methode B)
+// inclusief de 4%-NMR-splitsing in eigen risico / compensabele planschade, plus het totaal.
+function m11ComputeResult() {
+  const hasData = !!state.m8AddressData;
+  const n = state.turbines3a.length;
+  if (n === 0 || !hasData) return { hasData: false, n };
+  const meta = M11_CATEGORY_META[state.m11Category];
+  const useBand = state.m11Category === 'hoog' && state.m11Method === 'band';
+  const distances = m11AddressMinDistances() || [];
+  const woz = state.m11Woz || 0;
+
+  let rows;
+  if (useBand) {
+    rows = M11_DISTANCE_BANDS.map((b) => ({
+      label: b.label,
+      pct: b.pct,
+      woningen: distances.filter((d) => d > b.lo && d <= b.hi).length,
+    }));
+  } else {
+    rows = [{ label: `Binnen invloedscirkel (\u2264 ${meta.radius.toLocaleString('nl-NL')} m)`, pct: meta.flatPct, woningen: distances.length }];
+  }
+
+  let totWoningen = 0, totWaarde = 0, totEigen = 0, totCompensabel = 0;
+  rows = rows.map((r) => {
+    const waarde = r.woningen * woz * (r.pct / 100);
+    const eigen = r.woningen * woz * (Math.min(r.pct, M11_NMR_THRESHOLD) / 100);
+    const compensabel = r.woningen * woz * (Math.max(0, r.pct - M11_NMR_THRESHOLD) / 100);
+    totWoningen += r.woningen; totWaarde += waarde; totEigen += eigen; totCompensabel += compensabel;
+    return { ...r, waarde, eigen, compensabel };
+  });
+
+  return {
+    hasData: true, n, method: useBand ? 'band' : 'vlak', meta, rows,
+    totals: { woningen: totWoningen, waarde: totWaarde, eigen: totEigen, compensabel: totCompensabel },
+  };
+}
+
+function renderModule11() {
+  const catTabsEl = document.getElementById('m11-category-tabs');
+  const methodTabsEl = document.getElementById('m11-method-tabs');
+  const methodHint = document.getElementById('m11-method-hint');
+  const wozInput = document.getElementById('m11-woz-input');
+  const statusEl = document.getElementById('m11-status');
+  const totalsText = document.getElementById('m11-totals-text');
+  const kpiGrid = document.getElementById('m11-kpi-grid');
+  const tableTitle = document.getElementById('m11-table-title');
+  const tableBody = document.getElementById('m11-table-body');
+  if (!catTabsEl) return;
+
+  catTabsEl.querySelectorAll('[data-m11-category]').forEach((btn) => {
+    btn.setAttribute('aria-pressed', btn.dataset.m11Category === state.m11Category ? 'true' : 'false');
+  });
+  if (methodTabsEl) {
+    methodTabsEl.querySelectorAll('[data-m11-method]').forEach((btn) => {
+      const isBand = btn.dataset.m11Method === 'band';
+      if (isBand) btn.disabled = state.m11Category !== 'hoog';
+      btn.setAttribute('aria-pressed', btn.dataset.m11Method === state.m11Method ? 'true' : 'false');
+    });
+  }
+  if (methodHint) {
+    methodHint.textContent = state.m11Category === 'hoog'
+      ? 'Methode B (afstandsband) is alleen gepubliceerd voor de categorie Hoog.'
+      : `Voor categorie ${M11_CATEGORY_META[state.m11Category].label} publiceert Dro\u00ebs & Koster (2021) geen afstandsbanden \u2014 alleen Methode A (vlak percentage) is beschikbaar.`;
+  }
+  if (wozInput && document.activeElement !== wozInput) wozInput.value = state.m11Woz;
+
+  const n = state.turbines3a.length;
+  const result = m11ComputeResult();
+  window.__m11LastResult = result; // t.b.v. QA-scripts
+
+  if (statusEl) {
+    statusEl.className = 'hint';
+    if (n === 0) {
+      statusEl.textContent = 'Plaats minstens \u00e9\u00e9n turbine op de kaart in Module 3 om deze module te gebruiken.';
+    } else if (!state.m8AddressData) {
+      statusEl.textContent = 'Haal eerst de BAG-woningen op bij Module 8 ("Woningen ophalen (BAG)") \u2014 deze module hergebruikt die adressen.';
+      statusEl.classList.add('m8-status-error');
+    } else {
+      const stale = state.m8AddressData.turbineSnapshot !== m8TurbineSnapshot();
+      statusEl.textContent = stale
+        ? 'Turbines zijn gewijzigd sinds de BAG-ophaling in Module 8 \u2014 klik daar opnieuw op "Woningen ophalen (BAG)" voor actuele aantallen.'
+        : `Berekening op basis van de ${M11_CATEGORY_META[state.m11Category].label.toLowerCase()}, ${result.method === 'band' ? 'Methode B (afstandsband)' : 'Methode A (vlak percentage)'}, en de unieke BAG-adressen uit Module 8.`;
+      statusEl.classList.add(stale ? 'm8-status-error' : 'm8-status-ok');
+    }
+  }
+
+  const dash = '\u2014';
+  if (totalsText) {
+    if (!result.hasData) {
+      totalsText.innerHTML = '<em>Nog geen gegevens \u2014 plaats turbines, haal de BAG-woningen op in Module 8 en stel de WOZ-waarde in.</em>';
+    } else {
+      const t = result.totals;
+      totalsText.innerHTML = `<div class="m11-totals-line"><strong>${t.woningen.toLocaleString('nl-NL')} geraakte woningen</strong> \u00d7 gem. WOZ \u20ac${Math.round(state.m11Woz).toLocaleString('nl-NL')} \u2192 totale waardedaling <strong>${m9FmtEuro(t.waarde)}</strong>, waarvan <strong>${m9FmtEuro(t.eigen)}</strong> eigen risico (NMR \u2264${M11_NMR_THRESHOLD}%) en <strong>${m9FmtEuro(t.compensabel)}</strong> potentieel compensabele planschade (>${M11_NMR_THRESHOLD}%).</div>`;
+    }
+  }
+
+  if (kpiGrid) {
+    if (!result.hasData) {
+      kpiGrid.innerHTML = '';
+    } else {
+      const t = result.totals;
+      const gemPerWoning = t.woningen > 0 ? t.waarde / t.woningen : 0;
+      kpiGrid.innerHTML = `
+        <div class="m11-kpi-card m11-kpi-woningen"><span class="m11-kpi-label">Geraakte woningen</span><span class="m11-kpi-value">${t.woningen.toLocaleString('nl-NL')}</span><span class="m11-kpi-sub">unieke BAG-adressen</span></div>
+        <div class="m11-kpi-card m11-kpi-totaal"><span class="m11-kpi-label">Totale waardedaling</span><span class="m11-kpi-value">${m9FmtEuro(t.waarde)}</span><span class="m11-kpi-sub">gem. ${m9FmtEuro(gemPerWoning)}/woning</span></div>
+        <div class="m11-kpi-card m11-kpi-eigen"><span class="m11-kpi-label">Eigen risico (NMR \u2264${M11_NMR_THRESHOLD}%)</span><span class="m11-kpi-value">${m9FmtEuro(t.eigen)}</span><span class="m11-kpi-sub">voor rekening eigenaar</span></div>
+        <div class="m11-kpi-card m11-kpi-compensabel"><span class="m11-kpi-label">Compensabele planschade (>${M11_NMR_THRESHOLD}%)</span><span class="m11-kpi-value">${m9FmtEuro(t.compensabel)}</span><span class="m11-kpi-sub">indicatief, per geval te bepalen</span></div>
+      `;
+    }
+  }
+
+  if (tableTitle) {
+    tableTitle.textContent = !result.hasData
+      ? 'Uitsplitsing'
+      : result.method === 'band'
+        ? 'Uitsplitsing per afstandsband (categorie Hoog, Methode B)'
+        : `Uitsplitsing \u2014 ${M11_CATEGORY_META[state.m11Category].label}, Methode A (vlak percentage)`;
+  }
+  if (tableBody) {
+    if (!result.hasData) {
+      tableBody.innerHTML = `<tr><td colspan="6" class="empty-row">${n === 0 ? 'Plaats een turbine op de kaart in Module 3.' : 'Haal eerst BAG-gegevens op bij Module 8.'}</td></tr>`;
+    } else {
+      const rowsHtml = result.rows
+        .map((r) => `<tr>
+          <td>${r.label}</td>
+          <td>\u2212${r.pct.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</td>
+          <td>${r.woningen.toLocaleString('nl-NL')}</td>
+          <td>${m9FmtEuro(r.waarde)}</td>
+          <td>${m9FmtEuro(r.eigen)}</td>
+          <td>${m9FmtEuro(r.compensabel)}</td>
+        </tr>`)
+        .join('');
+      const t = result.totals;
+      const totalRow = result.rows.length > 1
+        ? `<tr class="m11-totals-row"><td>Totaal</td><td>${dash}</td><td>${t.woningen.toLocaleString('nl-NL')}</td><td>${m9FmtEuro(t.waarde)}</td><td>${m9FmtEuro(t.eigen)}</td><td>${m9FmtEuro(t.compensabel)}</td></tr>`
+        : '';
+      tableBody.innerHTML = rowsHtml + totalRow;
     }
   }
 }
