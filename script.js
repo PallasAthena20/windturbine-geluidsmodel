@@ -152,7 +152,9 @@ const state = {
   turbines3a: [], selectedTurbineId3a: null, daynight3a: 'dag',
   normPreset3a: 'oud', normCustomLnight3a: 41,
   // Module 7: shear-capacity-verkenner (Van Hooijdonk e.a. 2015 / Bosveld e.a. 2020) — zie script.js §M7.
-  m7Ugeo: 9, m7Cloud: 'half', m7ApplyToM6: false,
+  // De bewolkingsklasse is niet meer los instelbaar: elk scenario (best/middel/worst) heeft een vaste,
+  // vastgekoppelde bewolkingsklasse (M7_SCENARIO_CLOUD) en de koppeling naar Module 6 staat permanent aan.
+  m7Ugeo: 9,
   // Module 8: woningen (BAG) → bewoners → geschatte hinder per scenario — zie script.js §M8.
   m8HouseholdSize: 2.10, m8AddressData: null, m8Fetching: false, m8Error: null,
   // Module 9/10: kosten- en DALY-berekening op basis van Module 8's bewonersaantallen — zie script.js §M9/§M10.
@@ -314,16 +316,10 @@ scenarioList.querySelectorAll('.scenario-card').forEach(card => {
 curtailmentCheck.addEventListener('change', () => { state.curtailment = curtailmentCheck.checked; render(); });
 
 // ---------- Module 7: shear-capacity-verkenner ----------
+// De bewolkingsklasse per scenario ligt vast (M7_SCENARIO_CLOUD) en de koppeling naar Module 6 staat
+// permanent aan — er zijn dus geen cloud-tabs of een aan/uit-checkbox meer om te binden.
 const m7UgeoInput = document.getElementById('m7-ugeo-input');
 if (m7UgeoInput) m7UgeoInput.addEventListener('input', () => { state.m7Ugeo = parseFloat(m7UgeoInput.value); render(); });
-const m7CloudTabs = document.getElementById('m7-cloud-tabs');
-if (m7CloudTabs) {
-  m7CloudTabs.querySelectorAll('.cat-tab').forEach(btn => {
-    btn.addEventListener('click', () => { state.m7Cloud = btn.dataset.cloud; render(); });
-  });
-}
-const m7ApplyM6Check = document.getElementById('m7-apply-m6-check');
-if (m7ApplyM6Check) m7ApplyM6Check.addEventListener('change', () => { state.m7ApplyToM6 = m7ApplyM6Check.checked; render(); });
 
 const m8HouseholdInput = document.getElementById('m8-household-size');
 if (m8HouseholdInput) {
@@ -1168,10 +1164,11 @@ function m6ScenarioPercentages(lat, lng) {
   const distKm = m6DistanceToCoastKm(lat, lng);
   const stable = m6StablePct(distKm);
   // Abraham & Monahan (2019, deel II): volhardend-wSBL (middel) en volhardend-vSBL (worst) komen bij
-  // Cabauw ongeveer even vaak voor — 50/50 als standaard-benadering, geen exacte meting van alle nachten.
-  // Optioneel vervangen door de shear-capacity-gebaseerde verhouding uit Module 7 (Van Hooijdonk e.a. 2015 /
-  // Bosveld e.a. 2020), als de gebruiker daar de koppeling "toepassen op Module 6" heeft aangezet.
-  const wsblShare = state.m7ApplyToM6 ? m7WsblShare() : 0.5;
+  // Cabauw ongeveer even vaak voor — 50/50 was de oude standaard-benadering, geen exacte meting van alle
+  // nachten. Deze is permanent vervangen door de shear-capacity-gebaseerde verhouding uit Module 7
+  // (Van Hooijdonk e.a. 2015 / Bosveld e.a. 2020), automatisch gekoppeld aan de vaste bewolkingsklasse per
+  // scenario (half bewolkt=middel, helder=worst) — niet meer optioneel.
+  const wsblShare = m7WsblShare();
   const middel = stable * wsblShare;
   const worst = stable * (1 - wsblShare);
   const best = 100 - stable;
@@ -1270,18 +1267,21 @@ function renderModule6() {
   grid.innerHTML = `
     <div class="m6-pct-card m6-best">
       <span class="m6-pct-label">Best case</span>
+      <span class="m6-pct-cloud">☁️ Bewolkt</span>
       <span class="m6-pct-value">${pct.best.toFixed(0)}%</span>
       <span class="m6-pct-days">≈ ${days.best} nachten/jaar</span>
       <div class="m6-pct-bar"><div class="m6-pct-bar-fill" style="width:${pct.best}%"></div></div>
     </div>
     <div class="m6-pct-card m6-middel">
       <span class="m6-pct-label">Middel case</span>
+      <span class="m6-pct-cloud">⛅ Half bewolkt</span>
       <span class="m6-pct-value">${pct.middel.toFixed(0)}%</span>
       <span class="m6-pct-days">≈ ${days.middel} nachten/jaar</span>
       <div class="m6-pct-bar"><div class="m6-pct-bar-fill" style="width:${pct.middel}%"></div></div>
     </div>
     <div class="m6-pct-card m6-worst">
       <span class="m6-pct-label">Worst case</span>
+      <span class="m6-pct-cloud">☀️ Helder</span>
       <span class="m6-pct-value">${pct.worst.toFixed(0)}%</span>
       <span class="m6-pct-days">≈ ${days.worst} nachten/jaar</span>
       <div class="m6-pct-bar"><div class="m6-pct-bar-fill" style="width:${pct.worst}%"></div></div>
@@ -1289,9 +1289,7 @@ function renderModule6() {
   `;
 
   if (explainer) {
-    const splitNote = state.m7ApplyToM6
-      ? `Verdeling middel/worst binnen "stabiel": ${(pct.wsblShare * 100).toFixed(0)}%/${(100 - pct.wsblShare * 100).toFixed(0)}%, overgenomen uit de shear-capacity-schatting in Module 7 (i.p.v. de standaard 50/50).`
-      : `Verdeling middel/worst binnen "stabiel": standaard 50/50 — zie Module 7 voor een alternatieve, shear-capacity-gebaseerde verhouding.`;
+    const splitNote = `Verdeling middel/worst binnen "stabiel": ${(pct.wsblShare * 100).toFixed(0)}%/${(100 - pct.wsblShare * 100).toFixed(0)}%, permanent automatisch afgeleid uit de shear-capacity-schatting in Module 7 (half bewolkt=middel, helder=worst — niet meer de vaste 50/50).`;
     explainer.textContent = `Stabiele atmosfeer (middel + worst samen): ${pct.stable.toFixed(0)}% van de nachten, geïnterpoleerd tussen 15% (kust, Lutjewad) en 40% (landinwaarts, Cabauw) op basis van de afstand tot de kust — zie Verantwoording §5. ${splitNote}`;
   }
 
@@ -1358,8 +1356,16 @@ const M7_UMIN_BY_CLOUD = {
   bewolkt: 7,   // bewolkt (LLCC > 95%): drempel ≈ 7 m/s
 };
 const M7_CLOUD_LABELS = { helder: 'Helder (LLCC < 5%)', half: 'Half bewolkt', bewolkt: 'Bewolkt (LLCC > 95%)' };
-const M7_CLOUD_ORDER = ['helder', 'half', 'bewolkt'];
 const M7_LOGISTIC_K = 4; // steilheid van de soft-transition rond SC = 1 — eigen keuze, niet uit de literatuur
+
+// Vaste, niet meer los instelbare koppeling scenario ↔ bewolkingsklasse (zie Module 6-inleiding en de
+// method-callout aan het begin van Module 6/7): veel bewolking onderdrukt de nachtelijke uitstraling
+// waardoor de atmosfeer nauwelijks stabiel wordt (best case, neutraal/goed gemengd); onder heldere
+// hemel is de uitstraling het sterkst en is turbulence collapse (vSBL) het waarschijnlijkst (worst case);
+// half bewolkt ligt daar tussenin (wSBL, middel case). Dit vervangt de vrij te kiezen enkele
+// bewolkingsklasse uit een eerdere versie van deze module.
+const M7_SCENARIO_CLOUD = { best: 'bewolkt', middel: 'half', worst: 'helder' };
+const M7_SCENARIO_LABELS = { best: 'Best case', middel: 'Middel case (wSBL)', worst: 'Worst case (vSBL)' };
 
 function m7ShearCapacity(ugeo, cloud) {
   const umin = M7_UMIN_BY_CLOUD[cloud] ?? M7_UMIN_BY_CLOUD.half;
@@ -1368,20 +1374,40 @@ function m7ShearCapacity(ugeo, cloud) {
   return { umin, sc, pWsbl, pVsbl: 1 - pWsbl };
 }
 
-function m7WsblShare() {
-  return m7ShearCapacity(state.m7Ugeo, state.m7Cloud).pWsbl;
+// SC per scenario, elk met zijn eigen vastgekoppelde bewolkingsklasse — geen gedeelde, vrij te kiezen
+// bewolkingsklasse meer. Alle drie gebruiken hetzelfde, wél instelbare U_geo.
+function m7ScenarioSC(ugeo = state.m7Ugeo) {
+  return {
+    best: m7ShearCapacity(ugeo, M7_SCENARIO_CLOUD.best),
+    middel: m7ShearCapacity(ugeo, M7_SCENARIO_CLOUD.middel),
+    worst: m7ShearCapacity(ugeo, M7_SCENARIO_CLOUD.worst),
+  };
+}
+
+// Verdeling van de "stabiele" nachten (middel+worst) tussen wSBL (middel, met half-bewolkt-drempel) en
+// vSBL (worst, met helder-drempel): elke kant gebruikt automatisch zijn eigen vastgekoppelde
+// bewolkingsklasse, genormaliseerd zodat middelShare + worstShare = 1 (eigen normalisatie, zie
+// beperkingen Module 7). "Best" (bewolkt) telt hier niet mee — dat scenario valt buiten de wSBL/vSBL-
+// tweedeling; het aandeel best/stabiel wordt elders (afstand tot kust) bepaald.
+function m7WsblShare(ugeo = state.m7Ugeo) {
+  const sc = m7ScenarioSC(ugeo);
+  const wMiddel = sc.middel.pWsbl;
+  const wWorst = sc.worst.pVsbl;
+  const total = wMiddel + wWorst;
+  return total > 0 ? wMiddel / total : 0.5;
 }
 
 function m7ComparisonRows() {
   const anchor = m6TurbineAnchor();
   const distKm = m6DistanceToCoastKm(anchor.lat, anchor.lng);
   const stable = m6StablePct(distKm);
-  const sc = m7ShearCapacity(state.m7Ugeo, state.m7Cloud);
+  const scAll = m7ScenarioSC(state.m7Ugeo);
+  const wsblShare = m7WsblShare(state.m7Ugeo);
   const toDays = pct => Math.round(pct / 100 * 365);
   const defaultMiddelPct = stable / 2, defaultWorstPct = stable / 2;
-  const altMiddelPct = stable * sc.pWsbl, altWorstPct = stable * sc.pVsbl;
+  const altMiddelPct = stable * wsblShare, altWorstPct = stable * (1 - wsblShare);
   return {
-    anchor, stable, sc,
+    anchor, stable, scAll, wsblShare,
     std: { middelPct: defaultMiddelPct, worstPct: defaultWorstPct, middelDays: toDays(defaultMiddelPct), worstDays: toDays(defaultWorstPct) },
     alt: { middelPct: altMiddelPct, worstPct: altWorstPct, middelDays: toDays(altMiddelPct), worstDays: toDays(altWorstPct) },
   };
@@ -1389,62 +1415,69 @@ function m7ComparisonRows() {
 
 function renderModule7() {
   const ugeoReadout = document.getElementById('m7-ugeo-readout');
-  const cloudTabs = document.getElementById('m7-cloud-tabs');
-  const scValue = document.getElementById('m7-sc-value');
-  const uminValue = document.getElementById('m7-umin-value');
+  const scenarioCloudGrid = document.getElementById('m7-scenario-cloud-grid');
   const probGrid = document.getElementById('m7-prob-grid');
   const compareBody = document.getElementById('m7-compare-body');
-  const applyCheck = document.getElementById('m7-apply-m6-check');
   const applyNote = document.getElementById('m7-apply-m6-note');
   if (!probGrid) return;
 
   if (ugeoReadout) ugeoReadout.textContent = state.m7Ugeo.toFixed(1) + ' m/s';
-  if (cloudTabs) {
-    cloudTabs.querySelectorAll('.cat-tab').forEach(b => {
-      b.setAttribute('aria-pressed', b.dataset.cloud === state.m7Cloud ? 'true' : 'false');
-    });
-  }
 
   const cmp = m7ComparisonRows();
-  const { sc } = cmp;
-  if (scValue) scValue.textContent = sc.sc.toFixed(2);
-  if (uminValue) uminValue.textContent = sc.umin.toFixed(1) + ' m/s';
+  const { scAll, wsblShare } = cmp;
+
+  if (scenarioCloudGrid) {
+    const rows = [
+      { key: 'best', cls: 'm6-best', icon: '☁️' },
+      { key: 'middel', cls: 'm6-middel', icon: '⛅' },
+      { key: 'worst', cls: 'm6-worst', icon: '☀️' },
+    ];
+    scenarioCloudGrid.innerHTML = rows.map(r => `
+      <div class="m6-pct-card ${r.cls}">
+        <span class="m6-pct-label">${M7_SCENARIO_LABELS[r.key]}</span>
+        <span class="m6-pct-cloud">${r.icon} ${M7_CLOUD_LABELS[M7_SCENARIO_CLOUD[r.key]]}</span>
+        <span class="m6-pct-days">U<sub>min</sub> ≈ ${scAll[r.key].umin.toFixed(1)} m/s · SC = ${scAll[r.key].sc.toFixed(2)}</span>
+      </div>
+    `).join('');
+  }
 
   probGrid.innerHTML = `
+    <div class="m6-pct-card m6-best">
+      <span class="m6-pct-label">Bewolkt → best case</span>
+      <span class="m6-pct-value">SC ${scAll.best.sc.toFixed(2)}</span>
+      <span class="m6-pct-days">U<sub>geo</sub> = ${state.m7Ugeo.toFixed(1)} m/s, U<sub>min</sub> = ${scAll.best.umin.toFixed(1)} m/s — ter info, telt niet mee in de middel/worst-verdeling (zie beperkingen)</span>
+    </div>
     <div class="m6-pct-card m6-middel">
       <span class="m6-pct-label">Kans op wSBL (→ middel)</span>
-      <span class="m6-pct-value">${(sc.pWsbl * 100).toFixed(0)}%</span>
-      <span class="m6-pct-days">bij U<sub>geo</sub> = ${state.m7Ugeo.toFixed(1)} m/s, ${M7_CLOUD_LABELS[state.m7Cloud]}</span>
-      <div class="m6-pct-bar"><div class="m6-pct-bar-fill" style="width:${(sc.pWsbl * 100).toFixed(1)}%"></div></div>
+      <span class="m6-pct-value">${(scAll.middel.pWsbl * 100).toFixed(0)}%</span>
+      <span class="m6-pct-days">Half bewolkt, U<sub>geo</sub> = ${state.m7Ugeo.toFixed(1)} m/s, SC = ${scAll.middel.sc.toFixed(2)}</span>
+      <div class="m6-pct-bar"><div class="m6-pct-bar-fill" style="width:${(scAll.middel.pWsbl * 100).toFixed(1)}%"></div></div>
     </div>
     <div class="m6-pct-card m6-worst">
       <span class="m6-pct-label">Kans op vSBL (→ worst)</span>
-      <span class="m6-pct-value">${(sc.pVsbl * 100).toFixed(0)}%</span>
-      <span class="m6-pct-days">SC = U<sub>geo</sub>/U<sub>min</sub> = ${sc.sc.toFixed(2)}</span>
-      <div class="m6-pct-bar"><div class="m6-pct-bar-fill" style="width:${(sc.pVsbl * 100).toFixed(1)}%"></div></div>
+      <span class="m6-pct-value">${(scAll.worst.pVsbl * 100).toFixed(0)}%</span>
+      <span class="m6-pct-days">Helder, U<sub>geo</sub> = ${state.m7Ugeo.toFixed(1)} m/s, SC = ${scAll.worst.sc.toFixed(2)}</span>
+      <div class="m6-pct-bar"><div class="m6-pct-bar-fill" style="width:${(scAll.worst.pVsbl * 100).toFixed(1)}%"></div></div>
     </div>
   `;
 
   if (compareBody) {
     compareBody.innerHTML = `
       <tr>
-        <td><strong>Standaard Module 6 (50/50)</strong></td>
+        <td><strong>Oude standaard Module 6 (50/50, referentie)</strong></td>
         <td class="m6-month-cell">${cmp.std.middelDays}</td>
         <td class="m6-month-cell">${cmp.std.worstDays}</td>
       </tr>
       <tr>
-        <td><strong>Module 7 — shear capacity (${(sc.pWsbl * 100).toFixed(0)}/${(sc.pVsbl * 100).toFixed(0)})</strong></td>
+        <td><strong>Module 7 — automatische bewolkings-koppeling (${(wsblShare * 100).toFixed(0)}/${(100 - wsblShare * 100).toFixed(0)})</strong></td>
         <td class="m6-month-cell">${cmp.alt.middelDays}</td>
         <td class="m6-month-cell">${cmp.alt.worstDays}</td>
       </tr>
     `;
   }
 
-  if (applyCheck) applyCheck.checked = state.m7ApplyToM6;
   if (applyNote) {
-    applyNote.textContent = state.m7ApplyToM6
-      ? `Actief: Module 6 gebruikt nu ${(sc.pWsbl * 100).toFixed(0)}/${(sc.pVsbl * 100).toFixed(0)} in plaats van 50/50 voor de middel/worst-verdeling.`
-      : `Niet actief: Module 6 gebruikt nog de standaard 50/50-verdeling. Vink aan om de bovenstaande verhouding door te voeren.`;
+    applyNote.textContent = `Module 6 gebruikt nu altijd ${(wsblShare * 100).toFixed(0)}/${(100 - wsblShare * 100).toFixed(0)} (half bewolkt/helder) in plaats van 50/50 voor de middel/worst-verdeling.`;
   }
 }
 

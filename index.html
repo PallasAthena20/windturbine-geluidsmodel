@@ -360,6 +360,10 @@
 
     <div class="callout" id="m6-context-callout">Plaats minstens één turbine op de kaart in Module 3 om de schatting te koppelen aan die locatie. Zonder turbine wordt een landelijk gemiddelde (De Bilt, centraal Nederland) getoond.</div>
 
+    <div class="method-callout">
+      <strong>Vaste koppeling bewolking ↔ scenario (permanent actief via Module 7):</strong> <strong>bewolkt</strong> hoort bij <strong>best case</strong> (veel bewolking onderdrukt de nachtelijke uitstraling, de atmosfeer wordt zelden stabiel — dat is de neutrale/goed-gemengde toestand hierboven), <strong>half bewolkt</strong> bij <strong>middel case</strong> (wSBL) en <strong>helder</strong> bij <strong>worst case</strong> (vSBL, sterkste uitstraling, grootste kans op turbulence collapse). Deze koppeling ligt vast en is niet meer los instelbaar: de middel/worst-verdeling hieronder wordt er automatisch mee berekend — zie Module 7 voor de shear-capacity-onderbouwing per scenario.
+    </div>
+
     <h3 class="m6-subhead">Aandeel van de nachten per scenario</h3>
     <div class="m6-pct-grid" id="m6-pct-grid"></div>
     <p class="hint" id="m6-pct-explainer"></p>
@@ -391,7 +395,7 @@
     </div>
 
     <div class="callout m6-limitations">
-      <strong>Beperkingen:</strong> (1) een robuust, algemeen erkend 3-regime-model (best/middel/worst) bestaat niet in de vakliteratuur zelf — Abraham &amp; Monahan (2019, deel I &amp; II) verwerpen expliciet een derde, fysiek onderscheidbare regime en werken met twee regimes (wSBL/vSBL) binnen de stabiele nachten; de 50/50-verdeling tussen middel en worst hierboven is een benadering op basis van hun bevinding dat volhardend-wSBL en volhardend-vSBL nachten ongeveer even vaak voorkomen, niet een exacte meting van alle nachten (Module 7 biedt een alternatieve, shear-capacity-gebaseerde verhouding en licht de citatie toe). (2) De maandverdeling is een illustratieve, op nachtlengte gebaseerde verdeling — er bestaat geen gepubliceerde Nederlandse maandstatistiek van dit specifieke 3-scenario-model. (3) Het verband met windrichting is indirect/correlatief (via bewolking en synoptische patronen), niet causaal, en de risico-index is kwalitatief. (4) De afstand-tot-kust-interpolatie is een vereenvoudiging gebaseerd op slechts twee referentiestations (Cabauw inland, Lutjewad kust); tussenliggende locaties zijn een lineaire schatting, geen gemeten waarde.
+      <strong>Beperkingen:</strong> (1) een robuust, algemeen erkend 3-regime-model (best/middel/worst) bestaat niet in de vakliteratuur zelf — Abraham &amp; Monahan (2019, deel I &amp; II) verwerpen expliciet een derde, fysiek onderscheidbare regime en werken met twee regimes (wSBL/vSBL) binnen de stabiele nachten. De verdeling tussen middel en worst hierboven komt <strong>niet</strong> (meer) uit een vaste 50/50-aanname, maar wordt automatisch en permanent afgeleid uit de bewolkingsklasse per scenario via de shear-capacity-berekening in Module 7 (bewolkt=best, half bewolkt=middel, helder=worst) — ook dit is een eigen, transparant beredeneerde benadering op basis van Van Hooijdonk e.a. (2015) en Abraham &amp; Monahan (2019b), geen exacte meting van alle nachten; de oude 50/50-aanname staat in Module 7 nog als referentiewaarde. (2) De maandverdeling is een illustratieve, op nachtlengte gebaseerde verdeling — er bestaat geen gepubliceerde Nederlandse maandstatistiek van dit specifieke 3-scenario-model. (3) Het verband met windrichting is indirect/correlatief (via bewolking en synoptische patronen), niet causaal, en de risico-index is kwalitatief. (4) De afstand-tot-kust-interpolatie is een vereenvoudiging gebaseerd op slechts twee referentiestations (Cabauw inland, Lutjewad kust); tussenliggende locaties zijn een lineaire schatting, geen gemeten waarde.
     </div>
   </section>
 
@@ -400,7 +404,7 @@
       <span class="module-num">Module 7</span>
       <h2>Bosveld's eigen indeling: shear capacity en de vertaling naar Module 6</h2>
     </div>
-    <p class="module-desc">Module 6 gebruikt een vaste 50/50-verdeling tussen het "middel"- en "worst"-scenario binnen stabiele nachten. Deze module verkent een alternatief dat dichter aansluit bij wat <strong>Bosveld e.a. (2020)</strong> zelf noemen in hun overzicht van 50 jaar Cabauw-onderzoek: geen expliciete verwerping van een derde regime met bijbehorende bezettingspercentages, maar twee eigen classificaties voor de zwak-stabiele (wSBL) en zeer-stabiele (vSBL) grenslaag — de "shear capacity" van Van Hooijdonk e.a. (2015) en de geostrofische-windindeling van Van der Linden e.a. (2017). Hieronder volgt eerst een correctie, dan het model, en dan de koppeling terug naar Module 6.</p>
+    <p class="module-desc">Module 6 gebruikt <strong>niet meer</strong> een vaste 50/50-verdeling tussen het "middel"- en "worst"-scenario binnen stabiele nachten: die koppeling is inmiddels permanent vervangen door het model hieronder, dat dichter aansluit bij wat <strong>Bosveld e.a. (2020)</strong> zelf noemen in hun overzicht van 50 jaar Cabauw-onderzoek: geen expliciete verwerping van een derde regime met bijbehorende bezettingspercentages, maar twee eigen classificaties voor de zwak-stabiele (wSBL) en zeer-stabiele (vSBL) grenslaag — de "shear capacity" van Van Hooijdonk e.a. (2015) en de geostrofische-windindeling van Van der Linden e.a. (2017). Hieronder volgt eerst een correctie, dan het model — nu automatisch gekoppeld aan bewolkt/half bewolkt/helder per scenario — en dan de (permanente) koppeling terug naar Module 6.</p>
 
     <div class="method-callout" id="m7-correction-box">
       <strong>Correctie op Module 6:</strong> de tekst daar citeerde “Bosveld e.a. (2020)” voor de expliciete verwerping van een derde regime, de Hidden Markov-classificatie, de ~50/50-persistentieverhouding en de sturing door geostrofische wind/bewolking. Die specifieke analyse staat niet in Bosveld e.a. (2020) zelf, maar in <a href="https://journals.ametsoc.org/view/journals/atsc/76/11/jas-d-18-0261.1.pdf" target="_blank" rel="noopener">Abraham &amp; Monahan (2019a, deel I)</a> en <a href="https://journals.ametsoc.org/view/journals/atsc/76/11/jas-d-19-0078.1.xml" target="_blank" rel="noopener">Abraham &amp; Monahan (2019b, deel II)</a>, J. Atmos. Sci. 76(11). Het echte artikel van <a href="https://pure.tudelft.nl/ws/files/84722281/Bosveld2020_Article_FiftyYearsOfAtmosphericBoundar.pdf" target="_blank" rel="noopener">Bosveld e.a. (2020)</a>, Boundary-Layer Meteorology 177, 583–612, is een overzichtsartikel dat wSBL/vSBL alleen kort noemt via verwijzingen naar Van Hooijdonk e.a. (2015) en Van der Linden e.a. (2017) — zonder zelf drempels, percentages of een derde-regime-toets te geven. De tekst in Module 6 en de link in de footer zijn hierop aangepast.
@@ -428,20 +432,17 @@
         <input type="range" id="m7-ugeo-input" min="1" max="22" step="0.5" value="9" />
         <span class="dba-readout" id="m7-ugeo-readout">9.0 m/s</span>
       </div>
-      <span class="hint">Grootschalige (synoptische) drukgradiëntwind — <strong>geen</strong> lokale 10 m- of ashoogtewind (zie beperkingen).</span>
+      <span class="hint">Grootschalige (synoptische) drukgradiëntwind — <strong>geen</strong> lokale 10 m- of ashoogtewind (zie beperkingen). Deze ene waarde wordt hieronder automatisch tegen alle drie de bewolkingsklassen afgezet — er is geen los te kiezen bewolkingsklasse meer (zie koppeling hieronder).</span>
     </div>
 
-    <div class="cat-tabs" id="m7-cloud-tabs" role="tablist" aria-label="Bewolkingsklasse">
-      <button type="button" class="cat-tab" data-cloud="helder" aria-pressed="false">Helder<span class="cat-tab-sub">LLCC &lt; 5% · U<sub>min</sub> ≈ 12 m/s</span></button>
-      <button type="button" class="cat-tab" data-cloud="half" aria-pressed="true">Half bewolkt<span class="cat-tab-sub">U<sub>min</sub> ≈ 9,5 m/s (interpolatie)</span></button>
-      <button type="button" class="cat-tab" data-cloud="bewolkt" aria-pressed="false">Bewolkt<span class="cat-tab-sub">LLCC &gt; 95% · U<sub>min</sub> ≈ 7 m/s</span></button>
-    </div>
+    <div class="m6-pct-grid" id="m7-scenario-cloud-grid" aria-label="Vaste koppeling scenario en bewolkingsklasse"></div>
+    <p class="hint">Deze koppeling ligt vast en loopt automatisch mee met het scenario — ze is niet meer los instelbaar zoals in een eerdere versie van deze module.</p>
 
-    <p class="hint">Shear capacity SC = U<sub>geo</sub>/U<sub>min</sub> = <strong id="m7-sc-value">—</strong> (U<sub>min</sub> = <span id="m7-umin-value">—</span> bij deze bewolkingsklasse). Onderstaande kansen volgen uit een logistische soft-transition rond SC = 1 — illustratief, geen berekende kans uit de literatuur.</p>
+    <p class="hint">Shear capacity SC = U<sub>geo</sub>/U<sub>min</sub>, per scenario berekend met de bijbehorende bewolkingsklasse hierboven. Onderstaande kansen volgen uit een logistische soft-transition rond SC = 1 — illustratief, geen berekende kans uit de literatuur.</p>
     <div class="m6-pct-grid" id="m7-prob-grid"></div>
 
     <h3 class="m6-subhead">Vertaling naar Module 6</h3>
-    <p class="module-desc">Onderstaande tabel hergebruikt de stabiele-nachten-schatting van de huidige turbinelocatie (Module 3/6) en splitst die met de shear-capacity-kans hierboven, in plaats van de standaard 50/50-verdeling.</p>
+    <p class="module-desc">Onderstaande tabel hergebruikt de stabiele-nachten-schatting van de huidige turbinelocatie (Module 3/6) en splitst die met de shear-capacity-kansen hierboven (half bewolkt → middel, helder → worst), in plaats van de oude standaard 50/50-verdeling.</p>
     <div class="data-table-card">
       <table class="data-table m7-compare-table" id="m7-compare-table">
         <thead><tr><th>Bron van de verdeling</th><th>Middel</th><th>Worst</th></tr></thead>
@@ -450,11 +451,8 @@
       <p class="hint" style="margin-top:var(--space-2);margin-bottom:0;">Waarden in dagen per jaar.</p>
     </div>
 
-    <div class="checkbox-row" id="m7-apply-m6-row">
-      <input type="checkbox" id="m7-apply-m6-check" />
-      <label for="m7-apply-m6-check">Gebruik deze shear-capacity-verhouding ook in Module 6 (in plaats van 50/50)
-        <span class="sub" id="m7-apply-m6-note"></span>
-      </label>
+    <div class="method-callout" id="m7-apply-m6-row">
+      <strong>Permanent actief in Module 6:</strong> <span id="m7-apply-m6-note"></span> Dit is niet meer optioneel — de koppeling stond eerder achter een aan/uit-vinkje, dat is vervallen nu de bewolkingsklasse automatisch aan het scenario is gekoppeld.
     </div>
 
     <h3 class="m6-subhead">Duur en timing van regimes (Abraham &amp; Monahan, 2019b)</h3>
@@ -468,7 +466,7 @@
     </div>
 
     <div class="callout m6-limitations">
-      <strong>Beperkingen:</strong> (1) U<sub>min</sub> per bewolkingsklasse is hier gelijkgesteld aan de geostrofische-wind-drempels van Abraham &amp; Monahan (2019b) — een eigen koppeling aan het shear-capacity-concept van Van Hooijdonk e.a. (2015), niet een waarde die in één van beide papers letterlijk zo staat. (2) De logistische soft-transition rond SC = 1 (steilheid k=4) is een eigen gladde benadering tussen de twee gepubliceerde discrete drempels (7 en 12 m/s), niet een gemeten kansverdeling. (3) Er is geen aangetoond verband tussen windrichting en de wSBL/vSBL-regimewissel zelf, in tegenstelling tot Module 6's afzonderlijke, richtingsafhankelijke low-level-jet-index. (4) Geostrofische wind is een grootschalige drukgradiëntgrootheid, geen lokaal gemeten 10 m- of ashoogtewind. (5) De event-duur- en transitiestatistieken van Abraham &amp; Monahan zijn deels geaggregeerd over meerdere internationale torenlocaties; alleen een deel van de bewolkings-conditionering is specifiek voor Cabauw uitgesplitst.
+      <strong>Beperkingen:</strong> (1) U<sub>min</sub> per bewolkingsklasse is hier gelijkgesteld aan de geostrofische-wind-drempels van Abraham &amp; Monahan (2019b) — een eigen koppeling aan het shear-capacity-concept van Van Hooijdonk e.a. (2015), niet een waarde die in één van beide papers letterlijk zo staat. (2) De logistische soft-transition rond SC = 1 (steilheid k=4) is een eigen gladde benadering tussen de twee gepubliceerde discrete drempels (7 en 12 m/s), niet een gemeten kansverdeling. (3) Er is geen aangetoond verband tussen windrichting en de wSBL/vSBL-regimewissel zelf, in tegenstelling tot Module 6's afzonderlijke, richtingsafhankelijke low-level-jet-index. (4) Geostrofische wind is een grootschalige drukgradiëntgrootheid, geen lokaal gemeten 10 m- of ashoogtewind. (5) De event-duur- en transitiestatistieken van Abraham &amp; Monahan zijn deels geaggregeerd over meerdere internationale torenlocaties; alleen een deel van de bewolkings-conditionering is specifiek voor Cabauw uitgesplitst. (6) De vaste scenario-bewolkingskoppeling (bewolkt=best, half bewolkt=middel, helder=worst) is een eigen, op de Module 6-fysica gebaseerde toewijzing, geen empirisch geverifieerde 1-op-1-relatie — met name de "bewolkt→best"-koppeling is kwalitatief (minder uitstraling → doorgaans geen stabiele grenslaag) en wordt niet via een eigen shear-capacity-kans in de middel/worst-verdeling verwerkt, alleen ter vergelijking getoond. (7) De genormaliseerde middel/worst-verdeling (elk scenario met zijn eigen, vaste bewolkingsklasse in plaats van één gedeelde, vrij gekozen klasse) is een eigen rekenkundige normalisatie (pWsbl<sub>half</sub> / (pWsbl<sub>half</sub> + pVsbl<sub>helder</sub>)), niet een gepubliceerde formule.
     </div>
   </section>
 
