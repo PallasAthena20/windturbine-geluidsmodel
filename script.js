@@ -163,6 +163,7 @@ const state = {
   // is een EIGEN categorie-as, los van state.category (hoorbaar/laagfrequent/infrasoon) van Module 3.
   m11Category: 'hoog', m11Method: 'vlak', m11Woz: 398000,
   m11CbsData: null, m11CbsFetching: false, m11CbsError: null,
+  m11WozFetching: false, m11WozAutoInfo: null, m11WozAutoError: null,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' heeft geen vaste waarden; die komen uit state.normCustomLden/Lnight.
@@ -381,11 +382,15 @@ if (m11WozInput) {
   m11WozInput.addEventListener('input', () => {
     const v = parseFloat(m11WozInput.value);
     state.m11Woz = Number.isNaN(v) ? 0 : v;
+    state.m11WozAutoInfo = null; // handmatige aanpassing overschrijft eerder automatisch ophaalresultaat
+    state.m11WozAutoError = null;
     renderModule11();
   });
 }
 const m11CbsFetchBtnEl = document.getElementById('m11-cbs-fetch-btn');
 if (m11CbsFetchBtnEl) m11CbsFetchBtnEl.addEventListener('click', () => { m11CbsRunFetch(); });
+const m11WozAutoBtnEl = document.getElementById('m11-woz-auto-btn');
+if (m11WozAutoBtnEl) m11WozAutoBtnEl.addEventListener('click', () => { m11FetchLocalWoz(); });
 
 // ---------- Bronvermogen slider ----------
 lwaInput.addEventListener('input', () => { state.lwa = parseFloat(lwaInput.value); render(); });
@@ -2266,7 +2271,10 @@ function m11ComputeResult() {
 // hoogste ontwaardingspercentage, en vierkanten met te weinig woningen voor CBS-publicatie
 // (privacy) krijgen een aangenomen 3 woningen (wet van Benford). Dient als vergelijking naast de
 // nauwkeurigere BAG-hoofdmethode hierboven — zie Beperkingen-callout, punt 1 en 8.
-const M11_CBS_JAARCODE = 2024;
+// Jaargang 2024 van deze PDOK-dataset publiceert nog geen gemiddelde WOZ-waarde per vierkant
+// (veld staat overal op -99995, ook in dichtbebouwde gebieden — zelf gecontroleerd via de PDOK-API);
+// 2023 is de meest recente jaargang met zowel het woningaantal als de WOZ-waarde gevuld.
+const M11_CBS_JAARCODE = 2023;
 const M11_CBS_MAX_PAGES = 30; // 30 x limit=1000 = ruim voldoende voor een bbox van ~5x5 km per turbine
 const M11_CBS_ASSUMED_SUPPRESSED_WONINGEN = 3;
 
@@ -2318,6 +2326,30 @@ async function m11CbsFetchSquaresForTurbine(turbine, radiusM, squaresById) {
   return truncated;
 }
 
+// Haalt de CBS-vierkanten op (of hergebruikt ze als de eerdere ophaling nog actueel is voor de
+// huidige turbine-plaatsing) \u2014 gedeeld tussen de TNO-vergelijkingstabel en de automatische
+// lokale/regionale WOZ-ophaling hieronder, zodat beide functies dezelfde PDOK-gegevens hergebruiken
+// in plaats van dubbel op te halen.
+async function m11EnsureCbsSquares() {
+  const snapshot = m8TurbineSnapshot();
+  if (state.m11CbsData && state.m11CbsData.turbineSnapshot === snapshot) {
+    return state.m11CbsData;
+  }
+  const squaresById = new Map();
+  let anyTruncated = false;
+  for (const t of state.turbines3a) {
+    const truncated = await m11CbsFetchSquaresForTurbine(t, M11_BAND_MAX_RADIUS, squaresById);
+    if (truncated) anyTruncated = true;
+  }
+  state.m11CbsData = {
+    squares: squaresById,
+    turbineSnapshot: snapshot,
+    truncated: anyTruncated,
+    fetchedAt: new Date(),
+  };
+  return state.m11CbsData;
+}
+
 async function m11CbsRunFetch() {
   const n = state.turbines3a.length;
   if (n === 0) {
@@ -2329,23 +2361,88 @@ async function m11CbsRunFetch() {
   state.m11CbsError = null;
   renderModule11();
   try {
-    const squaresById = new Map();
-    let anyTruncated = false;
-    for (const t of state.turbines3a) {
-      const truncated = await m11CbsFetchSquaresForTurbine(t, M11_BAND_MAX_RADIUS, squaresById);
-      if (truncated) anyTruncated = true;
-    }
-    state.m11CbsData = {
-      squares: squaresById,
-      turbineSnapshot: m8TurbineSnapshot(),
-      truncated: anyTruncated,
-      fetchedAt: new Date(),
-    };
+    await m11EnsureCbsSquares();
   } catch (e) {
     state.m11CbsError = 'Ophalen van CBS-vierkanten bij PDOK is mislukt. Probeer het later opnieuw.';
   } finally {
     state.m11CbsFetching = false;
     renderModule11();
+  }
+}
+
+// Automatische lokale/regionale WOZ-ophaling: woningen-gewogen gemiddelde van de niet-afgeschermde
+// CBS-vierkant-WOZ-waarden binnen 2.500 m van de geplaatste turbine(s), ter vervanging van het
+// landelijke standaardcijfer in het WOZ-invoerveld hierboven.
+async function m11FetchLocalWoz() {
+  const n = state.turbines3a.length;
+  if (n === 0) {
+    state.m11WozAutoError = 'Plaats minstens \u00e9\u00e9n turbine op de kaart in Module 3 om dit te gebruiken.';
+    renderModule11();
+    return;
+  }
+  state.m11WozFetching = true;
+  state.m11WozAutoError = null;
+  renderModule11();
+  try {
+    const data = await m11EnsureCbsSquares();
+    let sumWeighted = 0, sumWoningen = 0, nSquares = 0;
+    data.squares.forEach((sq) => {
+      if (sq.woz == null) return; // afgeschermde WOZ-waarden tellen niet mee in het gemiddelde
+      let minD = Infinity;
+      state.turbines3a.forEach((t) => {
+        const d = haversineMeters(t.lat, t.lng, sq.lat, sq.lon);
+        if (d < minD) minD = d;
+      });
+      if (minD > M11_BAND_MAX_RADIUS) return;
+      const w = sq.woningen != null ? sq.woningen : M11_CBS_ASSUMED_SUPPRESSED_WONINGEN;
+      sumWeighted += w * sq.woz;
+      sumWoningen += w;
+      nSquares++;
+    });
+    if (sumWoningen === 0) {
+      state.m11WozAutoError = 'Geen betrouwbare lokale WOZ-gegevens gevonden binnen 2.500 m van de geplaatste turbine(s) \u2014 mogelijk overwegend privacy-afgeschermde vierkanten, of de locatie ligt buiten Nederland. De huidige waarde is ongewijzigd gebleven.';
+      state.m11WozAutoInfo = null;
+    } else {
+      const avg = Math.round((sumWeighted / sumWoningen) / 1000) * 1000;
+      state.m11Woz = avg;
+      state.m11WozAutoInfo = { avg, nSquares, nWoningen: Math.round(sumWoningen), turbineSnapshot: m8TurbineSnapshot(), fetchedAt: new Date() };
+    }
+  } catch (e) {
+    state.m11WozAutoError = 'Ophalen van lokale WOZ-gegevens bij PDOK is mislukt. Probeer het later opnieuw.';
+  } finally {
+    state.m11WozFetching = false;
+    renderModule11();
+  }
+}
+
+function renderModule11WozAuto() {
+  const btn = document.getElementById('m11-woz-auto-btn');
+  const statusEl = document.getElementById('m11-woz-auto-status');
+  if (!btn) return;
+  const n = state.turbines3a.length;
+  const busy = state.m11WozFetching || state.m11CbsFetching;
+  btn.disabled = busy || n === 0;
+  if (!statusEl) return;
+  statusEl.className = 'hint';
+  if (n === 0) {
+    statusEl.textContent = 'Plaats minstens \u00e9\u00e9n turbine op de kaart in Module 3 om dit te gebruiken.';
+  } else if (state.m11WozFetching) {
+    statusEl.textContent = 'Bezig met ophalen van lokale WOZ-gegevens (CBS Vierkantstatistieken 100m, PDOK)...';
+  } else if (state.m11WozAutoError) {
+    statusEl.textContent = state.m11WozAutoError;
+    statusEl.classList.add('m8-status-error');
+  } else if (!state.m11WozAutoInfo) {
+    statusEl.textContent = 'Nog niet opgehaald \u2014 klik op de knop hierboven om het lokale/regionale WOZ-gemiddelde automatisch in te vullen.';
+  } else {
+    const stale = state.m11WozAutoInfo.turbineSnapshot !== m8TurbineSnapshot();
+    if (stale) {
+      statusEl.textContent = 'Turbines zijn gewijzigd sinds het ophalen van de lokale WOZ-waarde \u2014 klik opnieuw op de knop voor een actueel gemiddelde.';
+      statusEl.classList.add('m8-status-error');
+    } else {
+      const when = state.m11WozAutoInfo.fetchedAt.toLocaleTimeString('nl-NL');
+      statusEl.textContent = `Automatisch ingevuld: \u20ac${state.m11WozAutoInfo.avg.toLocaleString('nl-NL')} \u2014 woningen-gewogen gemiddelde over ${state.m11WozAutoInfo.nSquares} CBS-vierkanten (${state.m11WozAutoInfo.nWoningen.toLocaleString('nl-NL')} woningen) binnen 2.500 m van de geplaatste turbine(s), jaargang ${M11_CBS_JAARCODE} (om ${when}). Je kunt dit hierboven nog handmatig aanpassen.`;
+      statusEl.classList.add('m8-status-ok');
+    }
   }
 }
 
@@ -2405,7 +2502,7 @@ function renderModule11CbsComparison() {
   if (!fetchBtn) return;
 
   const n = state.turbines3a.length;
-  fetchBtn.disabled = state.m11CbsFetching || n === 0;
+  fetchBtn.disabled = state.m11CbsFetching || state.m11WozFetching || n === 0;
 
   if (statusEl) {
     statusEl.className = 'hint';
@@ -2413,6 +2510,8 @@ function renderModule11CbsComparison() {
       statusEl.textContent = 'Plaats minstens \u00e9\u00e9n turbine op de kaart in Module 3 om deze vergelijking te gebruiken.';
     } else if (state.m11CbsFetching) {
       statusEl.textContent = `Bezig met ophalen van CBS-vierkanten (100\u00d7100 m, jaargang ${M11_CBS_JAARCODE}) rond ${n} turbine${n === 1 ? '' : 's'}...`;
+    } else if (state.m11WozFetching) {
+      statusEl.textContent = 'Bezig met ophalen van CBS-vierkanten via de WOZ-knop hierboven \u2014 deze vergelijking wordt daarna automatisch meteen bijgewerkt.';
     } else if (state.m11CbsError) {
       statusEl.textContent = state.m11CbsError;
       statusEl.classList.add('m8-status-error');
@@ -2573,6 +2672,7 @@ function renderModule11() {
     }
   }
 
+  renderModule11WozAuto();
   renderModule11CbsComparison();
 }
 

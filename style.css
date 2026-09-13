@@ -503,11 +503,14 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .m8-card.m8-worst .m8-hinder-num { color: var(--color-error); }
 #m8-fetch-status.m8-status-error,
 #m11-status.m8-status-error,
-#m11-cbs-status.m8-status-error { color: var(--color-error); }
+#m11-cbs-status.m8-status-error,
+#m11-woz-auto-status.m8-status-error { color: var(--color-error); }
 #m8-fetch-status.m8-status-ok,
 #m11-status.m8-status-ok,
-#m11-cbs-status.m8-status-ok { color: var(--color-success); }
+#m11-cbs-status.m8-status-ok,
+#m11-woz-auto-status.m8-status-ok { color: var(--color-success); }
 #m11-cbs-delta { font-style: italic; }
+#m11-woz-auto-btn { white-space: normal; width: 100%; text-align: center; line-height: 1.3; }
 .m8-table td.m8-hoorbaar-col, .m8-table th.m8-hoorbaar-col { background: var(--color-surface-offset); }
 
 .m6-month-table { min-width: 900px; }
