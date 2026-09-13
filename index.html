@@ -778,6 +778,117 @@
     </div>
   </section>
 
+  <!-- MODULE 12 -->
+  <section class="module" id="module-12">
+    <div class="module-head">
+      <span class="module-num">Module 12</span>
+      <h2>Bouw-/investeringskosten per turbine</h2>
+    </div>
+    <p class="module-desc">Deze module staat volledig los van de turbine(s) die je hierboven op de kaart hebt geplaatst (Module 3): vul hieronder vrij het <strong>vermogen per turbine (MW)</strong>, het <strong>aantal turbines</strong>, de <strong>hoofdcategorie</strong> en de <strong>windsnelheidscategorie</strong> in. Het model berekent de bouw-/investeringskosten volgens het <a href="https://www.pbl.nl/publicaties/advies-basisbedragen-sde-2026" target="_blank" rel="noopener">PBL-eindadvies "Advies basisbedragen SDE++ 2026"</a> en zet die om naar kosten per MW, per turbine, en per geproduceerde MWh (op basis van de vollasturen per windsnelheidscategorie en een economische levensduur van 20 jaar).</p>
+    <div class="calc-hint-m12 hint">Beweeg je cursor over een onderstreept getal (of tik erop op mobiel) om de exacte berekening te zien.</div>
+
+    <div class="method-callout">
+      <h3>Turbineprijs versus totale investeringskosten</h3>
+      <p>Het PBL onderscheidt twee bedragen per kW, die dit model naast elkaar toont:</p>
+      <ul class="m8-example-steps" style="list-style:disc;">
+        <li><strong>Turbineprijs &mdash; &euro; 1.090/kW.</strong> De prijs van de turbine zelf (incl. transport en installatie), voor alle categorieën gelijk en ongewijzigd t.o.v. 2025.</li>
+        <li><strong>Totale investeringskosten</strong> &mdash; inclusief de "meerkosten": netaansluiting, funderingen, bekabeling, wegen en voorbereidingskosten. Dit bedrag verschilt per hoofdcategorie: <strong>&euro; 1.540/kW</strong> (regulier), <strong>&euro; 1.550/kW</strong> (hoogtebeperkt, max. 150 m tiphoogte) en <strong>&euro; 1.770/kW</strong> (waterkeringen).</li>
+      </ul>
+      <p><strong>Bron:</strong> <a href="https://www.pbl.nl/publicaties/advies-basisbedragen-sde-2026" target="_blank" rel="noopener">PBL (2026), "Advies basisbedragen SDE++ 2026"</a>, Tabel 7.5 (regulier), Tabel 7.7 (hoogtebeperkt) en Tabel 7.9 (waterkeringen), en Tabel 7.4 voor de vollasturen per windsnelheidscategorie.</p>
+    </div>
+
+    <h3 style="margin-top:var(--space-6);margin-bottom:var(--space-3);font-size:var(--text-sm);font-weight:700;">Turbinegroep toevoegen</h3>
+    <div class="cum-controls">
+      <div class="cum-field">
+        <label for="m12-name-input">Naam (optioneel)</label>
+        <input type="text" id="m12-name-input" placeholder="bv. Park Noord">
+      </div>
+      <div class="cum-field">
+        <label for="m12-vermogen-input">Vermogen per turbine (MW)</label>
+        <input type="number" id="m12-vermogen-input" step="0.1" min="0.1" placeholder="bv. 5,6">
+      </div>
+      <div class="cum-field">
+        <label for="m12-aantal-input">Aantal turbines</label>
+        <input type="number" id="m12-aantal-input" step="1" min="1" placeholder="bv. 4">
+      </div>
+      <div class="cum-field">
+        <label for="m12-category-select">Hoofdcategorie</label>
+        <select id="m12-category-select">
+          <option value="regulier" selected>Wind op land, regulier (&euro; 1.540/kW)</option>
+          <option value="hoogtebeperkt">Hoogtebeperkt, max. 150 m tiphoogte (&euro; 1.550/kW)</option>
+          <option value="waterkeringen">Wind op waterkeringen (&euro; 1.770/kW)</option>
+        </select>
+      </div>
+      <div class="cum-field">
+        <label for="m12-windcat-select">Windsnelheidscategorie</label>
+        <select id="m12-windcat-select">
+          <option value="I">I &mdash; &ge; 8,0 m/s</option>
+          <option value="II">II &mdash; 7,5&ndash;8,0 m/s</option>
+          <option value="III" selected>III &mdash; 7,0&ndash;7,5 m/s</option>
+          <option value="IV">IV &mdash; 6,75&ndash;7,0 m/s</option>
+          <option value="V">V &mdash; &lt; 6,75 m/s</option>
+        </select>
+      </div>
+    </div>
+    <button type="button" class="add-turbine-btn" id="m12-add-btn">+ Turbinegroep toevoegen</button>
+    <p class="hint" id="m12-add-status"></p>
+    <p class="hint">De windsnelheidscategorie bepaalt het aantal vollasturen per jaar (PBL, Tabel 7.4) en staat los van de windrichting/-snelheid die je in Module 1&ndash;2 voor de geluidsberekening instelt &mdash; kies de categorie die het beste past bij de gemiddelde windsnelheid op ashoogte van de beoogde locatie.</p>
+
+    <div class="callout m11-totals-highlight" id="m12-totals-callout" style="display:none;">
+      <h3>Totalen (dit zijn de kerncijfers)</h3>
+      <div id="m12-totals-text"></div>
+    </div>
+    <div class="m11-kpi-grid" id="m12-kpi-grid"></div>
+
+    <div class="data-table-card" id="m12-table-card" style="margin-top:var(--space-5);">
+      <h3>Uitsplitsing per turbinegroep</h3>
+      <div class="cum-result-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Groep</th><th>Categorie</th><th>Windcat.</th><th>Vermogen/turbine</th><th>Aantal</th>
+              <th>Totaal vermogen</th><th>Turbineprijs/turbine</th><th>Investering/turbine</th>
+              <th>Totale investering</th><th>Vollasturen/jr</th><th>Productie/jr (MWh)</th>
+              <th>&euro;/MWh (jaar 1)</th><th>&euro;/MWh (20 jaar)</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="m12-table-body"><tr><td colspan="14" class="empty-row">Voeg hierboven één of meer turbinegroepen toe.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="method-callout">
+      <h3>Herkomst van de bedragen en de rekenmethode</h3>
+      <p><strong>Bron:</strong> <a href="https://www.pbl.nl/publicaties/advies-basisbedragen-sde-2026" target="_blank" rel="noopener">Planbureau voor de Leefomgeving (2026), "Advies basisbedragen SDE++ 2026"</a> &mdash; het eindadvies dat het PBL jaarlijks aan de minister van Klimaat en Groene Groei uitbrengt ter onderbouwing van de subsidiebedragen in de SDE++-regeling.</p>
+      <p><strong>Rekenstappen per turbinegroep</strong> (vermogen per turbine <code>P</code> in MW, aantal <code>n</code>, hoofdcategorie-tarief <code>i</code> in &euro;/kW, vollasturen <code>V</code> uit Tabel 7.4):</p>
+      <ul class="m8-example-steps" style="list-style:disc;">
+        <li>Totaal vermogen: <code>P_totaal = P &times; n</code>.</li>
+        <li>Turbineprijs per turbine/totaal: <code>P &times; 1.000 &times; &euro; 1.090/kW</code>.</li>
+        <li>Investering per turbine/totaal: <code>P &times; 1.000 &times; i</code> (i = &euro; 1.540, 1.550 of 1.770 per kW, afhankelijk van de hoofdcategorie).</li>
+        <li>Jaarproductie: <code>P_totaal &times; V &times; (1 &minus; 13%)</code> &mdash; het PBL rekent met een vast <strong>windparkverlies van 13%</strong> (onderlinge afschaduwing tussen turbines binnen één park, &sect;7.2.2 van het advies).</li>
+        <li>Kosten per MWh in jaar 1: <code>investering_totaal / jaarproductie</code>.</li>
+        <li>Kosten per MWh over de economische levensduur: <code>investering_totaal / (jaarproductie &times; 20 jaar)</code> &mdash; het PBL rekent met een vaste <strong>economische levensduur van 20 jaar</strong> (niet noodzakelijk gelijk aan de technische levensduur van de turbine).</li>
+      </ul>
+      <p>De vollasturen zijn een vast brongegeven uit <a href="https://www.pbl.nl/publicaties/advies-basisbedragen-sde-2026" target="_blank" rel="noopener">PBL, Tabel 7.4</a> en verschillen per combinatie van windsnelheidscategorie en hoofdcategorie:</p>
+      <div class="cum-result-wrap">
+        <table class="data-table">
+          <thead><tr><th>Windcat.</th><th>Regulier</th><th>Hoogtebeperkt</th><th>Waterkeringen</th></tr></thead>
+          <tbody>
+            <tr><td>I (&ge; 8,0 m/s)</td><td>3.660</td><td>3.040</td><td>3.680</td></tr>
+            <tr><td>II (7,5&ndash;8,0 m/s)</td><td>3.290</td><td>2.690</td><td>3.300</td></tr>
+            <tr><td>III (7,0&ndash;7,5 m/s)</td><td>2.980</td><td>2.390</td><td>3.000</td></tr>
+            <tr><td>IV (6,75&ndash;7,0 m/s)</td><td>2.780</td><td>2.210</td><td>2.800</td></tr>
+            <tr><td>V (&lt; 6,75 m/s)</td><td>2.580</td><td>2.020</td><td>2.590</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="callout m6-limitations">
+      <strong>Beperkingen:</strong> (1) Dit is een <strong>indicatieve investeringsmaatstaf</strong>, geen volledige business case: er wordt niet gerekend met financieringskosten/WACC, inflatie, onderhouds- en exploitatiekosten (O&amp;M), afschrijving, de daadwerkelijke SDE++-subsidiebijdrage zelf, of de opbrengst uit de elektriciteitsmarkt &mdash; het PBL gebruikt deze bedragen alleen om de subsidiebehoefte per categorie te onderbouwen, niet als volledige projectraming. (2) De <strong>windsnelheidscategorie (I&ndash;V)</strong> is een eigen, handmatig gekozen invoer in deze module en is <strong>niet</strong> gekoppeld aan de geostrofische wind (U<sub>geo</sub>) die Module 7 hierboven live uit ERA5-drukgegevens afleidt &mdash; er bestaat geen algemeen erkende directe omrekening tussen die twee grootheden, dus kies de categorie die naar eigen inschatting het beste past bij de gemiddelde windsnelheid op ashoogte van de beoogde locatie. (3) De hoofdcategorieën (regulier / hoogtebeperkt / waterkeringen) zijn PBL-subsidiecategorieën en <strong>niet identiek</strong> aan de tiphoogte-categorieën (laag/midden/hoog) van Module 11 hierboven &mdash; hoogtebeperkt geldt specifiek voor turbines met een maximale tiphoogte van 150 m, wat een ander afkappunt is dan Module 11's grens van 50 m. (4) Het <strong>windparkverlies van 13%</strong> en de <strong>economische levensduur van 20 jaar</strong> zijn vaste PBL-aannames die gelden voor een gemiddeld Nederlands windpark; de daadwerkelijke onderlinge afschaduwing hangt sterk af van de turbineopstelling en -afstand op een specifieke locatie, en de technische levensduur van een turbine kan hoger liggen dan de economische afschrijvingstermijn. (5) De genoemde bedragen zijn het <strong>eindadvies</strong> van het PBL voor 2026 &mdash; het advies waarop de minister de definitieve SDE++-basisbedragen baseert, doorgaans nagenoeg ongewijzigd overgenomen, maar op zichzelf nog geen vastgestelde ministeriële regeling. (6) Alle bedragen zijn nominale prijspeil-2026-cijfers; ze houden geen rekening met toekomstige schommelingen in staal-, koper- of transportprijzen die de daadwerkelijke bouwkosten van een concreet project kunnen beïnvloeden.
+    </div>
+  </section>
+
   <!-- METHODOLOGY -->
   <section class="module" id="methodology">
     <div class="module-head">

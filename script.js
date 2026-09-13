@@ -165,6 +165,9 @@ const state = {
   m11Category: 'hoog', m11Method: 'vlak', m11Woz: 398000,
   m11CbsData: null, m11CbsFetching: false, m11CbsError: null,
   m11WozFetching: false, m11WozAutoInfo: null, m11WozAutoError: null,
+  // Module 12: bouw-/investeringskosten per turbine (PBL-eindadvies SDE++ 2026) — zie script.js §M12.
+  // Volledig losstaand van de geplaatste turbine(s)/locatie(s) hierboven: vrije invoer per turbinegroep.
+  m12Groups: [],
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' heeft geen vaste waarden; die komen uit state.normCustomLden/Lnight.
@@ -399,6 +402,10 @@ const m11CbsFetchBtnEl = document.getElementById('m11-cbs-fetch-btn');
 if (m11CbsFetchBtnEl) m11CbsFetchBtnEl.addEventListener('click', () => { m11CbsRunFetch(); });
 const m11WozAutoBtnEl = document.getElementById('m11-woz-auto-btn');
 if (m11WozAutoBtnEl) m11WozAutoBtnEl.addEventListener('click', () => { m11FetchLocalWoz(); });
+
+// ---------- Module 12: turbinegroep toevoegen ----------
+const m12AddBtnEl = document.getElementById('m12-add-btn');
+if (m12AddBtnEl) m12AddBtnEl.addEventListener('click', () => { m12AddGroup(); });
 
 // ---------- Bronvermogen slider ----------
 lwaInput.addEventListener('input', () => { state.lwa = parseFloat(lwaInput.value); render(); });
@@ -2795,6 +2802,270 @@ function renderModule11() {
   renderModule11CbsComparison();
 }
 
+// ============================================================================
+// Module 12: bouw-/investeringskosten per turbine (PBL-eindadvies SDE++ 2026)
+// Volledig losstaand van de kaart/turbines hierboven — vrije invoer per groep.
+// ============================================================================
+
+// ---------- Generieke "berekening"-tooltips (gebruikt door Module 12) ----------
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+function attrEscapeCalc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+// Wraps a rendered value in a hoverable/focusable/tappable span carrying the
+// exact calculation text (met echte ingevulde waarden) in data-calc.
+function calcSpan(calcText, displayHtml) {
+  return `<span class="calc" tabindex="0" data-calc="${attrEscapeCalc(calcText)}">${displayHtml}</span>`;
+}
+function initCalcTooltip() {
+  if (document.getElementById('calc-tooltip')) return;
+  const tip = document.createElement('div');
+  tip.id = 'calc-tooltip';
+  tip.setAttribute('role', 'tooltip');
+  document.body.appendChild(tip);
+  let activeEl = null;
+
+  function place(el) {
+    const r = el.getBoundingClientRect();
+    tip.style.left = '0px';
+    tip.style.top = '0px';
+    tip.classList.add('visible');
+    const tipRect = tip.getBoundingClientRect();
+    let left = r.left + r.width / 2 - tipRect.width / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
+    let top = r.top - tipRect.height - 10;
+    if (top < 8) top = r.bottom + 10;
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
+  }
+  function show(el) {
+    const text = el.getAttribute('data-calc');
+    if (!text) return;
+    activeEl = el;
+    tip.innerHTML = '<span class="calc-tooltip-label">Berekening</span>' + escapeHtml(text).replace(/\n/g, '<br>');
+    place(el);
+  }
+  function hide(el) {
+    if (el && el !== activeEl) return;
+    tip.classList.remove('visible');
+    activeEl = null;
+  }
+  document.addEventListener('mouseover', (e) => { const el = e.target.closest('[data-calc]'); if (el) show(el); });
+  document.addEventListener('mouseout', (e) => { const el = e.target.closest('[data-calc]'); if (el) hide(el); });
+  document.addEventListener('focusin', (e) => { const el = e.target.closest('[data-calc]'); if (el) show(el); });
+  document.addEventListener('focusout', (e) => { const el = e.target.closest('[data-calc]'); if (el) hide(el); });
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-calc]');
+    if (!el) { hide(); return; }
+    if (activeEl === el) hide(el); else show(el);
+  });
+  window.addEventListener('scroll', () => hide(), true);
+  window.addEventListener('resize', () => hide());
+}
+
+// ---------- Module 12: constanten (PBL, "Advies basisbedragen SDE++ 2026") ----------
+const M12_TURBINEPRIJS_PER_KW = 1090;
+const M12_INVESTERING_PER_KW = { regulier: 1540, hoogtebeperkt: 1550, waterkeringen: 1770 };
+const M12_CATEGORY_LABELS = {
+  regulier: 'Wind op land, regulier',
+  hoogtebeperkt: 'Wind op land, met hoogtebeperking (max. 150 m tiphoogte)',
+  waterkeringen: 'Wind op waterkeringen',
+};
+const M12_VOLLASTUREN = {
+  I:   { regulier: 3660, hoogtebeperkt: 3040, waterkeringen: 3680 },
+  II:  { regulier: 3290, hoogtebeperkt: 2690, waterkeringen: 3300 },
+  III: { regulier: 2980, hoogtebeperkt: 2390, waterkeringen: 3000 },
+  IV:  { regulier: 2780, hoogtebeperkt: 2210, waterkeringen: 2800 },
+  V:   { regulier: 2580, hoogtebeperkt: 2020, waterkeringen: 2590 },
+};
+const M12_WINDPARKVERLIES_PCT = 13;
+const M12_LEVENSDUUR_JAAR = 20;
+let m12NextId = 1;
+
+function m12FmtEuroDec(n) {
+  return n == null || Number.isNaN(n) ? '\u2014' : '\u20ac' + n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function m12AddGroup() {
+  const nameInput = document.getElementById('m12-name-input');
+  const vermogenInput = document.getElementById('m12-vermogen-input');
+  const aantalInput = document.getElementById('m12-aantal-input');
+  const categorySelect = document.getElementById('m12-category-select');
+  const windcatSelect = document.getElementById('m12-windcat-select');
+  const statusEl = document.getElementById('m12-add-status');
+  if (!vermogenInput || !aantalInput || !categorySelect || !windcatSelect) return;
+  const vermogen = parseFloat(vermogenInput.value);
+  const aantal = parseInt(aantalInput.value, 10);
+  if (!(vermogen > 0)) {
+    if (statusEl) { statusEl.textContent = 'Vul een geldig vermogen per turbine in (groter dan 0 MW).'; statusEl.className = 'hint m8-status-error'; }
+    return;
+  }
+  if (!(aantal >= 1)) {
+    if (statusEl) { statusEl.textContent = 'Vul een geldig aantal turbines in (minimaal 1).'; statusEl.className = 'hint m8-status-error'; }
+    return;
+  }
+  state.m12Groups.push({
+    id: m12NextId++,
+    naam: (nameInput && nameInput.value || '').trim(),
+    vermogenMw: vermogen,
+    aantal: aantal,
+    categorie: categorySelect.value,
+    windcategorie: windcatSelect.value,
+  });
+  if (nameInput) nameInput.value = '';
+  vermogenInput.value = '';
+  aantalInput.value = '';
+  if (statusEl) { statusEl.textContent = ''; statusEl.className = 'hint'; }
+  renderModule12();
+}
+
+function m12RemoveGroup(id) {
+  state.m12Groups = state.m12Groups.filter((g) => g.id !== id);
+  renderModule12();
+}
+
+function m12ComputeRow(g, idx) {
+  const vermogenTotaalMw = g.vermogenMw * g.aantal;
+  const turbineprijsPerKw = M12_TURBINEPRIJS_PER_KW;
+  const investeringPerKw = M12_INVESTERING_PER_KW[g.categorie];
+  const turbineprijsPerTurbine = g.vermogenMw * 1000 * turbineprijsPerKw;
+  const investeringPerTurbine = g.vermogenMw * 1000 * investeringPerKw;
+  const turbineprijsTotaal = vermogenTotaalMw * 1000 * turbineprijsPerKw;
+  const investeringTotaal = vermogenTotaalMw * 1000 * investeringPerKw;
+  const vollasturen = M12_VOLLASTUREN[g.windcategorie][g.categorie];
+  const jaarproductie = vermogenTotaalMw * vollasturen * (1 - M12_WINDPARKVERLIES_PCT / 100);
+  const levensduurproductie = jaarproductie * M12_LEVENSDUUR_JAAR;
+  const kostenJaar1 = jaarproductie > 0 ? investeringTotaal / jaarproductie : null;
+  const kostenLevensduur = levensduurproductie > 0 ? investeringTotaal / levensduurproductie : null;
+  const label = g.naam || `Groep ${idx + 1}`;
+  return {
+    ...g, label, vermogenTotaalMw, turbineprijsPerKw, investeringPerKw,
+    turbineprijsPerTurbine, investeringPerTurbine, turbineprijsTotaal, investeringTotaal,
+    vollasturen, jaarproductie, levensduurproductie, kostenJaar1, kostenLevensduur,
+  };
+}
+
+function renderModule12() {
+  const tableBody = document.getElementById('m12-table-body');
+  const kpiGrid = document.getElementById('m12-kpi-grid');
+  const totalsCallout = document.getElementById('m12-totals-callout');
+  const totalsText = document.getElementById('m12-totals-text');
+  if (!tableBody) return;
+
+  const rows = state.m12Groups.map((g, i) => m12ComputeRow(g, i));
+
+  if (rows.length === 0) {
+    tableBody.innerHTML = '<tr><td colspan="14" class="empty-row">Voeg hierboven \u00e9\u00e9n of meer turbinegroepen toe.</td></tr>';
+    if (kpiGrid) kpiGrid.innerHTML = '';
+    if (totalsCallout) totalsCallout.style.display = 'none';
+    return;
+  }
+
+  const totals = rows.reduce((acc, r) => {
+    acc.vermogenTotaalMw += r.vermogenTotaalMw;
+    acc.turbineprijsTotaal += r.turbineprijsTotaal;
+    acc.investeringTotaal += r.investeringTotaal;
+    acc.jaarproductie += r.jaarproductie;
+    acc.levensduurproductie += r.levensduurproductie;
+    acc.aantalTurbines += r.aantal;
+    return acc;
+  }, { vermogenTotaalMw: 0, turbineprijsTotaal: 0, investeringTotaal: 0, jaarproductie: 0, levensduurproductie: 0, aantalTurbines: 0 });
+  const gemKostenJaar1 = totals.jaarproductie > 0 ? totals.investeringTotaal / totals.jaarproductie : null;
+  const gemKostenLevensduur = totals.levensduurproductie > 0 ? totals.investeringTotaal / totals.levensduurproductie : null;
+
+  const rowsHtml = rows.map((r) => {
+    const calcVermogenTotaal = calcSpan(
+      `Vermogen per turbine \u00d7 aantal:\n${r.vermogenMw.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW \u00d7 ${r.aantal}\n= ${r.vermogenTotaalMw.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW.`,
+      `${r.vermogenTotaalMw.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW`
+    );
+    const calcTurbineprijsTurbine = calcSpan(
+      `Vermogen per turbine (in kW) \u00d7 turbineprijs per kW:\n${m9Fmt(r.vermogenMw * 1000)} kW \u00d7 ${m12FmtEuroDec(r.turbineprijsPerKw)}/kW\n= ${m9FmtEuro(r.turbineprijsPerTurbine)}.`,
+      m9FmtEuro(r.turbineprijsPerTurbine)
+    );
+    const calcInvesteringTurbine = calcSpan(
+      `Vermogen per turbine (in kW) \u00d7 investering per kW voor categorie '${M12_CATEGORY_LABELS[r.categorie]}':\n${m9Fmt(r.vermogenMw * 1000)} kW \u00d7 ${m12FmtEuroDec(r.investeringPerKw)}/kW\n= ${m9FmtEuro(r.investeringPerTurbine)}.`,
+      m9FmtEuro(r.investeringPerTurbine)
+    );
+    const calcInvesteringTotaal = calcSpan(
+      `Totaal vermogen (in kW) \u00d7 investering per kW:\n${m9Fmt(r.vermogenTotaalMw * 1000)} kW \u00d7 ${m12FmtEuroDec(r.investeringPerKw)}/kW\n= ${m9FmtEuro(r.investeringTotaal)}.\n(Turbineprijs-deel: ${m9FmtEuro(r.turbineprijsTotaal)}; meerkosten: ${m9FmtEuro(r.investeringTotaal - r.turbineprijsTotaal)}.)`,
+      m9FmtEuro(r.investeringTotaal)
+    );
+    const calcVollasturen = calcSpan(
+      `Vaste tabelwaarde (PBL-eindadvies SDE++ 2026, Tabel 7.4) voor windsnelheidscategorie '${r.windcategorie}' en type '${M12_CATEGORY_LABELS[r.categorie]}'.\nGeen berekening \u2014 dit is een brongegeven.\n= ${m9Fmt(r.vollasturen)} vollasturen/jaar.`,
+      m9Fmt(r.vollasturen)
+    );
+    const calcJaarproductie = calcSpan(
+      `Totaal vermogen \u00d7 vollasturen \u00d7 (1 \u2212 windparkverlies):\n${r.vermogenTotaalMw.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW \u00d7 ${m9Fmt(r.vollasturen)} \u00d7 (1 \u2212 ${M12_WINDPARKVERLIES_PCT}%)\n= ${m9Fmt(r.jaarproductie)} MWh/jaar.`,
+      m9Fmt(r.jaarproductie)
+    );
+    const calcKostenJaar1 = calcSpan(
+      `Totale investering / jaarproductie:\n${m9FmtEuro(r.investeringTotaal)} / ${m9Fmt(r.jaarproductie)} MWh\n= ${m12FmtEuroDec(r.kostenJaar1)}/MWh in jaar 1.`,
+      m12FmtEuroDec(r.kostenJaar1)
+    );
+    const calcKostenLevensduur = calcSpan(
+      `Totale investering / (jaarproductie \u00d7 economische levensduur van ${M12_LEVENSDUUR_JAAR} jaar):\n${m9FmtEuro(r.investeringTotaal)} / (${m9Fmt(r.jaarproductie)} \u00d7 ${M12_LEVENSDUUR_JAAR})\n= ${m12FmtEuroDec(r.kostenLevensduur)}/MWh.`,
+      m12FmtEuroDec(r.kostenLevensduur)
+    );
+    return `<tr>
+      <td>${escapeHtml(r.label)}</td>
+      <td>${escapeHtml(M12_CATEGORY_LABELS[r.categorie])}</td>
+      <td>${r.windcategorie}</td>
+      <td>${r.vermogenMw.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW</td>
+      <td>${r.aantal}</td>
+      <td>${calcVermogenTotaal}</td>
+      <td>${calcTurbineprijsTurbine}</td>
+      <td>${calcInvesteringTurbine}</td>
+      <td>${calcInvesteringTotaal}</td>
+      <td>${calcVollasturen}</td>
+      <td>${calcJaarproductie}</td>
+      <td>${calcKostenJaar1}</td>
+      <td>${calcKostenLevensduur}</td>
+      <td><button type="button" class="popup-remove-btn m12-remove-btn" data-m12-remove="${r.id}">Verwijder</button></td>
+    </tr>`;
+  }).join('');
+
+  const totalRow = rows.length > 1
+    ? `<tr class="m11-totals-row">
+        <td>Totaal</td><td>\u2014</td><td>\u2014</td><td>\u2014</td><td>${totals.aantalTurbines}</td>
+        <td>${totals.vermogenTotaalMw.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW</td>
+        <td>\u2014</td><td>\u2014</td>
+        <td>${m9FmtEuro(totals.investeringTotaal)}</td>
+        <td>\u2014</td>
+        <td>${m9Fmt(totals.jaarproductie)}</td>
+        <td>${m12FmtEuroDec(gemKostenJaar1)}</td>
+        <td>${m12FmtEuroDec(gemKostenLevensduur)}</td>
+        <td></td>
+      </tr>`
+    : '';
+  tableBody.innerHTML = rowsHtml + totalRow;
+  tableBody.querySelectorAll('[data-m12-remove]').forEach((btn) => {
+    btn.addEventListener('click', () => m12RemoveGroup(parseInt(btn.dataset.m12Remove, 10)));
+  });
+
+  if (totalsCallout) totalsCallout.style.display = '';
+  if (totalsText) {
+    totalsText.innerHTML = `<div class="m11-totals-line"><strong>${totals.aantalTurbines.toLocaleString('nl-NL')} turbine(s)</strong> \u2014 totaal vermogen <strong>${totals.vermogenTotaalMw.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW</strong>, totale investering <strong>${m9FmtEuro(totals.investeringTotaal)}</strong> (waarvan turbineprijs ${m9FmtEuro(totals.turbineprijsTotaal)} en meerkosten ${m9FmtEuro(totals.investeringTotaal - totals.turbineprijsTotaal)}), geschatte jaarproductie <strong>${m9Fmt(totals.jaarproductie)} MWh</strong> (na 13% windparkverlies).</div>`;
+  }
+  if (kpiGrid) {
+    kpiGrid.innerHTML = `
+      <div class="m11-kpi-card m11-kpi-totaal"><span class="m11-kpi-label">Totaal vermogen</span><span class="m11-kpi-value">${totals.vermogenTotaalMw.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW</span><span class="m11-kpi-sub">${totals.aantalTurbines} turbine(s)</span></div>
+      <div class="m11-kpi-card m11-kpi-eigen"><span class="m11-kpi-label">Totale investering</span><span class="m11-kpi-value">${m9FmtEuro(totals.investeringTotaal)}</span><span class="m11-kpi-sub">turbineprijs ${m9FmtEuro(totals.turbineprijsTotaal)}</span></div>
+      <div class="m11-kpi-card m11-kpi-woningen"><span class="m11-kpi-label">Jaarproductie</span><span class="m11-kpi-value">${m9Fmt(totals.jaarproductie)} MWh</span><span class="m11-kpi-sub">per jaar, na 13% windparkverlies</span></div>
+      <div class="m11-kpi-card m11-kpi-compensabel"><span class="m11-kpi-label">\u20ac/MWh (20 jaar)</span><span class="m11-kpi-value">${m12FmtEuroDec(gemKostenLevensduur)}</span><span class="m11-kpi-sub">jaar 1: ${m12FmtEuroDec(gemKostenJaar1)}</span></div>
+    `;
+  }
+}
+
 // ---------- Wire up turbine controls & init ----------
 initMap3a();
 render();
+renderModule12();
+initCalcTooltip();

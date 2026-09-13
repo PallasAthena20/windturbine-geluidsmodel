@@ -423,7 +423,7 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .cum-controls { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-5); flex-wrap: wrap; margin-bottom: var(--space-5); background: var(--color-surface-offset); border-radius: var(--radius-lg); padding: var(--space-5); }
 .cum-field { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; flex: 1 1 220px; max-width: 100%; }
 .cum-field label { font-size: var(--text-sm); font-weight: 600; }
-.cum-field select, .cum-field input[type="number"] { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border: 1.5px solid var(--color-border); background: var(--color-surface-2); color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm); min-width: 12ch; width: 100%; max-width: 100%; box-sizing: border-box; }
+.cum-field select, .cum-field input[type="number"], .cum-field input[type="text"] { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border: 1.5px solid var(--color-border); background: var(--color-surface-2); color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm); min-width: 12ch; width: 100%; max-width: 100%; box-sizing: border-box; }
 @media (max-width: 640px) {
   .cum-controls { flex-direction: column; align-items: stretch; }
   .cum-field { flex: 1 1 auto; }
@@ -511,6 +511,8 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 #m11-cbs-status.m8-status-ok,
 #m11-woz-auto-status.m8-status-ok,
 #m7-ugeo-auto-status.m8-status-ok { color: var(--color-success); }
+#m12-add-status.m8-status-error { color: var(--color-error); }
+.m12-remove-btn { margin-top: 0; white-space: nowrap; }
 #m11-cbs-delta { font-style: italic; }
 #m11-woz-auto-btn, #m7-ugeo-auto-btn { white-space: normal; width: 100%; text-align: center; line-height: 1.3; }
 .m8-table td.m8-hoorbaar-col, .m8-table th.m8-hoorbaar-col { background: var(--color-surface-offset); }
@@ -592,3 +594,35 @@ footer { text-align: center; padding: var(--space-10) var(--space-6); color: var
 .m8-totals-line, .m9-totals-line, .m10-totals-line, .m11-totals-line { font-size: var(--text-sm); line-height: 1.6; padding: var(--space-2) var(--space-3); background: var(--color-surface); border-radius: var(--radius-md); }
 tr.m8-totals-row, tr.m9-totals-row, tr.m10-totals-row, tr.m11-totals-row { font-weight: 700; background: var(--color-success-highlight); }
 tr.m8-totals-row td, tr.m9-totals-row td, tr.m10-totals-row td, tr.m11-totals-row td { color: var(--color-text); }
+
+/* ============ Module 12: berekening-tooltips ("Beweeg je cursor over...") ============ */
+.calc {
+  cursor: help;
+  border-bottom: 1.5px dotted var(--color-primary);
+  text-underline-offset: 3px;
+  border-radius: 2px;
+  outline-offset: 2px;
+}
+.calc:hover, .calc:focus-visible {
+  background: var(--color-primary-highlight);
+}
+#calc-tooltip {
+  position: fixed;
+  z-index: 500;
+  max-width: 340px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-text);
+  color: var(--color-bg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  white-space: pre-line;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+#calc-tooltip.visible { opacity: 1; transform: translateY(0); }
+#calc-tooltip .calc-tooltip-label { display: block; font-weight: 700; margin-bottom: var(--space-1); color: var(--color-bg); opacity: 0.72; text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.04em; }
+.calc-hint-m12 { display: flex; align-items: center; gap: var(--space-2); margin-top: 0; margin-bottom: var(--space-4); }
