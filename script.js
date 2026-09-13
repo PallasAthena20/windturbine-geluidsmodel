@@ -3148,48 +3148,66 @@ function m13BuildReportHtml() {
   const hasBag = r.hasBag;
   const hasM12 = r.hasM12;
 
-  // Gedeelde matrix: per scenario (best/middel/worst), per hinderpercentage (9/30/46%):
-  // bewoners, zorgkosten (jaar + horizon) en DALY's (jaar + horizon, en × 3 monetaire waarden).
-  const matrix = totals8.map((t) => ({
-    ...t,
-    hinder: t.hinder.map((h) => {
-      const costYear = h.people != null ? h.people * costPerPerson : null;
-      const costHorizon = costYear != null ? costYear * horizon : null;
-      const dalyYear = h.people != null ? h.people * dwTotal : null;
-      const dalyHorizon = dalyYear != null ? dalyYear * horizon : null;
-      const values = M10_VALUES.map((v) => ({
-        ...v,
-        euroHorizon: dalyHorizon != null ? dalyHorizon * v.euro : null,
-      }));
-      return { ...h, costYear, costHorizon, dalyYear, dalyHorizon, values };
-    }),
+  // BELANGRIJK: hinder-, zorgkosten- en DALY-berekeningen moeten PER GELUIDSCATEGORIE (hoorbaar/
+  // laagfrequent/infrasoon) worden toegepast op de bewoners die zich BINNEN DE RING VAN DIE CATEGORIE
+  // bevinden (rows8, exact zoals Module 8/9/10 dat al doen) — niet op het "ontdubbelde" totaal
+  // (totals8), dat slechts de vereniging van de drie ringen is (in de praktijk gelijk aan de grootste
+  // ring, doorgaans infrasoon ≤5000 m). Anders zou bijv. bij best case hoorbaar geluid, waar maar 1
+  // woning/2 bewoners binnen de norm-overschrijding vallen, het hinderpercentage worden toegepast op
+  // duizenden bewoners die dat hoorbare geluid helemaal niet ervaren — een categorie/eenheidfout.
+  const catMatrix = rows8.map((r) => ({
+    scenario: r.scenario,
+    categories: r.categories.map((c) => ({
+      key: c.key, label: c.label, ring: c.ring, houses: c.houses, people: c.people,
+      hinder: c.hinder.map((h) => {
+        const costYear = h.people != null ? h.people * costPerPerson : null;
+        const costHorizon = costYear != null ? costYear * horizon : null;
+        const dalyYear = h.people != null ? h.people * dwTotal : null;
+        const dalyHorizon = dalyYear != null ? dalyYear * horizon : null;
+        const values = M10_VALUES.map((v) => ({
+          ...v,
+          euroHorizon: dalyHorizon != null ? dalyHorizon * v.euro : null,
+        }));
+        return { ...h, costYear, costHorizon, dalyYear, dalyHorizon, values };
+      }),
+    })),
   }));
 
-  // Maatschappelijke kosten-totaal (over de volledige horizon, alle drie hinderpercentages
-  // naast elkaar getoond — er is geen "enige juiste" percentage, zie de kritische analyse).
-  const socTotalsByPct = M8_HINDER_SCENARIOS.map((hs, hIdx) => {
-    // som over de drie scenario's (best+middel+worst) is NIET zinvol (een woning ligt niet
-    // gelijktijdig in drie scenario's) — in plaats daarvan tonen we het jaargewogen gemiddelde:
-    // gewicht = aandeel nachten (m6.pct), zodat dit de daadwerkelijke jaargemiddelde blootstelling weerspiegelt.
-    let costHorizonWeighted = 0, dalyHorizonWeighted = 0, peopleWeighted = 0;
-    let anyData = false;
-    matrix.forEach((t) => {
-      const h = t.hinder[hIdx];
-      const weight = m6 ? (m6.pct[t.scenario] / 100) : (1 / 3);
-      if (h.people != null) { peopleWeighted += h.people * weight; anyData = true; }
-      if (h.costHorizon != null) costHorizonWeighted += h.costHorizon * weight;
-      if (h.dalyHorizon != null) dalyHorizonWeighted += h.dalyHorizon * weight;
+  // Maatschappelijke kosten-totaal, PER GELUIDSCATEGORIE (niet meer geblend tot één ontdubbeld cijfer):
+  // voor elke categorie het jaargewogen gemiddelde (gewicht = aandeel nachten per scenario, m6.pct) over
+  // de drie hinderpercentages. De 9/30/46%-hinderstudies (RIVM/Pawlaczyk) betreffen bewoners die
+  // aangeven hoorbaar turbinegeluid waar te nemen — de hoorbaar-rij is daarom de wetenschappelijk
+  // best onderbouwde vergelijking; laagfrequent/infrasoon passen dezelfde percentages illustratief toe
+  // op hun eigen (grotere) ringbevolking, bij gebrek aan aparte hinderstudies voor die frequentiebanden.
+  const catSocByPct = M8_CATEGORY_META.map((meta) => {
+    const byPct = M8_HINDER_SCENARIOS.map((hs, hIdx) => {
+      let costHorizonWeighted = 0, dalyHorizonWeighted = 0, peopleWeighted = 0;
+      let anyData = false;
+      catMatrix.forEach((t) => {
+        const cat = t.categories.find((c) => c.key === meta.key);
+        if (!cat) return;
+        const h = cat.hinder[hIdx];
+        const weight = m6 ? (m6.pct[t.scenario] / 100) : (1 / 3);
+        if (h.people != null) { peopleWeighted += h.people * weight; anyData = true; }
+        if (h.costHorizon != null) costHorizonWeighted += h.costHorizon * weight;
+        if (h.dalyHorizon != null) dalyHorizonWeighted += h.dalyHorizon * weight;
+      });
+      return {
+        pct: hs.pct, label: hs.label,
+        people: anyData ? peopleWeighted : null,
+        costHorizon: anyData ? costHorizonWeighted : null,
+        dalyHorizon: anyData ? dalyHorizonWeighted : null,
+        euro70k: anyData ? dalyHorizonWeighted * 70000 : null,
+      };
     });
-    return {
-      pct: hs.pct, label: hs.label,
-      people: anyData ? peopleWeighted : null,
-      costHorizon: anyData ? costHorizonWeighted : null,
-      dalyHorizon: anyData ? dalyHorizonWeighted : null,
-      euro50k: anyData ? dalyHorizonWeighted * 50000 : null,
-      euro70k: anyData ? dalyHorizonWeighted * 70000 : null,
-      euro80k: anyData ? dalyHorizonWeighted * 80000 : null,
-    };
+    return { key: meta.key, label: meta.label, byPct };
   });
+  const catSocFor = (key) => catSocByPct.find((c) => c.key === key);
+  const socTotal = (s) => (s && s.costHorizon != null && s.euro70k != null) ? s.costHorizon + s.euro70k + (m11.hasData ? m11.totals.waarde : 0) : null;
+  const hoorbaarCrit = catSocFor('hoorbaar').byPct[2];
+  const infrasoonCrit = catSocFor('infrasoon').byPct[2];
+  const hoorbaarCritTotal = socTotal(hoorbaarCrit);
+  const infrasoonCritTotal = socTotal(infrasoonCrit);
 
   const warningBanner = (!r.normOk || r.nTurbines === 0)
     ? `<div class="rp-callout rp-warn"><strong>Let op — onvolledige basis:</strong> ${
@@ -3230,9 +3248,9 @@ function m13BuildReportHtml() {
         <tr><td>5</td><td>Toetsing van het berekende geluidsniveau aan een wettelijke/advies-norm (Lnight).</td><td>Actieve norm: ${escapeHtml(norm.label)}${norm.lnight != null ? ` (Lnight ≤ ${norm.lnight} dB)` : ' (geen Lnight-waarde)'}</td></tr>
         <tr><td>6</td><td>Hoe vaak de nachtelijke best/middel/worst-omstandigheden voorkomen, op basis van klimatologie.</td><td>${m6 ? `Best ${m13Pct(m6.pct.best)} (${m6.days.best} nachten/jr), middel ${m13Pct(m6.pct.middel)} (${m6.days.middel} nachten/jr), worst ${m13Pct(m6.pct.worst)} (${m6.days.worst} nachten/jr)` : '— (geen turbine geplaatst)'}</td></tr>
         <tr><td>7</td><td>Wetenschappelijke onderbouwing (shear-capacity, Bosveld/Abraham &amp; Monahan) van de middel/worst-splitsing in Module 6.</td><td>Geostrofische wind (ERA5) ter plaatse: U<sub>geo</sub> ≈ ${state.m7Ugeo} m/s</td></tr>
-        <tr><td>8</td><td>Aantal woningen (BAG) en bewoners binnen de overschrijdingsring per scenario, met hinderpercentage 9/30/46%.</td><td>${hasBag ? `Zie hindertabel in §4 hieronder` : '— (nog geen BAG-gegevens opgehaald)'}</td></tr>
-        <tr><td>9</td><td>Geschatte jaarlijkse zorgkosten per gehinderde bewoner (Godono e.a. 2023).</td><td>€${costPerPerson.toFixed(2)}/bewoner/jaar, horizon ${horizon} jaar — zie §5</td></tr>
-        <tr><td>10</td><td>DALY-verlies (disability-adjusted life years) door slaapverstoring + hinder, in drie monetaire waarderingen.</td><td>${dwTotal.toFixed(3)} DALY/bewoner/jaar × €50.000/€70.000/€80.000 per DALY — zie §6</td></tr>
+        <tr><td>8</td><td>Aantal woningen (BAG) en bewoners binnen de overschrijdingsring per scenario/categorie, met hinderpercentage 9/30/46%.</td><td>${hasBag ? `Zie §4 (ring/woningen) en §5 (hinderpercentages) hieronder` : '— (nog geen BAG-gegevens opgehaald)'}</td></tr>
+        <tr><td>9</td><td>Geschatte jaarlijkse zorgkosten per gehinderde bewoner (Godono e.a. 2023).</td><td>€${costPerPerson.toFixed(2)}/bewoner/jaar, horizon ${horizon} jaar — zie §6</td></tr>
+        <tr><td>10</td><td>DALY-verlies (disability-adjusted life years) door slaapverstoring + hinder, in drie monetaire waarderingen.</td><td>${dwTotal.toFixed(3)} DALY/bewoner/jaar × €50.000/€70.000/€80.000 per DALY — zie §7</td></tr>
         <tr><td>11</td><td>Waardedaling van woningen (Droës &amp; Koster 2021), naar tiphoogte-categorie.</td><td>${m11.hasData ? `${m11.totals.woningen.toLocaleString('nl-NL')} woningen, €${Math.round(m11.totals.waarde).toLocaleString('nl-NL')} totale waardedaling` : '— (geen BAG-gegevens of geen turbine geplaatst)'}</td></tr>
         <tr><td>12</td><td>Bouw-/investeringskosten per turbine(groep), PBL-eindadvies SDE++ 2026.</td><td>${hasM12 ? `${m12rows.length} groep(en), ${m12TotalVermogen.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW totaal, €${Math.round(m12TotalInvest).toLocaleString('nl-NL')} investering` : '— (nog geen turbinegroep toegevoegd)'}</td></tr>
       </tbody>
@@ -3283,63 +3301,73 @@ function m13BuildReportHtml() {
       <thead><tr><th>Scenario</th><th>Categorie</th><th>Overschrijdingsring</th><th>Woningen (BAG)</th><th>Bewoners</th></tr></thead>
       <tbody>${catRowsHtml('best')}${catRowsHtml('middel')}${catRowsHtml('worst')}</tbody>
     </table>
-    <p class="rp-note">Ontdubbeld totaal per scenario (grootste ring van de drie categorieën, geen dubbeltelling): ${matrix.map((t) => `<strong>${M8_SCENARIO_LABEL[t.scenario]}</strong> ${m8RingLabel(t.ring)}, ${t.houses != null ? t.houses.toLocaleString('nl-NL') : '—'} woningen, ${t.people != null ? m13Int(t.people) : '—'} bewoners`).join(' · ')}.</p>
+    <p class="rp-note">Ontdubbeld totaal per scenario (grootste ring van de drie categorieën, geen dubbeltelling — uitsluitend informatief, dit cijfer wordt <strong>niet</strong> gebruikt in de hinder-, zorgkosten- of DALY-berekening hieronder; daarvoor geldt steeds het bewonersaantal van de eigen ring per categorie, zie §5–§7): ${totals8.map((t) => `<strong>${M8_SCENARIO_LABEL[t.scenario]}</strong> ${m8RingLabel(t.ring)}, ${t.houses != null ? t.houses.toLocaleString('nl-NL') : '—'} woningen, ${t.people != null ? m13Int(t.people) : '—'} bewoners`).join(' · ')}.</p>
   </section>`;
 
-  // ---- Sectie: hinderpercentages RIVM/illustratief/kritisch ----
-  const hinderRowsHtml = matrix.map((t) => t.hinder.map((h, hIdx) => `<tr>
-    <td>${hIdx === 0 ? M8_SCENARIO_LABEL[t.scenario] : ''}</td>
-    <td>${h.pct}% <span class="rp-src">(${escapeHtml(h.label)})</span></td>
-    <td>${t.people != null ? m13Int(t.people) : '—'}</td>
-    <td>${h.people != null ? m13Int(h.people) : '—'}</td>
+  // ---- Sectie: hinderpercentages RIVM/illustratief/kritisch — PER CATEGORIE (hoorbaar/laagfrequent/infrasoon) ----
+  const hinderRowsHtml = catMatrix.map((t) => t.categories.map((c, cIdx) => `<tr>
+    ${cIdx === 0 ? `<td rowspan="3">${M8_SCENARIO_LABEL[t.scenario]}</td>` : ''}
+    <td>${c.label}</td>
+    <td>${m8RingLabel(c.ring)}</td>
+    <td>${c.houses != null ? c.houses.toLocaleString('nl-NL') : '—'}</td>
+    <td>${c.people != null ? m13Int(c.people) : '—'}</td>
+    <td>${c.hinder[0].people != null ? m13Int(c.hinder[0].people) : '—'}</td>
+    <td>${c.hinder[1].people != null ? m13Int(c.hinder[1].people) : '—'}</td>
+    <td>${c.hinder[2].people != null ? m13Int(c.hinder[2].people) : '—'}</td>
   </tr>`).join('')).join('');
   const hinderSection = `
   <section class="rp-section rp-avoid-break">
     <h2>5. Hindercijfers: RIVM, illustratief en kritisch scenario</h2>
-    <p>Het aantal ernstig gehinderde bewoners hangt sterk af van welk hinderpercentage wordt toegepast op de bewonersaantallen uit §4. Dit model toetst drie percentages naast elkaar, in plaats van er één als "de" uitkomst te presenteren:</p>
+    <p>Het aantal ernstig gehinderde bewoners hangt sterk af van welk hinderpercentage wordt toegepast — en, cruciaal, op <strong>welke bewonerspopulatie</strong>: elke geluidscategorie heeft een eigen overschrijdingsring en dus een eigen bewonersaantal (§4). Bij best case hoorbaar geluid vallen bijvoorbeeld maar enkele woningen binnen de norm-overschrijding — het hinderpercentage wordt daarom hier toegepast op die enkele woningen, niet op de veel grotere (en qua geluidstype andere) laagfrequent- of infrasoonpopulatie. Dit model toetst drie hinderpercentages naast elkaar, in plaats van er één als "de" uitkomst te presenteren:</p>
     <ul class="rp-list">
       <li><strong>9% — RIVM-basisscenario:</strong> ernstige hinder binnenshuis bij de oude 47 dB Lden-norm, uit de <a href="https://www.rivm.nl/sites/default/files/2026-02/Factsheet-gezondheidseffecten-van-windturbinegeluid.pdf" target="_blank" rel="noopener">RIVM-factsheet gezondheidseffecten van windturbinegeluid</a>.</li>
       <li><strong>30% — illustratief tussenscenario:</strong> geen uitkomst van één specifiek onderzoek, maar een tussenwaarde om de gevoeligheid van de uitkomst voor deze aanname te tonen.</li>
-      <li><strong>46% — kritisch scenario:</strong> uit <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC6121431/" target="_blank" rel="noopener">Pawlaczyk-Łuszczyńska e.a. (2018)</a>, gerapporteerd voor bewoners die aangeven windturbinegeluid 's nachts te horen.</li>
+      <li><strong>46% — kritisch scenario:</strong> uit <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC6121431/" target="_blank" rel="noopener">Pawlaczyk-Łuszczyńska e.a. (2018)</a>, gerapporteerd voor bewoners die aangeven windturbinegeluid 's nachts te horen — deze en de RIVM-9% zijn onderzoek naar <strong>hoorbaar</strong> geluid; toepassing op laagfrequent/infrasoon in de tabel hieronder is een illustratieve extrapolatie, omdat er geen aparte hinderpercentage-studies voor die frequentiebanden bestaan.</li>
     </ul>
-    <table class="rp-table">
-      <thead><tr><th>Scenario</th><th>Hinderpercentage</th><th>Bewoners (ontdubbeld)</th><th>Ernstig gehinderd</th></tr></thead>
+    <table class="rp-table rp-table-compact">
+      <thead><tr><th>Scenario</th><th>Categorie</th><th>Overschrijdingsring</th><th>Woningen</th><th>Bewoners (ring)</th><th>9% gehinderd</th><th>30% gehinderd</th><th>46% gehinderd</th></tr></thead>
       <tbody>${hinderRowsHtml}</tbody>
     </table>
   </section>`;
 
-  // ---- Sectie: zorgkosten ----
-  const costRowsHtml = matrix.map((t) => t.hinder.map((h, hIdx) => `<tr>
-    <td>${hIdx === 0 ? M8_SCENARIO_LABEL[t.scenario] : ''}</td>
-    <td>${h.pct}%</td>
-    <td>${h.costYear != null ? m9FmtEuro(h.costYear) : '—'}</td>
-    <td>${h.costHorizon != null ? m9FmtEuro(h.costHorizon) : '—'}</td>
+  // ---- Sectie: zorgkosten — PER CATEGORIE ----
+  const m13CostCell = (h) => h.people == null ? '—' : `${m13Int(h.people)} bew. → <strong>${m9FmtEuro(h.costHorizon)}</strong><br><span class="rp-src">(${m9FmtEuro(h.costYear)}/jr)</span>`;
+  const costRowsHtml = catMatrix.map((t) => t.categories.map((c, cIdx) => `<tr>
+    ${cIdx === 0 ? `<td rowspan="3">${M8_SCENARIO_LABEL[t.scenario]}</td>` : ''}
+    <td>${c.label}</td>
+    <td>${m13CostCell(c.hinder[0])}</td>
+    <td>${m13CostCell(c.hinder[1])}</td>
+    <td>${m13CostCell(c.hinder[2])}</td>
   </tr>`).join('')).join('');
   const costSection = `
   <section class="rp-section rp-avoid-break">
     <h2>6. Zorgkosten</h2>
-    <p>Geschatte zorgkosten volgen de formule <code>kosten = bewoners × €${costPerPerson.toFixed(2)}/persoon/jaar</code>, gebaseerd op <a href="https://doi.org/10.1016/j.ijheh.2023.114273" target="_blank" rel="noopener">Godono e.a. (2023)</a>, over een horizon van ${horizon} jaar.</p>
-    <table class="rp-table">
-      <thead><tr><th>Scenario</th><th>Hinder%</th><th>Kosten/jaar</th><th>Kosten over ${horizon} jaar</th></tr></thead>
+    <p>Geschatte zorgkosten volgen de formule <code>kosten = gehinderde bewoners (per categorie/ring) × €${costPerPerson.toFixed(2)}/persoon/jaar</code>, gebaseerd op <a href="https://doi.org/10.1016/j.ijheh.2023.114273" target="_blank" rel="noopener">Godono e.a. (2023)</a>, over een horizon van ${horizon} jaar. Net als in §5 wordt elk hinderpercentage toegepast op het bewonersaantal van de eigen categorie-ring, niet op een gecombineerd totaal.</p>
+    <table class="rp-table rp-table-compact">
+      <thead><tr><th>Scenario</th><th>Categorie</th><th>${M8_HINDER_SCENARIOS[0].pct}% <span class="rp-src">(${escapeHtml(M8_HINDER_SCENARIOS[0].label)})</span></th><th>${M8_HINDER_SCENARIOS[1].pct}% <span class="rp-src">(${escapeHtml(M8_HINDER_SCENARIOS[1].label)})</span></th><th>${M8_HINDER_SCENARIOS[2].pct}% <span class="rp-src">(${escapeHtml(M8_HINDER_SCENARIOS[2].label)})</span></th></tr></thead>
       <tbody>${costRowsHtml}</tbody>
     </table>
   </section>`;
 
-  // ---- Sectie: DALY's ----
-  const dalyRowsHtml = matrix.map((t) => t.hinder.map((h, hIdx) => `<tr>
-    <td>${hIdx === 0 ? M8_SCENARIO_LABEL[t.scenario] : ''}</td>
-    <td>${h.pct}%</td>
-    <td>${h.dalyHorizon != null ? m10FmtDaly(h.dalyHorizon) : '—'}</td>
-    <td>${h.values[0].euroHorizon != null ? m9FmtEuro(h.values[0].euroHorizon) : '—'}</td>
-    <td>${h.values[1].euroHorizon != null ? m9FmtEuro(h.values[1].euroHorizon) : '—'}</td>
-    <td>${h.values[2].euroHorizon != null ? m9FmtEuro(h.values[2].euroHorizon) : '—'}</td>
+  // ---- Sectie: DALY's — PER CATEGORIE ----
+  const m13DalyCell = (h) => {
+    if (h.people == null) return '—';
+    const v70 = h.values.find((v) => v.key === 'pbl');
+    return `${m13Int(h.people)} bew. → <strong>${m10FmtDaly(h.dalyHorizon)} DALY</strong><br><span class="rp-src">€70k/DALY (PBL): ${v70 && v70.euroHorizon != null ? m9FmtEuro(v70.euroHorizon) : '—'}</span>`;
+  };
+  const dalyRowsHtml = catMatrix.map((t) => t.categories.map((c, cIdx) => `<tr>
+    ${cIdx === 0 ? `<td rowspan="3">${M8_SCENARIO_LABEL[t.scenario]}</td>` : ''}
+    <td>${c.label}</td>
+    <td>${m13DalyCell(c.hinder[0])}</td>
+    <td>${m13DalyCell(c.hinder[1])}</td>
+    <td>${m13DalyCell(c.hinder[2])}</td>
   </tr>`).join('')).join('');
   const dalySection = `
   <section class="rp-section rp-avoid-break">
     <h2>7. DALY's — gezondheidsverlies in monetaire termen</h2>
-    <p>Disability weight slaapverstoring (0,010) + hinder (0,011) = <strong>${dwTotal.toFixed(3)} DALY per gehinderde bewoner per jaar</strong> (<a href="https://www.who.int/europe/publications/i/item/WHO-EURO-2024-9196-48968-72969" target="_blank" rel="noopener">WHO Europe 2024</a>), over ${horizon} jaar gewaardeerd tegen drie erkende Nederlandse referentiewaarden per DALY: <a href="https://www.pbl.nl/sites/default/files/downloads/PBL_2012_Gezondheid_in_MKBAs_van_omgevingsbeleid_550051004.pdf" target="_blank" rel="noopener">RIVM €50.000 en PBL €70.000</a>, en Zorginstituut Nederland €80.000.</p>
-    <table class="rp-table">
-      <thead><tr><th>Scenario</th><th>Hinder%</th><th>DALY (${horizon} jr)</th><th>€50k/DALY (RIVM)</th><th>€70k/DALY (PBL)</th><th>€80k/DALY (ZiN)</th></tr></thead>
+    <p>Disability weight slaapverstoring (0,010) + hinder (0,011) = <strong>${dwTotal.toFixed(3)} DALY per gehinderde bewoner per jaar</strong> (<a href="https://www.who.int/europe/publications/i/item/WHO-EURO-2024-9196-48968-72969" target="_blank" rel="noopener">WHO Europe 2024</a>), over ${horizon} jaar, per categorie/ring en per hinderpercentage — zelfde populatie-logica als §5–§6. Onderstaande tabel toont de PBL-referentiewaarde (€70.000/DALY); de RIVM- (€50.000) en Zorginstituut-waarderingen (€80.000) per scenario/categorie/hinderpercentage staan in Module 10 van de webapplicatie zelf.</p>
+    <table class="rp-table rp-table-compact">
+      <thead><tr><th>Scenario</th><th>Categorie</th><th>${M8_HINDER_SCENARIOS[0].pct}% <span class="rp-src">(${escapeHtml(M8_HINDER_SCENARIOS[0].label)})</span></th><th>${M8_HINDER_SCENARIOS[1].pct}% <span class="rp-src">(${escapeHtml(M8_HINDER_SCENARIOS[1].label)})</span></th><th>${M8_HINDER_SCENARIOS[2].pct}% <span class="rp-src">(${escapeHtml(M8_HINDER_SCENARIOS[2].label)})</span></th></tr></thead>
       <tbody>${dalyRowsHtml}</tbody>
     </table>
   </section>`;
@@ -3391,24 +3419,25 @@ function m13BuildReportHtml() {
     <p>Bron: <a href="https://doi.org/10.1016/j.enpol.2021.112327" target="_blank" rel="noopener">Droës &amp; Koster (2021), "Wind turbines, solar farms, and house prices", Energy Policy 155, 112327</a>. WOZ-uitgangswaarde: €${state.m11Woz.toLocaleString('nl-NL')}.</p>` : '<p><em>Geen BAG-gegevens of geen turbine geplaatst — waardedaling kan niet worden berekend.</em></p>'}
   </section>`;
 
-  // ---- Sectie: maatschappelijke kosten vs. investeringskosten ----
-  const socRowsHtml = socTotalsByPct.map((s) => `<tr>
+  // ---- Sectie: maatschappelijke kosten vs. investeringskosten — PER CATEGORIE (niet meer geblend) ----
+  const socRowsHtml = catSocByPct.map((cat) => cat.byPct.map((s, sIdx) => `<tr>
+    ${sIdx === 0 ? `<td rowspan="3">${cat.label}</td>` : ''}
     <td>${s.pct}% <span class="rp-src">(${escapeHtml(s.label)})</span></td>
     <td>${s.people != null ? m13Int(s.people) : '—'}</td>
     <td>${s.costHorizon != null ? m9FmtEuro(s.costHorizon) : '—'}</td>
     <td>${s.dalyHorizon != null ? m10FmtDaly(s.dalyHorizon) : '—'}</td>
     <td>${s.euro70k != null ? m9FmtEuro(s.euro70k) : '—'}</td>
-    <td>${(s.costHorizon != null && s.euro70k != null) ? m9FmtEuro(s.costHorizon + s.euro70k + (m11.hasData ? m11.totals.waarde : 0)) : '—'}</td>
-  </tr>`).join('');
+    <td>${socTotal(s) != null ? m9FmtEuro(socTotal(s)) : '—'}</td>
+  </tr>`).join('')).join('');
   const compareSection = `
   <section class="rp-section">
     <h2>10. Kritische vergelijking: maatschappelijke kosten versus investeringskosten</h2>
-    <p>De "maatschappelijke kosten" hieronder zijn de som van drie componenten: waardedaling van woningen (§9, eenmalig maar reëel verlies voor eigenaren), zorgkosten (§6, jaarlijks terugkerend over ${horizon} jaar) en het DALY-verlies gewaardeerd tegen €70.000/DALY (§7, PBL-waarde, jaarlijks terugkerend over ${horizon} jaar). Omdat het jaargemiddelde blootstelling betreft (§8.2), is dit geen worst-case-optelsom maar een <strong>jaargewogen gemiddelde</strong> over het best/middel/worst-scenario, per hinderpercentage.</p>
-    <table class="rp-table">
-      <thead><tr><th>Hinderpercentage</th><th>Bewoners (jaargewogen)</th><th>Zorgkosten (${horizon} jr)</th><th>DALY (${horizon} jr)</th><th>DALY-waarde (€70k)</th><th>Totaal maatsch. kosten¹</th></tr></thead>
+    <p>De "maatschappelijke kosten" hieronder zijn, <strong>per geluidscategorie apart</strong>, de som van drie componenten: waardedaling van woningen (§9, eenmalig maar reëel verlies voor eigenaren, categorie-onafhankelijk), zorgkosten (§6, jaarlijks terugkerend over ${horizon} jaar) en het DALY-verlies gewaardeerd tegen €70.000/DALY (§7, PBL-waarde, jaarlijks terugkerend over ${horizon} jaar). Omdat het jaargemiddelde blootstelling betreft (§8.2), is dit geen worst-case-optelsom maar een <strong>jaargewogen gemiddelde</strong> over het best/middel/worst-scenario, per categorie en hinderpercentage. Categorieën worden hier <strong>niet</strong> bij elkaar opgeteld: hoorbaar, laagfrequent en infrasoon zijn verschillende geluidstypen met eigen ringen en verschillende bewijskracht voor het toegepaste hinderpercentage (zie §5) — optellen zou tot dubbeltelling en categoriefouten leiden.</p>
+    <table class="rp-table rp-table-compact">
+      <thead><tr><th>Categorie</th><th>Hinderpercentage</th><th>Bewoners (jaargewogen)</th><th>Zorgkosten (${horizon} jr)</th><th>DALY (${horizon} jr)</th><th>DALY-waarde (€70k)</th><th>Totaal maatsch. kosten¹</th></tr></thead>
       <tbody>${socRowsHtml}</tbody>
     </table>
-    <p class="rp-note">¹ Zorgkosten + DALY-waarde (€70k) + waardedaling (§9, eenmalig, niet scenarioafhankelijk — daarom in elke rij hetzelfde bedrag opgeteld).</p>
+    <p class="rp-note">¹ Zorgkosten + DALY-waarde (€70k) + waardedaling (§9, eenmalig, niet scenario- of categorieafhankelijk — daarom in elke rij hetzelfde bedrag opgeteld). <strong>Hoorbaar</strong> is de wetenschappelijk best onderbouwde rij (RIVM/Pawlaczyk-onderzoek betreft hoorbaar geluid, §5); laagfrequent/infrasoon zijn illustratieve toepassingen van dezelfde hinderpercentages op hun eigen (grotere) ringpopulatie.</p>
     ${hasM12 ? `
     <p><strong>Investeringskosten (Module 12):</strong> ${m12rows.length} turbinegroep(en), totaal ${m12TotalVermogen.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW, totale investering <strong>${m9FmtEuro(m12TotalInvest)}</strong>.</p>
     <div class="rp-callout rp-warn">
@@ -3416,7 +3445,7 @@ function m13BuildReportHtml() {
       <ul class="rp-list">
         <li>De investeringskosten zijn <strong>eenmalig kapitaal</strong> van de projectontwikkelaar/investeerder, terugverdiend over de exploitatieperiode via energieverkoop (en doorgaans SDE++-subsidie) — een bedrijfseconomische kostenpost voor één partij.</li>
         <li>De maatschappelijke kosten zijn grotendeels <strong>jaarlijks terugkerende, gespreide lasten voor omwonenden</strong> — een andere partij, die geen deel heeft in de opbrengsten van de turbine.</li>
-        <li>Het is dus geen directe "aftrekpost" op de business case van de investeerder, maar wel een indicatie van hoe groot de externe kosten zijn ten opzichte van de kapitaalinzet: bij het meest kritische hinderpercentage (46%) bedraagt de geschatte maatschappelijke kostenpost over ${horizon} jaar <strong>${socTotalsByPct[2].costHorizon != null && socTotalsByPct[2].euro70k != null ? m9FmtEuro(socTotalsByPct[2].costHorizon + socTotalsByPct[2].euro70k + (m11.hasData ? m11.totals.waarde : 0)) : '—'}</strong>, tegenover een investering van <strong>${m9FmtEuro(m12TotalInvest)}</strong> — dat is <strong>${(socTotalsByPct[2].costHorizon != null && socTotalsByPct[2].euro70k != null && m12TotalInvest > 0) ? ((socTotalsByPct[2].costHorizon + socTotalsByPct[2].euro70k + (m11.hasData ? m11.totals.waarde : 0)) / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong> van de investering, puur aan externe kosten die niet in de businesscase van de ontwikkelaar zitten.</li>
+        <li>Op basis van de wetenschappelijk best onderbouwde rij (<strong>hoorbaar geluid, kritisch hinderpercentage 46%</strong>, §5) bedraagt de geschatte maatschappelijke kostenpost over ${horizon} jaar <strong>${hoorbaarCritTotal != null ? m9FmtEuro(hoorbaarCritTotal) : '—'}</strong>, tegenover een investering van <strong>${m9FmtEuro(m12TotalInvest)}</strong> — dat is <strong>${(hoorbaarCritTotal != null && m12TotalInvest > 0) ? (hoorbaarCritTotal / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong> van de investering, puur aan externe kosten die niet in de businesscase van de ontwikkelaar zitten. Wordt hetzelfde hinderpercentage illustratief ook op de (grotere) infrasoonring toegepast, loopt dit op tot <strong>${infrasoonCritTotal != null ? m9FmtEuro(infrasoonCritTotal) : '—'}</strong> (<strong>${(infrasoonCritTotal != null && m12TotalInvest > 0) ? (infrasoonCritTotal / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong>) — dat bovenste cijfer heeft echter geen eigen hinderstudie als onderbouwing (zie §5) en dient uitsluitend als gevoeligheidsindicatie.</li>
         <li>Deze externe kosten worden in de huidige vergunningverlening <strong>niet gecompenseerd of geïnternaliseerd</strong> (behalve, deels, via planschadevergoeding bij waardedaling boven de 4% NMR-drempel, §9) — ze blijven bij de omwonenden liggen, wat de aanleiding is voor het advies in §11.</li>
       </ul>
     </div>` : m12Banner}
@@ -3492,6 +3521,9 @@ function m13BuildReportHtml() {
   .rp-table th, .rp-table td { border: 1px solid #cfc6ae; padding: 5px 7px; text-align: left; vertical-align: top; }
   .rp-table thead th { background: #d3e0dd; font-family: 'Helvetica', 'Arial', sans-serif; font-weight: 700; font-size: 8.8pt; }
   .rp-table tbody tr:nth-child(even) { background: #f5f3ee; }
+  .rp-table-compact { font-size: 8pt; }
+  .rp-table-compact th, .rp-table-compact td { padding: 4px 5px; }
+  .rp-table-compact .rp-src { font-size: 7.3pt; }
   .rp-src { color: #5c6a63; font-size: 8.6pt; }
   .rp-note { font-size: 9pt; color: #5c6a63; font-style: italic; }
   .rp-list { margin: 6px 0 12px 18px; }
