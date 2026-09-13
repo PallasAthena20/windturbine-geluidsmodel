@@ -558,6 +558,29 @@
     </div>
   </section>
 
+  <section class="module" id="module-8a">
+    <div class="module-head">
+      <span class="module-num">Module 8a</span>
+      <h2>Gevolgen van A-weging op laagfrequent en infrasoon geluid</h2>
+    </div>
+    <p class="module-desc">Module 8 hierboven rekent laagfrequent geluid <strong>ongewogen</strong> (dB(Lin)) en infrasoon geluid <strong>G-gewogen</strong> (dB(G)) — de eenheden waarin deze twee geluidssoorten volgens de vakliteratuur daadwerkelijk beoordeeld moeten worden, omdat A-weging speciaal is ontworpen voor het menselijk gehoor bij middelhoge en hoge frequenties en lage tonen sterk onderdrukt. In de praktijk wordt windturbinegeluid echter vrijwel altijd getoetst met de wettelijke dB(A)-Lnight-norm, dus met A-weging over <em>alle</em> frequenties inclusief laagfrequent en infrasoon. Deze module rekent dat scenario expliciet door: dezelfde overschrijdingsring/woningen/bewoners-methodiek als Module 8, maar nu met de A-gewogen bronwaarde in plaats van de ongewogen/G-gewogen bronwaarde, en voor zowel dag als nacht.</p>
+
+    <div class="callout" id="m8a-context-callout">Plaats minstens één turbine op de kaart in Module 3 om deze module te gebruiken.</div>
+
+    <div id="m8a-tables"></div>
+
+    <div class="method-callout">
+      <h3>Waarom dit ertoe doet</h3>
+      <p><strong>De A-weging is niet neutraal.</strong> Bij 31,5/63/125 Hz (laagfrequent) trekt de A-weging respectievelijk −39,4 / −26,2 / −16,1 dB af; bij 8/16 Hz (infrasoon) is dat zelfs −77,8 / −56,7 dB (zie de octaafbandtabel van Module 1). Het bronniveau van laagfrequent geluid daalt daardoor typisch met circa 25 dB zodra je het A-weegt in plaats van ongewogen laat; infrasoon daalt met circa 65 dB. Een daling van 10 dB wordt door het menselijk oor ervaren als "twee keer zo zacht" — 25 tot 65 dB is dus geen kleine correctie, maar een numerieke bijna-uitwissing van precies de frequenties waar laagfrequent- en infrasoonhinder over gaat.</p>
+      <p><strong>Praktisch gevolg:</strong> omdat de overschrijdingsring in dit model direct afhangt van het bronniveau (Module 2/5), leidt die daling van 25–65 dB tot een veel kleinere ring, en dus tot veel minder getelde BAG-woningen en bewoners dan bij de ongewogen/G-gewogen toetsing van Module 8. Voor infrasoon kan de A-gewogen ring op vrijwel elke afstand al onder de norm duiken — het geluid "verdwijnt" numeriek, ook al is de fysieke drukgolf onveranderd aanwezig. Dit illustreert een kernkritiekpunt uit de aangeleverde position papers: uitsluitend toetsen in dB(A) onderschat systematisch de blootstelling aan laagfrequent en infrasoon geluid.</p>
+      <p><strong>Dag versus nacht:</strong> er bestaat in dit model geen apart, wettelijk vastgesteld dag-toetsingsniveau (zie Module 8 — toetsing gebeurt uitsluitend op de Lnight-norm). De dag-rijen hierboven toetsen daarom, net als de nacht-rijen, aan datzelfde Lnight-getal — uitsluitend om het effect van de nachtelijke windschering/inversietoeslag (Module 2/6/7) te isoleren van het effect van de A-weging. Lees het verschil tussen dag en nacht in deze tabellen dus als "het effect van de meteorologische nachttoeslag", niet als een aparte wettelijke dagnorm.</p>
+    </div>
+
+    <div class="callout m6-limitations">
+      <strong>Beperkingen:</strong> (1) Er is geen wettelijk vastgestelde dag-norm in dit model; de dag-kolom hierboven toetst indicatief aan dezelfde Lnight-waarde als de nacht-kolom, uitsluitend om de nachtelijke meteorologische toeslag te isoleren — zie hierboven. (2) De A-gewogen infrasoonwaarde is een rekenkundige exercitie, geen erkende meetmethode: er bestaat geen gepubliceerde praktijkstandaard die infrasoon geluid van windturbines routinematig A-weegt en tegen de Lnight-norm toetst. (3) Net als bij Module 8 wordt de overschrijdingsafstand afgerond naar boven op de eerstvolgende vaste ring (500/900/1300/1500/2000/5000 m), en zijn "woningen" unieke BAG-adresseerbare objecten binnen die ring rond elke geplaatste turbine. (4) Deze module herrekent geen zorgkosten of DALY's (Module 9/10 blijven gebaseerd op de ongewogen/G-gewogen cijfers van Module 8) — het doel hier is uitsluitend het tonen van het effect van de weegmethode zelf, niet een alternatieve kostenraming.</p>
+    </div>
+  </section>
+
   <!-- MODULE 9 -->
   <section class="module" id="module-9">
     <div class="module-head">

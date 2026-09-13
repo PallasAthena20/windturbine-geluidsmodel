@@ -501,6 +501,9 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .m8-card.m8-best .m8-hinder-num { color: var(--color-success); }
 .m8-card.m8-middel .m8-hinder-num { color: #d69e2e; }
 .m8-card.m8-worst .m8-hinder-num { color: var(--color-error); }
+#m8a-tables .m8a-scenario-card + .m8a-scenario-card { margin-top: var(--space-4); }
+.m8a-table tr.m8a-row-gewogen td { background: var(--color-warning-highlight); color: var(--color-warning); font-weight: 600; }
+.m8a-table tr.m8a-row-gewogen td:first-child, .m8a-table tr.m8a-row-gewogen td:nth-child(2) { color: var(--color-text); font-weight: 400; }
 #m8-fetch-status.m8-status-error,
 #m11-status.m8-status-error,
 #m11-cbs-status.m8-status-error,

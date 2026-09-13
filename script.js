@@ -56,7 +56,13 @@ function computeCategoryLw(lwaInput) {
   const hoorbaar = logSum(CATEGORY_BANDS.hoorbaar.map(f => lwa[BAND_INDEX[f]]));
   const laagfrequent = logSum(CATEGORY_BANDS.laagfrequent.map(f => lwUnweighted[BAND_INDEX[f]]));
   const infrasoon = logSum(CATEGORY_BANDS.infrasoon.map(f => lwUnweighted[BAND_INDEX[f]] + G_CORR[f]));
-  return { hoorbaar, laagfrequent, infrasoon, lwUnweighted, lwa, delta };
+  // A-gewogen varianten van dezelfde twee categorieën (t.b.v. Module 8a) — zelfde octaafbanden,
+  // maar nu gesommeerd via `lwa` (dus mét A_CORR) in plaats van via `lwUnweighted`/G_CORR.
+  // Laat zien wat er numeriek gebeurt als je (zoals de wettelijke dB(A)-norm impliciet doet)
+  // de A-weging ook toepast op laagfrequent en infrasoon geluid.
+  const laagfrequentA = logSum(CATEGORY_BANDS.laagfrequent.map(f => lwa[BAND_INDEX[f]]));
+  const infrasoonA = logSum(CATEGORY_BANDS.infrasoon.map(f => lwa[BAND_INDEX[f]]));
+  return { hoorbaar, laagfrequent, infrasoon, laagfrequentA, infrasoonA, lwUnweighted, lwa, delta };
 }
 
 // ---------- Directional propagation model ----------
@@ -1840,6 +1846,120 @@ function m8ComputeTotals() {
   });
 }
 
+// ==================== MODULE 8a: gevolgen van A-weging op laagfrequent/infrasoon ====================
+// Zelfde methodiek als Module 8 (ring → BAG-woningen → bewoners), maar nu berekend voor de twee
+// categorieën die normaal NIET A-gewogen worden (laagfrequent: dB(Lin); infrasoon: dB(G)), en voor
+// zowel dag als nacht. Laat zien wat er gebeurt als je (zoals de dB(A)-Lnight-norm in de praktijk
+// impliciet doet) de A-weging ook over laagfrequent en infrasoon geluid legt: A-weging onderdrukt
+// lage frequenties fors (zie Module 1/octaafbandtabel), dus "gewogen" geeft een veel lager niveau,
+// een veel kleinere overschrijdingsring en dus veel minder getelde woningen/bewoners dan "ongewogen".
+const M8A_CATEGORIES = [
+  { key: 'laagfrequent', label: 'Laagfrequent geluid', unweightedUnit: 'dB(Lin)', lwKey: 'laagfrequent', lwKeyA: 'laagfrequentA' },
+  { key: 'infrasoon', label: 'Infrasoon geluid', unweightedUnit: 'dB(G)', lwKey: 'infrasoon', lwKeyA: 'infrasoonA' },
+];
+const M8A_PERIODS = [
+  { key: 'dag', label: 'Dag' },
+  { key: 'nacht', label: 'Nacht' },
+];
+const M8A_WEGINGEN = [
+  { key: 'ongewogen', label: 'Ongewogen' },
+  { key: 'gewogen', label: 'Gewogen (A)' },
+];
+
+// Zoals m8ExceedanceRadius(), maar met expliciete daynight EN een meegegeven lwCat (i.p.v. altijd
+// 'nacht' en altijd de standaard-Lw van de categorie) zodat dezelfde ring/woningen-machinerie ook
+// voor de dag-kolom en voor de A-gewogen variant kan worden hergebruikt.
+function m8aExceedanceRadius(scenarioKey, categoryKey, daynightKey, lwCat) {
+  const norm = getActiveNorm();
+  if (norm.lnight == null) return null;
+  const nightState = { scenario: scenarioKey, daynight: daynightKey, curtailment: state.curtailment, windBearing: state.windBearing };
+  let radius = null;
+  DISTANCES.forEach((d) => {
+    const lp = lpAt(d, 1, categoryKey, lwCat, nightState);
+    if (lp > norm.lnight) radius = d;
+  });
+  return radius;
+}
+
+// Bouwt, per scenario (best/middel/worst — "in alle scenario's"), de 2 (categorie) × 2 (dag/nacht)
+// × 2 (ongewogen/gewogen) = 8-rijen-staatje. Let op: er bestaat geen aparte, wettelijk vastgestelde
+// dag-norm in dit model (zie Module 8/methodologie — toetsing gebeurt uitsluitend op Lnight); de
+// dag-rijen hieronder toetsen daarom één-op-één aan datzelfde Lnight-getal, uitsluitend om het
+// effect van de nachtelijke windschering/inversietoeslag (Module 2) te isoleren — net zoals Module 8
+// de dB(A)-Lnight-norm ook al als indicatief referentiepunt voor infrasoon (dB(G)) gebruikt.
+function m8aComputeRows() {
+  const catLw = computeCategoryLw(state.lwa);
+  const hasData = !!state.m8AddressData;
+  return ['best', 'middel', 'worst'].map((scenario) => {
+    const rows = [];
+    M8A_CATEGORIES.forEach((cat) => {
+      M8A_PERIODS.forEach((period) => {
+        M8A_WEGINGEN.forEach((weging) => {
+          const isWeighted = weging.key === 'gewogen';
+          const lwCat = isWeighted ? catLw[cat.lwKeyA] : catLw[cat.lwKey];
+          const unit = isWeighted ? 'dB(A)' : cat.unweightedUnit;
+          const ring = m8aExceedanceRadius(scenario, cat.key, period.key, lwCat);
+          const houses = hasData ? m8CountUnique(ring) : null;
+          const people = houses != null ? houses * state.m8HouseholdSize : null;
+          rows.push({
+            catKey: cat.key, catLabel: cat.label, periodLabel: period.label,
+            wegingKey: weging.key, wegingLabel: weging.label,
+            lw: lwCat, unit, ring, houses, people,
+          });
+        });
+      });
+    });
+    return { scenario, rows };
+  });
+}
+
+function renderModule8a() {
+  const container = document.getElementById('m8a-tables');
+  const contextCallout = document.getElementById('m8a-context-callout');
+  if (!container) return;
+  const n = state.turbines3a.length;
+  const norm = getActiveNorm();
+  const normHasLnight = norm.lnight != null;
+  if (contextCallout) {
+    if (n === 0) {
+      contextCallout.textContent = 'Plaats minstens één turbine op de kaart in Module 3 om deze module te gebruiken.';
+    } else if (!normHasLnight) {
+      contextCallout.textContent = `De geselecteerde norm (${norm.label}) heeft geen Lnight-waarde — deze vergelijking kan hiermee niet worden bepaald. Kies een andere norm bij Module 5.`;
+    } else if (!state.m8AddressData) {
+      contextCallout.textContent = 'Nog geen BAG-gegevens — klik hierboven bij Module 8 op "Woningen ophalen (BAG)".';
+    } else {
+      contextCallout.innerHTML = `Zelfde ${m8CountUnique(M8_FETCH_RADIUS).toLocaleString('nl-NL')} BAG-adressen als Module 8 hierboven, nu doorgerekend met de A-gewogen variant van laagfrequent en infrasoon geluid, voor zowel dag als nacht.`;
+    }
+  }
+  const rows = m8aComputeRows();
+  const dash = '—';
+  container.innerHTML = rows.map((r) => `
+    <div class="data-table-card m8a-scenario-card">
+      <h3>${M8_SCENARIO_LABEL[r.scenario]}</h3>
+      <div class="cum-result-wrap">
+      <table class="data-table m8a-table">
+        <thead>
+          <tr><th>Categorie</th><th>Periode</th><th>Weging</th><th>Bronniveau</th><th>Overschrijdingsring</th><th>Woningen (BAG)</th><th>Bewoners</th></tr>
+        </thead>
+        <tbody>
+          ${n === 0 ? `<tr><td colspan="7" class="empty-row">Plaats een turbine op de kaart en klik bij Module 8 op "Woningen ophalen (BAG)".</td></tr>` : r.rows.map((row, idx) => {
+            const firstOfCat = idx % 4 === 0;
+            return `<tr class="${row.wegingKey === 'gewogen' ? 'm8a-row-gewogen' : ''}">
+              <td>${firstOfCat ? row.catLabel : ''}</td>
+              <td>${row.periodLabel}</td>
+              <td>${row.wegingLabel}</td>
+              <td>${row.lw != null ? row.lw.toFixed(1) + ' ' + row.unit : dash}</td>
+              <td>${m8RingLabel(row.ring)}</td>
+              <td>${row.houses != null ? row.houses.toLocaleString('nl-NL') : dash}</td>
+              <td>${row.people != null ? Math.round(row.people).toLocaleString('nl-NL') : dash}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      </div>
+    </div>`).join('');
+}
+
 function renderModule8() {
   const contextCallout = document.getElementById('m8-context-callout');
   const fetchStatus = document.getElementById('m8-fetch-status');
@@ -1980,6 +2100,7 @@ function renderModule8() {
     }
   }
 
+  renderModule8a();
   renderModule9();
   renderModule10();
   renderModule11();
