@@ -789,6 +789,11 @@ function applyMapTileTheme3a() {
   if (!tileLayer3a) {
     tileLayer3a = L.maplibreGL({
       style: 'https://tiles.openfreemap.org/styles/positron',
+      // preserveDrawingBuffer: nodig om de WebGL-kaart later als afbeelding te kunnen
+      // vastleggen voor het Module 13-rapport (zie m13CaptureSingleView) — zonder deze optie
+      // wist de browser de canvas-buffer meteen na elke render en levert toDataURL() een
+      // leeg/zwart beeld op.
+      preserveDrawingBuffer: true,
       attributionControl: {
         customAttribution: 'MapLibre | <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> \u00a9 <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
       },
@@ -3199,7 +3204,8 @@ function m13Int(n) {
 
 // Bouwt de volledige rapport-HTML als losstaand document (eigen <style>, geen afhankelijkheid
 // van style.css) zodat het exact zo afdrukt/PDF't als getoond, ook nadat de tab losstaat van de app.
-function m13BuildReportHtml() {
+function m13BuildReportHtml(mapImages) {
+  const mapViews = mapImages || { closeup: null, regional: null };
   const now = new Date();
   const genDate = now.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
   const genTime = now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
@@ -3221,6 +3227,7 @@ function m13BuildReportHtml() {
   const m12TotalVermogen = m12rows.reduce((s, row) => s + row.vermogenTotaalMw, 0);
   const hasBag = r.hasBag;
   const hasM12 = r.hasM12;
+  const rows8a = m8aComputeRows();
 
   // BELANGRIJK: hinder-, zorgkosten- en DALY-berekeningen moeten PER GELUIDSCATEGORIE (hoorbaar/
   // laagfrequent/infrasoon) worden toegepast op de bewoners die zich BINNEN DE RING VAN DIE CATEGORIE
@@ -3576,6 +3583,78 @@ function m13BuildReportHtml() {
     </ol>
   </section>`;
 
+  // ---- Sectie: Position paper (A-weging) — dynamisch, o.b.v. Module 8a en de actuele turbinepositie(s) ----
+  const m13aFindRow = (scenario, catKey) => {
+    const s = rows8a.find((rr) => rr.scenario === scenario);
+    if (!s) return null;
+    return s.rows.find((rr) => rr.catKey === catKey && rr.periodLabel === 'Nacht') || null;
+  };
+  const m13aPctRound = (row) => (row && row.afnamePct != null) ? Math.round(row.afnamePct) : null;
+  const m13aErased = (row) => m13aPctRound(row) != null && m13aPctRound(row) >= 100;
+  const m13aResidual = (row) => m13aPctRound(row) != null && m13aPctRound(row) < 100 && row.housesM8a > 0;
+  const m13aScenarios = ['best', 'middel', 'worst'];
+  const lfNightRows = m13aScenarios.map((sc) => ({ scenario: sc, label: M8_SCENARIO_LABEL[sc], row: m13aFindRow(sc, 'laagfrequent') }));
+  const infraNightRows = m13aScenarios.map((sc) => ({ scenario: sc, label: M8_SCENARIO_LABEL[sc], row: m13aFindRow(sc, 'infrasoon') }));
+  const lfHasAnyData = lfNightRows.some((x) => x.row && x.row.housesM8 != null);
+  const infraHasAnyData = infraNightRows.some((x) => x.row && x.row.housesM8 != null);
+  const lfResidual = lfNightRows.filter((x) => m13aResidual(x.row));
+  const infraResidual = infraNightRows.filter((x) => m13aResidual(x.row));
+  const lfErasedCount = lfNightRows.filter((x) => m13aErased(x.row)).length;
+  const infraErasedCount = infraNightRows.filter((x) => m13aErased(x.row)).length;
+
+  const m13aResidualSentence = (label, residual, erasedCount) => {
+    if (residual.length === 0) {
+      return `voor <strong>${label}</strong> verdwijnt de overschrijding in alle drie de scenario's (best/middel/worst) volledig na A-weging (${erasedCount}/3 op nul woningen na weging)`;
+    }
+    const worst = residual[residual.length - 1];
+    return `voor <strong>${label}</strong> blijft in ${residual.length} van de 3 scenario's een overschrijding over na A-weging — het zwaarste geval (${worst.label.toLowerCase()}) resulteert in <strong>${m13Int(worst.row.housesM8a)} van de ${m13Int(worst.row.housesM8)} woningen</strong> die zonder A-weging binnen de overschrijdingsring zouden vallen (een afname van &ldquo;slechts&rdquo; ${m13aPctRound(worst.row)}% in plaats van 100%)`;
+  };
+
+  const m13aTableRow = (scenarioLabel, catLabel, row) => {
+    if (!row || row.housesM8 == null) {
+      return `<tr><td>${scenarioLabel}</td><td>${catLabel}</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>`;
+    }
+    return `<tr><td>${scenarioLabel}</td><td>${catLabel}</td><td>${row.lwM8.toFixed(1)} ${row.unweightedUnit} → ${row.lwM8a.toFixed(1)} dB(A)</td><td>${row.deltaDb != null ? row.deltaDb.toFixed(1) : '—'}</td><td>${m13Int(row.housesM8)} → ${m13Int(row.housesM8a)}</td><td>${row.afnamePct != null ? '−' + Math.round(row.afnamePct) + '%' : '—'}</td></tr>`;
+  };
+
+  const positioningPaperSection = (hasBag && (lfHasAnyData || infraHasAnyData)) ? `
+  <section class="rp-section rp-avoid-break">
+    <h2>12. Position paper: A-weging maskeert laagfrequent en infrasoon geluid</h2>
+    <h3>12.1 Kernboodschap</h3>
+    <p><strong>De Nederlandse geluidsnorm voor windturbines (${escapeHtml(norm.label)}${norm.lnight != null ? `, Lnight ≤ ${norm.lnight} dB` : ''}) rekent uitsluitend in A-gewogen decibellen — de eenheid die is afgestemd op het menselijk gehoor voor gewoon, hoorbaar geluid. Op laagfrequent geluid (20–125 Hz) trekt die weging tot circa 39 dB af; op infrasoon geluid (&lt;20 Hz) tot bijna 78 dB. Doorgerekend op de hierboven vermelde turbinepositie(s) ${m13aResidualSentence('infrasoon geluid', infraResidual, infraErasedCount)}, en ${m13aResidualSentence('laagfrequent geluid', lfResidual, lfErasedCount)} — niet omdat er geen geluid meer is, maar omdat de meetmethode het numeriek onzichtbaar maakt.</strong></p>
+    <p>Dat is geen bijverschijnsel maar een <strong>cirkelredenering</strong>: eerst een filter toepassen dat specifiek laagfrequent en infrasoon geluid onderdrukt, en vervolgens concluderen dat er geen probleem is (<a href="https://sonavyx.com/en/insights/iec-61672-1-frequency-weighting" target="_blank" rel="noopener">SonaVyx</a>). Denemarken doorbrak die redenering in 2012 met een aparte, ongewogen LFG-norm, getoetst bij representatieve <em>ongunstige</em> windsnelheden (6–8 m/s) in plaats van een jaargemiddelde (<a href="https://docs.wind-watch.org/vandenBerg-SoundOfHighWinds.pdf" target="_blank" rel="noopener">Van den Berg</a>). Nederland heeft die stap nooit gezet: de overheid achtte een aparte norm voor laagfrequent geluid &ldquo;tot nog toe onnodig&rdquo; (<a href="https://www.rivm.nl/sites/default/files/2018-11/Kennisbericht_Geluid_van_windturbines_versie_1punt0_20150611.pdf" target="_blank" rel="noopener">RIVM, 2015</a>), en beantwoordt Kamervragen over aanhoudende klachten met de stelling dat er &ldquo;geen reden&rdquo; is voor aanvullende normen (<a href="https://zoek.officielebekendmakingen.nl/ah-tk-20202021-620.html" target="_blank" rel="noopener">Rijksoverheid</a>).</p>
+    ${lfResidual.length > 0 ? `<p>Het scenario met de grootste resterende overschrijding na A-weging — <strong>${lfResidual[lfResidual.length - 1].label.toLowerCase()}, nacht, laagfrequent</strong> — is precies het type piekmoment dat een jaargemiddelde Lnight-toets wegmiddelt tussen de vele rustigere nachten (zie §8.3). Dat scenario, niet het jaargemiddelde, is het scenario waarop beleid en vergunningverlening zich zouden moeten richten als het doel is om laagfrequente en infrasone hinder daadwerkelijk te kunnen zien voordat een vergunning wordt verleend.</p>` : `<p>Bij deze turbinepositie(s) verdwijnt de overschrijding voor beide categorieën in alle drie de scenario's volledig na A-weging. Dat betekent niet dat er geen laagfrequent of infrasoon geluid is — het betekent dat de gekozen meetmethode het bij deze specifieke plaatsing numeriek volledig onzichtbaar maakt, en dat een andere plaatsing (dichter bij woningen, of een zwaardere turbine) dit beeld kan omslaan naar een resterende overschrijding zoals bij een minder gunstige locatie.</p>`}
+
+    <h3>12.2 Waar dit rapport is getoetst</h3>
+    <p>De cijfers hierboven zijn niet abstract: ze zijn doorgerekend op de ${n} hierboven vermelde turbinepositie(s) (${escapeHtml(turbineList)}, bronvermogen ${state.lwa.toFixed(1)} dB(A)), met de zes vaste toetsingsringen van het model (500 / 900 / 1.300 / 1.500 / 2.000 / 5.000 m).</p>
+    ${m13MapImagesHtml(mapViews, turbineList)}
+
+    <h3>12.3 Wat de A-weging numeriek wegfiltert</h3>
+    <table class="rp-table rp-table-compact">
+      <thead><tr><th>Scenario</th><th>Categorie</th><th>Bronniveau<br><span class="rp-src">ongewogen → A-gewogen</span></th><th>Δ (dB)</th><th>Woningen<br><span class="rp-src">ongewogen → A-gewogen</span></th><th>Afname</th></tr></thead>
+      <tbody>
+        ${lfNightRows.map((x) => m13aTableRow(x.label, 'Laagfrequent', x.row)).join('')}
+        ${infraNightRows.map((x) => m13aTableRow(x.label, 'Infrasoon', x.row)).join('')}
+      </tbody>
+    </table>
+    <p class="rp-note">Alle rijen betreffen de nachtperiode (zie §2); cijfers afgeleid van Module 8a, ringen en woningtellingen zoals gedefinieerd in Module 3/8.</p>
+
+    <h3>12.4 Beperkingen van Module 8a en beleidsaanbevelingen</h3>
+    <p>Module 8a maakt het effect van A-weging zichtbaar, maar heeft zelf vijf methodologische beperkingen. Elke beperking wijst naar een concrete stap die nodig is om de onderliggende blinde vlek in de bestaande normstelling weg te nemen — niet in het model, maar in beleid en vergunningverlening.</p>
+    <ol class="rp-list">
+      <li><strong>Geen wettelijk vastgestelde dag-norm.</strong> Het model toetst de dag-periode indicatief aan dezelfde Lnight-waarde als de nacht, omdat een aparte wettelijke dagnorm voor laagfrequent/infrasoon geluid ontbreekt. <em>Aanbeveling:</em> introduceer een expliciete, aparte toetsingswaarde voor laagfrequent en infrasoon geluid overdag, analoog aan de bestaande Lden/Lnight-tweedeling voor hoorbaar geluid.</li>
+      <li><strong>A-gewogen infrasoon is een rekenexercitie, geen erkende meetmethode.</strong> Er bestaat geen gepubliceerde praktijkstandaard die infrasoon geluid van windturbines routinematig A-weegt en tegen de Lnight-norm toetst. <em>Aanbeveling:</em> herstel een onafhankelijk, doorlopend expertiseplatform voor windturbinegeluid met een specifiek mandaat voor laagfrequent/infrasoon meting — de eerdere pilot van het Kennisplatform Windenergie werd na evaluatie stopgezet en niet uitgebreid (<a href="https://zoek.officielebekendmakingen.nl/kst-33612-61.pdf" target="_blank" rel="noopener">Kamerstuk 33 612, nr. 61</a>); laat dat platform een erkende, ongewogen meetmethode vaststellen vóórdat nieuwe vergunningen worden verleend.</li>
+      <li><strong>Toetsingsring van 5 km ligt ruim binnen de werkelijke reikwijdte van infrasoon.</strong> Overschrijdingsafstanden worden afgerond op de eerstvolgende vaste ring, met 5.000 m als maximum. Onder gunstige atmosferische omstandigheden kan infrasoon van grote turbines zich over meer dan 10 km verspreiden (<a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson e.a., 2026</a>), en wordt infrasoon volgens andere bronnen in de standaard emissiemeting (20–20.000 Hz) in het geheel niet meegenomen (<a href="https://www.platformwindenergiedezijpe.nl/wp-content/uploads/2020/11/Geluid-windturbines.pdf" target="_blank" rel="noopener">Platform Windenergie De Zijpe</a>). <em>Aanbeveling:</em> verplicht in de vergunningsaanvraag propagatiemodellering tot minimaal 10–15 km voor infrasoon bij gevoelige bestemmingen, en laat de emissiemeting het volledige frequentiebereik &lt;20 Hz omvatten.</li>
+      <li><strong>Definitieverschil tussen de aangeleverde position papers en de octaafbanden van het model.</strong> De aangeleverde position papers definiëren &ldquo;laagfrequent geluid&rdquo; breder (20–200 Hz) dan de octaafbanden die dit model gebruikt (31,5/63/125 Hz); de richting van de bevindingen is gelijk, maar de exacte getallen zijn niet 1-op-1 herleidbaar naar die bredere definitie. <em>Aanbeveling:</em> harmoniseer de wettelijke/beleidsmatige definitie van laagfrequent geluid met een eenduidige, internationaal herkenbare tertsbanddefinitie zoals in de Deense norm.</li>
+      <li><strong>Geen doorrekening naar zorgkosten of gezondheidsverlies op basis van A-weging.</strong> Module 9 (zorgkosten) en Module 10 (DALY's) blijven gebaseerd op de ongewogen/G-gewogen bewonersaantallen van Module 8; het A-wegingseffect van Module 8a wordt daar niet in doorgerekend. <em>Aanbeveling:</em> laat gezondheidseffectonderzoek (RIVM, GGD) blootstelling baseren op ongewogen, laagfrequent-specifieke geluidsniveaus in plaats van op de A-gewogen dB(A)-Lnight-waarde alleen.</li>
+    </ol>
+    <p class="rp-note">Bronnen bij deze position paper: <a href="https://sonavyx.com/en/insights/iec-61672-1-frequency-weighting" target="_blank" rel="noopener">SonaVyx — IEC 61672-1 frequency weighting</a> · <a href="https://docs.wind-watch.org/vandenBerg-SoundOfHighWinds.pdf" target="_blank" rel="noopener">Van den Berg — The Sound of High Winds</a> · <a href="https://www.rivm.nl/sites/default/files/2018-11/Kennisbericht_Geluid_van_windturbines_versie_1punt0_20150611.pdf" target="_blank" rel="noopener">RIVM (2015)</a> · <a href="https://zoek.officielebekendmakingen.nl/ah-tk-20202021-620.html" target="_blank" rel="noopener">Kamervragen Beckerman &amp; Van Gerven</a> · <a href="https://zoek.officielebekendmakingen.nl/kst-33612-61.pdf" target="_blank" rel="noopener">Kamerstuk 33 612, nr. 61</a> · <a href="https://www.platformwindenergiedezijpe.nl/wp-content/uploads/2020/11/Geluid-windturbines.pdf" target="_blank" rel="noopener">Platform Windenergie De Zijpe</a> · <a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson e.a. (2026), Applied Acoustics</a>.</p>
+  </section>` : `
+  <section class="rp-section">
+    <h2>12. Position paper: A-weging maskeert laagfrequent en infrasoon geluid</h2>
+    <p><em>${n === 0 ? 'Plaats minstens één turbine in Module 3 en haal de BAG-woningen op bij Module 8 om deze positioning paper met locatiespecifieke cijfers te vullen.' : 'Nog geen BAG-gegevens opgehaald bij Module 8 voor deze turbinepositie(s) — plaats de turbine(s) en klik op "Woningen ophalen (BAG)" om deze sectie te vullen.'}</em></p>
+  </section>`;
+
   const bronnenSection = `
   <section class="rp-section">
     <h2>Bronnen</h2>
@@ -3635,6 +3714,11 @@ function m13BuildReportHtml() {
   .rp-sources li { margin-bottom: 4px; }
   code { font-family: 'Courier New', monospace; background: #ece8de; padding: 1px 4px; border-radius: 3px; font-size: 0.92em; }
   .rp-footer { margin-top: 24px; padding-top: 10px; border-top: 1px solid #cfc6ae; font-size: 8.3pt; color: #92998f; }
+  .rp-map-grid { display: flex; gap: 12px; margin: 10px 0 6px; flex-wrap: wrap; }
+  .rp-map-fig { flex: 1 1 0; min-width: 0; margin: 0; }
+  .rp-map-grid-1 .rp-map-fig { flex: 0 1 68%; margin: 0 auto; }
+  .rp-map-fig img { width: 100%; height: auto; display: block; border: 1px solid #cfc6ae; border-radius: 4px; }
+  .rp-map-fig figcaption { font-size: 8.6pt; color: #5c6a63; margin-top: 4px; text-align: center; }
   a { color: #0e4a4a; }
   @media print { .rp-toolbar { display: none !important; } .rp-page { max-width: none; padding: 0; } }
 </style>
@@ -3659,6 +3743,7 @@ function m13BuildReportHtml() {
   ${valueSection}
   ${compareSection}
   ${advisorySection}
+  ${positioningPaperSection}
   ${bronnenSection}
   <div class="rp-footer">Automatisch gegenereerd door het interactieve windturbinegeluidsmodel (Module 13). Dient ter beleidsmatige illustratie — vervangt geen formeel akoestisch onderzoek, planschadetaxatie of gezondheidskundig advies. Klik linksboven op "Afdrukken / opslaan als PDF" en kies als bestemming "Opslaan als PDF" om dit rapport te downloaden.</div>
 </div>
@@ -3666,13 +3751,119 @@ function m13BuildReportHtml() {
 </html>`;
 }
 
-function m13OpenReport() {
-  const html = m13BuildReportHtml();
+// ---- Kaartafbeeldingen voor het rapport (§12) — legt de daadwerkelijke turbinepositie(s)
+// vast, niet een statische referentieafbeelding. Gebruikt html2canvas om de volledige
+// kaartcontainer (MapLibre-GL-tegels + Leaflet-canvasrenderer met de ringen + DOM-markers)
+// tot één PNG te composeren. preserveDrawingBuffer:true op tileLayer3a (zie applyMapTileTheme3a)
+// zorgt dat de WebGL-tegellaag leesbaar blijft voor html2canvas/toDataURL.
+function m13WaitMapIdle(timeout) {
+  return new Promise((resolve) => {
+    if (!map3a || !tileLayer3a || typeof tileLayer3a.getMaplibreMap !== 'function') {
+      resolve();
+      return;
+    }
+    const glMap = tileLayer3a.getMaplibreMap();
+    if (!glMap) {
+      resolve();
+      return;
+    }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    try {
+      glMap.once('idle', finish);
+    } catch (e) {
+      finish();
+      return;
+    }
+    setTimeout(finish, timeout || 900);
+  });
+}
+
+async function m13CaptureSingleView() {
+  const mapEl = document.getElementById('turbine-map-3a');
+  if (!mapEl || typeof html2canvas !== 'function' || !map3a) return null;
+  const container = mapEl.closest('.m3a-map-wrap') || mapEl;
+  container.classList.add('m13-capturing');
+  try {
+    map3a.invalidateSize();
+    await m13WaitMapIdle(900);
+    await new Promise((r) => setTimeout(r, 120));
+    const canvas = await html2canvas(mapEl, {
+      useCORS: true,
+      backgroundColor: null,
+      scale: 2,
+      logging: false,
+    });
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    console.warn('Kaartafbeelding voor rapport kon niet worden vastgelegd:', e);
+    return null;
+  } finally {
+    container.classList.remove('m13-capturing');
+  }
+}
+
+async function m13CaptureMapViews() {
+  if (!map3a || state.turbines3a.length === 0) return { closeup: null, regional: null };
+  const originalCenter = map3a.getCenter();
+  const originalZoom = map3a.getZoom();
+  let closeup = null;
+  let regional = null;
+  try {
+    closeup = await m13CaptureSingleView();
+    const regioZoom = Math.max(map3a.getMinZoom ? map3a.getMinZoom() : 6, originalZoom - 4);
+    if (regioZoom < originalZoom) {
+      map3a.setView(originalCenter, regioZoom, { animate: false });
+      await new Promise((r) => setTimeout(r, 200));
+      regional = await m13CaptureSingleView();
+    }
+  } finally {
+    map3a.setView(originalCenter, originalZoom, { animate: false });
+    await new Promise((r) => setTimeout(r, 60));
+  }
+  return { closeup, regional };
+}
+
+function m13MapImagesHtml(mapViews, turbineListStr) {
+  const closeup = mapViews && mapViews.closeup;
+  const regional = mapViews && mapViews.regional;
+  if (!closeup && !regional) {
+    return `<p class="rp-note"><em>De kaartafbeelding van de turbinepositie(s) kon niet automatisch worden vastgelegd bij het genereren van dit rapport (mogelijk blokkeerde de browser het uitlezen van de kaart, of html2canvas kon niet laden). Zie Module 3 in de app voor de actuele kaartweergave op ${escapeHtml(turbineListStr)}.</em></p>`;
+  }
+  const figs = [];
+  if (closeup) figs.push(`<figure class="rp-map-fig"><img src="${closeup}" alt="Kaart met de geplaatste turbine(s), directe omgeving"><figcaption>Directe omgeving van de geanalyseerde turbine(s): ${escapeHtml(turbineListStr)}.</figcaption></figure>`);
+  if (regional) figs.push(`<figure class="rp-map-fig"><img src="${regional}" alt="Regionale context van de geplaatste turbine(s)"><figcaption>Regionale context van dezelfde locatie(s).</figcaption></figure>`);
+  return `<div class="rp-map-grid rp-map-grid-${figs.length}">${figs.join('')}</div>`;
+}
+
+async function m13OpenReport() {
+  const btn = document.getElementById('m13-generate-btn');
+  const originalBtnText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Kaart wordt vastgelegd…';
+  }
+  let mapViews = { closeup: null, regional: null };
+  try {
+    mapViews = await m13CaptureMapViews();
+  } catch (e) {
+    console.warn('Kaartcapture voor rapport mislukt:', e);
+  }
+  if (btn) btn.textContent = 'Rapport wordt opgebouwd…';
+  const html = m13BuildReportHtml(mapViews);
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   const win = window.open(url, '_blank');
   if (!win) {
     alert('De pop-up werd geblokkeerd door de browser — sta pop-ups toe voor deze pagina en klik opnieuw op "Rapport genereren (PDF)".');
+  }
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = originalBtnText || 'Rapport genereren (PDF)';
   }
 }
 

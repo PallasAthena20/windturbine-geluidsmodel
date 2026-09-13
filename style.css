@@ -341,6 +341,10 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 #turbine-map.map-dark-filter .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.85); }
 #turbine-map-3a.map-dark-filter .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.9); }
 @media (max-width: 640px) { #turbine-map, #turbine-map-3a { height: 420px; } }
+/* Verbergt de zoomknoppen tijdens het vastleggen van de kaartafbeelding voor het Module 13-rapport,
+   zodat die UI-elementen niet in de geëxporteerde afbeelding verschijnen. */
+#turbine-map-3a.m13-capturing .leaflet-control-zoom,
+#turbine-map-3a.m13-capturing .leaflet-control-attribution { visibility: hidden; }
 
 .compass-rose-ctrl {
   width: 42px; height: 42px; margin: 10px !important;
