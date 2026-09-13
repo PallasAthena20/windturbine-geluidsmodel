@@ -554,3 +554,13 @@ footer { text-align: center; padding: var(--space-10) var(--space-6); color: var
 .m10-value-grid { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-2); }
 .m10-value-chip { font-family: var(--font-mono); font-size: 0.72rem; background: var(--color-surface-offset-2); padding: 3px 8px; border-radius: 999px; white-space: nowrap; color: var(--color-text); }
 .m10-value-chip small { font-family: var(--font-sans, inherit); color: var(--color-text-faint); }
+
+/* ---------- Ontdubbelde totalen (Module 8/9/10) — het "kerncijfer" boven de categorie-detailtabellen ---------- */
+.module-subhead { margin: var(--space-6) 0 var(--space-2); }
+.module-subhead h3 { font-size: var(--text-base); font-weight: 700; color: var(--color-text); margin-bottom: var(--space-2); }
+.callout.m8-totals-highlight, .callout.m9-totals-highlight, .callout.m10-totals-highlight { background: var(--color-success-highlight); border-left: 3px solid var(--color-success); }
+.callout.m8-totals-highlight h3, .callout.m9-totals-highlight h3, .callout.m10-totals-highlight h3 { font-size: var(--text-base); font-weight: 700; margin-bottom: var(--space-2); color: var(--color-text); }
+.m8-totals-text, .m9-totals-text, .m10-totals-text { margin-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
+.m8-totals-line, .m9-totals-line, .m10-totals-line { font-size: var(--text-sm); line-height: 1.6; padding: var(--space-2) var(--space-3); background: var(--color-surface); border-radius: var(--radius-md); }
+tr.m8-totals-row, tr.m9-totals-row, tr.m10-totals-row { font-weight: 700; background: var(--color-success-highlight); }
+tr.m8-totals-row td, tr.m9-totals-row td, tr.m10-totals-row td { color: var(--color-text); }

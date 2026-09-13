@@ -492,10 +492,33 @@
     <p class="hint" id="m8-household-hint">Standaardwaarde 2,10 personen/huishouden: CBS, <a href="https://www.cbs.nl/nl-nl/cijfers/detail/86030NED" target="_blank" rel="noopener">Prognose huishoudens op 1 januari; kerncijfers 2025-2070</a> (peildatum 1 januari 2025) — pas aan voor een lokale/andere waarde.</p>
     <p class="hint" id="m8-fetch-status"></p>
 
+    <div class="callout m8-totals-highlight" id="m8-totals-callout">
+      <h3>Totaal per scenario (ontdubbeld over categorieën — dit zijn de kerncijfers)</h3>
+      <p class="hint">Hoorbaar, laagfrequent en infrasoon geluid delen dezelfde turbinelocatie: hun overschrijdingsringen liggen concentrisch (zelfde middelpunt, verschillende straal). Het totaal hieronder telt elke woning <strong>hoogstens één keer</strong> — op basis van de grootste van de drie ringen — en is daarom de enige cijferreeks die vrij is van dubbeltelling. De categorie-uitsplitsing eronder is uitsluitend ter vergelijking en mag <strong>niet</strong> bij elkaar worden opgeteld.</p>
+      <div id="m8-totals-text" class="m8-totals-text"></div>
+    </div>
+
+    <div class="data-table-card" id="m8-totals-table-card">
+      <h3>Totaaloverzicht per scenario en hinderpercentage</h3>
+      <div class="cum-result-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Scenario</th><th>Ontdubbelde ring</th><th>Woningen (uniek)</th><th>Bewoners</th><th>Hinder 9%</th><th>Hinder 30%</th><th>Hinder 46%</th></tr>
+          </thead>
+          <tbody id="m8-totals-table-body"><tr><td colspan="7" class="empty-row">Plaats een turbine op de kaart en klik op "Woningen ophalen (BAG)".</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="module-subhead">
+      <h3>Detail per geluidscategorie</h3>
+      <p class="hint">Ter vergelijking en transparantie — <strong>niet optellen</strong>. Elke categorie heeft haar eigen (concentrische) ring rond dezelfde turbine(s); een woning binnen de kleinste ring valt ook binnen de twee grotere ringen en zou bij optelling twee- of driemaal meegeteld worden. Gebruik het totaal hierboven voor het scenario-eindcijfer.</p>
+    </div>
+
     <div class="m8-grid" id="m8-grid"></div>
 
     <div class="data-table-card" id="m8-table-card" style="margin-top:var(--space-5);">
-      <h3>Vergelijking van de drie scenario's</h3>
+      <h3>Detailtabel per categorie (niet optellen — zie totaal hierboven)</h3>
       <div class="cum-result-wrap">
       <table class="data-table m8-table">
         <thead>
@@ -531,7 +554,7 @@
     </div>
 
     <div class="callout m6-limitations">
-      <strong>Beperkingen:</strong> (1) De overschrijdingsafstand wordt bepaald op de zes vaste ringen van Module 3 (500/900/1300/1500/2000/5000 m) — de werkelijke overschrijdingsgrens ligt ergens tussen twee ringen in en wordt hier naar boven afgerond op de eerstvolgende ring waar nog overschrijding optreedt (conservatieve schatting). (2) "Woningen" = unieke BAG-adresseerbare objecten (verblijfsobject/standplaats/ligplaats) binnen de cirkel rond elke geplaatste turbine, ontdubbeld bij overlappende cirkels; de BAG-adrescollectie onderscheidt geen woonfunctie van bedrijfs- of kantoorfunctie, dus dit is een lichte overschatting van het aantal daadwerkelijke woningen. (3) Personen per woning is een landelijk (CBS) gemiddelde, geen lokale huishoudenssamenstelling van het betreffende gebied. (4) De 9/30/46%-hinderscenario's zijn ontleend aan drie verschillende onderzoekscontexten (Nederlandse Lden-norm, illustratieve tussenwaarde, Pools veldonderzoek bij 33–50 dB(A)) — geen dosis-effectcurve die continu is gefit op de dB-waarden van dit specifieke model. Bovendien zijn ze afkomstig uit onderzoek naar hoorbaar geluid maar worden ze in dit model ook toegepast op de laagfrequent- en infrasoon-bewonersaantallen — voor die twee categorieën is er geen onderliggend dosis-effectonderzoek dat deze percentages rechtvaardigt; het is een indicatieve ‘wat als’-toepassing, geen gevalideerde schatting. (5) Overlappende geluidscirkels van meerdere turbines worden alleen ontdubbeld op adresniveau (één woning telt maximaal één keer), niet energetisch gecumuleerd zoals in Module 4 — een woning binnen twee overlappende cirkels ondervindt in werkelijkheid een hoger cumulatief niveau dan hier per turbine wordt getoetst. (6) BAG-opvragingen zijn client-side en gelimiteerd op 20 pagina's (20.000 adressen) per turbine; in zeer dichtbebouwd gebied kan dit aantal afgekapt worden (zie statusmelding hierboven). (7) De infrasoon-ring gebruikt dezelfde dB(A)-Lnight-norm als indicatief referentiepunt (zoals ook in Module 5) — er bestaat geen formeel vastgestelde grenswaarde in dB(G), dus deze ring/woningtelling is nadrukkelijk illustratief en niet toetsend.
+      <strong>Beperkingen:</strong> (1) De overschrijdingsafstand wordt bepaald op de zes vaste ringen van Module 3 (500/900/1300/1500/2000/5000 m) — de werkelijke overschrijdingsgrens ligt ergens tussen twee ringen in en wordt hier naar boven afgerond op de eerstvolgende ring waar nog overschrijding optreedt (conservatieve schatting). (2) "Woningen" = unieke BAG-adresseerbare objecten (verblijfsobject/standplaats/ligplaats) binnen de cirkel rond elke geplaatste turbine, ontdubbeld bij overlappende cirkels; de BAG-adrescollectie onderscheidt geen woonfunctie van bedrijfs- of kantoorfunctie, dus dit is een lichte overschatting van het aantal daadwerkelijke woningen. (3) Personen per woning is een landelijk (CBS) gemiddelde, geen lokale huishoudenssamenstelling van het betreffende gebied. (4) De 9/30/46%-hinderscenario's zijn ontleend aan drie verschillende onderzoekscontexten (Nederlandse Lden-norm, illustratieve tussenwaarde, Pools veldonderzoek bij 33–50 dB(A)) — geen dosis-effectcurve die continu is gefit op de dB-waarden van dit specifieke model. Bovendien zijn ze afkomstig uit onderzoek naar hoorbaar geluid maar worden ze in dit model ook toegepast op de laagfrequent- en infrasoon-bewonersaantallen — voor die twee categorieën is er geen onderliggend dosis-effectonderzoek dat deze percentages rechtvaardigt; het is een indicatieve ‘wat als’-toepassing, geen gevalideerde schatting. (5) Overlappende geluidscirkels van meerdere turbines worden alleen ontdubbeld op adresniveau (één woning telt maximaal één keer), niet energetisch gecumuleerd zoals in Module 4 — een woning binnen twee overlappende cirkels ondervindt in werkelijkheid een hoger cumulatief niveau dan hier per turbine wordt getoetst. (6) BAG-opvragingen zijn client-side en gelimiteerd op 20 pagina's (20.000 adressen) per turbine; in zeer dichtbebouwd gebied kan dit aantal afgekapt worden (zie statusmelding hierboven). (7) De infrasoon-ring gebruikt dezelfde dB(A)-Lnight-norm als indicatief referentiepunt (zoals ook in Module 5) — er bestaat geen formeel vastgestelde grenswaarde in dB(G), dus deze ring/woningtelling is nadrukkelijk illustratief en niet toetsend. (8) <strong>Optellen over categorieën is fout en wordt daarom niet meer als officieel eindcijfer getoond.</strong> Hoorbaar, laagfrequent en infrasoon geluid gaan uit van dezelfde turbinelocatie(s); hun overschrijdingsringen liggen dus concentrisch (zelfde middelpunt, verschillende straal). Een woning binnen de kleinste ring valt per definitie ook binnen de twee grotere ringen, dus "hoorbaar-bewoners + laagfrequent-bewoners + infrasoon-bewoners" telt diezelfde woning twee- of driemaal mee. De "Totaal per scenario"-tabel hierboven corrigeert dit: die telt per scenario het aantal unieke BAG-adressen binnen de grootste van de drie categorieringen (de wiskundige vereniging van drie concentrische cirkels is exact gelijk aan de cirkel met de grootste straal, ongeacht welke categorie die straal toevallig heeft) en past de hinderpercentages toe op dat ontdubbelde aantal. De categorie-detailtabel hierboven blijft staan voor transparantie per geluidssoort, maar is nooit de bron voor een gerapporteerd totaalcijfer.
     </div>
   </section>
 
@@ -555,10 +578,33 @@
     </div>
     <p class="hint">Standaardwaarde €609,60/persoon/jaar en horizon van 25 jaar: overgenomen van het referentiemodel, gebaseerd op <a href="https://doi.org/10.1016/j.ijheh.2023.114273" target="_blank" rel="noopener">Godono et al. (2023), International Journal of Hygiene and Environmental Health</a> — pas beide waarden hieronder aan voor een eigen gevoeligheidsanalyse.</p>
 
+    <div class="callout m9-totals-highlight" id="m9-totals-callout">
+      <h3>Totale kosten per scenario (ontdubbeld — dit zijn de kerncijfers)</h3>
+      <p class="hint">Gebaseerd op het ontdubbelde bewonerstotaal van Module 8 (grootste van de drie categorieringen, elke woning hoogstens één keer geteld) — niet op de som van de categorie-detailtabel hieronder.</p>
+      <div id="m9-totals-text" class="m9-totals-text"></div>
+    </div>
+
+    <div class="data-table-card" id="m9-totals-table-card">
+      <h3>Totaaloverzicht kosten per scenario en hinderpercentage</h3>
+      <div class="cum-result-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Scenario</th><th>Hinderpercentage</th><th>Bewoners (ontdubbeld)</th><th>Kosten per jaar</th><th>Kosten over horizon</th></tr>
+          </thead>
+          <tbody id="m9-totals-table-body"><tr><td colspan="5" class="empty-row">Plaats een turbine op de kaart in Module 3.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="module-subhead">
+      <h3>Detail per geluidscategorie</h3>
+      <p class="hint">Ter vergelijking — <strong>niet optellen</strong> over categorieën (zie Module 8 voor de uitleg over concentrische ringen). Gebruik het totaal hierboven voor het scenario-eindcijfer.</p>
+    </div>
+
     <div class="m9-grid" id="m9-grid"></div>
 
     <div class="data-table-card" id="m9-table-card" style="margin-top:var(--space-5);">
-      <h3>Kosten per scenario, categorie en hinderpercentage</h3>
+      <h3>Detailtabel kosten per categorie (niet optellen — zie totaal hierboven)</h3>
       <div class="cum-result-wrap">
       <table class="data-table">
         <thead>
@@ -577,7 +623,7 @@
     </div>
 
     <div class="callout m6-limitations">
-      <strong>Beperkingen:</strong> (1) €609,60/persoon/jaar is een eerste-orde inschatting, geen exacte schadeclaim of officieel vastgesteld normbedrag — het referentiemodel geeft hiervoor geen directe, controleerbare bronvermelding. (2) De kosten worden onafhankelijk berekend per hinderpercentage (9/30/46%) en per categorie (hoorbaar/laagfrequent/infrasoon); ze zijn nadrukkelijk <em>niet</em> optelbaar over hinderpercentages (dat zijn drie alternatieve scenario's, geen drie afzonderlijke groepen) en het optellen over categorieën zou hetzelfde huishouden dubbel kunnen meetellen als het binnen meerdere overschrijdingsringen valt. (3) Kosten schalen lineair met het aantal bewoners; er is geen rekening gehouden met inflatie, discontering over de horizon, of regionale verschillen in zorgkosten. (4) Zoals bij Module 8: de 9/30/46%-hinderpercentages zijn afkomstig uit onderzoek naar hoorbaar geluid en worden hier ook toegepast op laagfrequente en infrasone bewonersaantallen — dat is een aanname, geen gevalideerde extrapolatie. (5) Het referentiemodel gebruikt vijf eigen vaste afstanden en een CBS-buurtgebaseerde woningtelling; deze module herrekent dat bewust niet, maar leunt op de zes ringen en de BAG-telling van dit model zelf (Module 3/8) — de absolute bewonersaantallen kunnen daardoor afwijken van wat het referentiemodel voor dezelfde locatie zou tonen.
+      <strong>Beperkingen:</strong> (1) €609,60/persoon/jaar is een eerste-orde inschatting, geen exacte schadeclaim of officieel vastgesteld normbedrag — het referentiemodel geeft hiervoor geen directe, controleerbare bronvermelding. (2) De kosten in de categorie-detailtabel worden onafhankelijk berekend per hinderpercentage (9/30/46%) en per categorie (hoorbaar/laagfrequent/infrasoon); ze zijn nadrukkelijk <em>niet</em> optelbaar over hinderpercentages (dat zijn drie alternatieve scenario's, geen drie afzonderlijke groepen) en het optellen over categorieën zou hetzelfde huishouden dubbel of driedubbel meetellen omdat de drie categorieringen concentrisch zijn (zelfde turbinelocatie). De "Totale kosten per scenario"-tabel hierboven vermijdt dit door de kosten te baseren op het ontdubbelde bewonerstotaal van Module 8 (grootste categoriering) — dat is het cijfer om te citeren, niet een som van de categorie-detailtabel. (3) Kosten schalen lineair met het aantal bewoners; er is geen rekening gehouden met inflatie, discontering over de horizon, of regionale verschillen in zorgkosten. (4) Zoals bij Module 8: de 9/30/46%-hinderpercentages zijn afkomstig uit onderzoek naar hoorbaar geluid en worden hier ook toegepast op laagfrequente en infrasone bewonersaantallen — dat is een aanname, geen gevalideerde extrapolatie. (5) Het referentiemodel gebruikt vijf eigen vaste afstanden en een CBS-buurtgebaseerde woningtelling; deze module herrekent dat bewust niet, maar leunt op de zes ringen en de BAG-telling van dit model zelf (Module 3/8) — de absolute bewonersaantallen kunnen daardoor afwijken van wat het referentiemodel voor dezelfde locatie zou tonen.
     </div>
   </section>
 
@@ -591,10 +637,33 @@
 
     <p class="hint">Tijdshorizon: <strong id="m10-horizon-readout">25</strong> jaar — gedeeld met Module 9 hierboven; pas de horizon daar aan om ook deze module bij te werken.</p>
 
+    <div class="callout m10-totals-highlight" id="m10-totals-callout">
+      <h3>Totale DALY's per scenario (ontdubbeld — dit zijn de kerncijfers)</h3>
+      <p class="hint">Gebaseerd op het ontdubbelde bewonerstotaal van Module 8 — niet op de som van de categorie-detailtabel hieronder.</p>
+      <div id="m10-totals-text" class="m10-totals-text"></div>
+    </div>
+
+    <div class="data-table-card" id="m10-totals-table-card">
+      <h3>Totaaloverzicht DALY's en monetaire waarde per scenario en hinderpercentage</h3>
+      <div class="cum-result-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Scenario</th><th>Hinderpercentage</th><th>Bewoners (ontdubbeld)</th><th>DALY/jaar</th><th>DALY/horizon</th><th>RIVM €/jaar</th><th>RIVM €/horizon</th><th>PBL €/jaar</th><th>PBL €/horizon</th><th>ZIN €/jaar</th><th>ZIN €/horizon</th></tr>
+          </thead>
+          <tbody id="m10-totals-table-body"><tr><td colspan="11" class="empty-row">Plaats een turbine op de kaart in Module 3.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="module-subhead">
+      <h3>Detail per geluidscategorie</h3>
+      <p class="hint">Ter vergelijking — <strong>niet optellen</strong> over categorieën. Gebruik het totaal hierboven voor het scenario-eindcijfer.</p>
+    </div>
+
     <div class="m10-grid" id="m10-grid"></div>
 
     <div class="data-table-card" id="m10-table-card" style="margin-top:var(--space-5);">
-      <h3>DALY's en monetaire waarde per scenario, categorie en hinderpercentage</h3>
+      <h3>Detailtabel DALY's per categorie (niet optellen — zie totaal hierboven)</h3>
       <div class="cum-result-wrap">
       <table class="data-table">
         <thead>
@@ -619,7 +688,7 @@
     </div>
 
     <div class="callout m6-limitations">
-      <strong>Beperkingen:</strong> (1) De DALY-berekening beperkt zich tot slaapverstoring en ernstige hinder; hart- en vaatziekten en vroegtijdig overlijden door geluid zijn bewust <em>niet</em> meegenomen omdat er geen windturbinespecifiek dosis-effectmodel voor bestaat — de uitkomst is daardoor een conservatieve ondergrens van het werkelijke gezondheidsverlies. (2) De disability weights hebben brede 95%-betrouwbaarheidsintervallen (0,006–0,015 en 0,006–0,016); de puntschattingen van 0,010/0,011 verbergen die onzekerheid. (3) Er bestaat geen wettelijk vastgesteld €/DALY-bedrag in Nederland — de drie getoonde waarden (RIVM/PBL/Zorginstituut Nederland) zijn elk uit een andere beleidscontext afkomstig en onderling niet zomaar vergelijkbaar of optelbaar. (4) DALY's en de zorgkosten van Module 9 hierboven meten gedeeltelijk hetzelfde onderliggende gezondheidseffect (slaapverstoring/hinder) via twee verschillende methodieken — ze mogen niet bij elkaar worden opgeteld tot één totale schadepost, dat zou dubbeltelling opleveren. (5) Zoals bij Module 8/9: de onderliggende hinderpercentages (9/30/46%) zijn afkomstig uit onderzoek naar hoorbaar geluid en worden ook toegepast op laagfrequente en infrasone bewonersaantallen, zonder eigen dosis-effectonderbouwing voor die twee categorieën.
+      <strong>Beperkingen:</strong> (1) De DALY-berekening beperkt zich tot slaapverstoring en ernstige hinder; hart- en vaatziekten en vroegtijdig overlijden door geluid zijn bewust <em>niet</em> meegenomen omdat er geen windturbinespecifiek dosis-effectmodel voor bestaat — de uitkomst is daardoor een conservatieve ondergrens van het werkelijke gezondheidsverlies. (2) De disability weights hebben brede 95%-betrouwbaarheidsintervallen (0,006–0,015 en 0,006–0,016); de puntschattingen van 0,010/0,011 verbergen die onzekerheid. (3) Er bestaat geen wettelijk vastgesteld €/DALY-bedrag in Nederland — de drie getoonde waarden (RIVM/PBL/Zorginstituut Nederland) zijn elk uit een andere beleidscontext afkomstig en onderling niet zomaar vergelijkbaar of optelbaar. (4) DALY's en de zorgkosten van Module 9 hierboven meten gedeeltelijk hetzelfde onderliggende gezondheidseffect (slaapverstoring/hinder) via twee verschillende methodieken — ze mogen niet bij elkaar worden opgeteld tot één totale schadepost, dat zou dubbeltelling opleveren. (5) De DALY's in de categorie-detailtabel hierboven zijn per categorie (hoorbaar/laagfrequent/infrasoon) apart berekend en mogen — net als in Module 8/9 — <em>niet</em> bij elkaar worden opgeteld, omdat de drie categorieringen concentrisch zijn rond dezelfde turbine(s) en een woning binnen de kleinste ring ook binnen de twee grotere ringen valt. De "Totale DALY's per scenario"-tabel hierboven gebruikt in plaats daarvan het ontdubbelde bewonerstotaal van Module 8 en is het cijfer om te citeren. (6) Zoals bij Module 8/9: de onderliggende hinderpercentages (9/30/46%) zijn afkomstig uit onderzoek naar hoorbaar geluid en worden ook toegepast op laagfrequente en infrasone bewonersaantallen, zonder eigen dosis-effectonderbouwing voor die twee categorieën.
     </div>
   </section>
 
