@@ -162,6 +162,7 @@ const state = {
   // Module 11: waardedaling woningen (Droës & Koster 2021) — zie script.js §M11. Tiphoogte-categorie
   // is een EIGEN categorie-as, los van state.category (hoorbaar/laagfrequent/infrasoon) van Module 3.
   m11Category: 'hoog', m11Method: 'vlak', m11Woz: 398000,
+  m11CbsData: null, m11CbsFetching: false, m11CbsError: null,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' heeft geen vaste waarden; die komen uit state.normCustomLden/Lnight.
@@ -383,6 +384,8 @@ if (m11WozInput) {
     renderModule11();
   });
 }
+const m11CbsFetchBtnEl = document.getElementById('m11-cbs-fetch-btn');
+if (m11CbsFetchBtnEl) m11CbsFetchBtnEl.addEventListener('click', () => { m11CbsRunFetch(); });
 
 // ---------- Bronvermogen slider ----------
 lwaInput.addEventListener('input', () => { state.lwa = parseFloat(lwaInput.value); render(); });
@@ -2256,6 +2259,217 @@ function m11ComputeResult() {
   };
 }
 
+// ---------- Module 11: TNO-vergelijking (CBS-vierkanten 100x100 m, live via PDOK) ----------
+// Repliceert de operationalisatie van TNO (2022), "De verwachte impact van windturbines op
+// huizenprijzen in Nederland" (p. 13, 18-19): Nederland ingedeeld in vierkanten van 100x100 m,
+// woningen per vierkant gerepresenteerd door het middelpunt, bij overlap telt de turbine met het
+// hoogste ontwaardingspercentage, en vierkanten met te weinig woningen voor CBS-publicatie
+// (privacy) krijgen een aangenomen 3 woningen (wet van Benford). Dient als vergelijking naast de
+// nauwkeurigere BAG-hoofdmethode hierboven — zie Beperkingen-callout, punt 1 en 8.
+const M11_CBS_JAARCODE = 2024;
+const M11_CBS_MAX_PAGES = 30; // 30 x limit=1000 = ruim voldoende voor een bbox van ~5x5 km per turbine
+const M11_CBS_ASSUMED_SUPPRESSED_WONINGEN = 3;
+
+async function m11CbsFetchSquaresForTurbine(turbine, radiusM, squaresById) {
+  const lat = turbine.lat, lng = turbine.lng;
+  const dLat = radiusM / 111320;
+  const dLon = radiusM / (111320 * Math.cos((lat * Math.PI) / 180));
+  const bbox = [(lng - dLon).toFixed(6), (lat - dLat).toFixed(6), (lng + dLon).toFixed(6), (lat + dLat).toFixed(6)].join(',');
+  let url = `https://api.pdok.nl/cbs/vierkantstatistieken100m/ogc/v1/collections/vierkant100/items?bbox=${bbox}&limit=1000&f=json&jaarcode=${M11_CBS_JAARCODE}`;
+  let pages = 0;
+  let truncated = false;
+  while (url && pages < M11_CBS_MAX_PAGES) {
+    let res;
+    try {
+      res = await fetch(url);
+    } catch (e) {
+      truncated = true;
+      break;
+    }
+    if (!res.ok) { truncated = true; break; }
+    const data = await res.json();
+    (data.features || []).forEach((f) => {
+      const p = f.properties || {};
+      const id = p.crs28992res100m;
+      if (!id || squaresById.has(id)) return;
+      const geom = f.geometry;
+      let clat = null, clon = null;
+      if (geom && geom.coordinates && geom.coordinates[0] && geom.coordinates[0][0]) {
+        const ring = geom.coordinates[0][0];
+        let sumLon = 0, sumLat = 0, cnt = 0;
+        for (let i = 0; i < ring.length - 1; i++) { sumLon += ring[i][0]; sumLat += ring[i][1]; cnt++; } // laatste punt = eerste (gesloten ring), overslaan
+        if (cnt > 0) { clon = sumLon / cnt; clat = sumLat / cnt; }
+      }
+      if (clat == null) return;
+      const woningenRaw = p.aantal_woningen;
+      const wozRaw = p.gemiddelde_woz_waarde_woning;
+      squaresById.set(id, {
+        lat: clat,
+        lon: clon,
+        woningen: (woningenRaw != null && woningenRaw >= 0) ? woningenRaw : null,
+        woz: (wozRaw != null && wozRaw >= 0) ? wozRaw * 1000 : null, // CBS publiceert dit veld in duizend euro
+      });
+    });
+    const next = (data.links || []).find((l) => l.rel === 'next');
+    url = next ? next.href : null;
+    pages++;
+  }
+  if (url) truncated = true;
+  return truncated;
+}
+
+async function m11CbsRunFetch() {
+  const n = state.turbines3a.length;
+  if (n === 0) {
+    state.m11CbsError = 'Plaats minstens \u00e9\u00e9n turbine op de kaart in Module 3 om CBS-vierkanten op te halen.';
+    renderModule11();
+    return;
+  }
+  state.m11CbsFetching = true;
+  state.m11CbsError = null;
+  renderModule11();
+  try {
+    const squaresById = new Map();
+    let anyTruncated = false;
+    for (const t of state.turbines3a) {
+      const truncated = await m11CbsFetchSquaresForTurbine(t, M11_BAND_MAX_RADIUS, squaresById);
+      if (truncated) anyTruncated = true;
+    }
+    state.m11CbsData = {
+      squares: squaresById,
+      turbineSnapshot: m8TurbineSnapshot(),
+      truncated: anyTruncated,
+      fetchedAt: new Date(),
+    };
+  } catch (e) {
+    state.m11CbsError = 'Ophalen van CBS-vierkanten bij PDOK is mislukt. Probeer het later opnieuw.';
+  } finally {
+    state.m11CbsFetching = false;
+    renderModule11();
+  }
+}
+
+// Voor elk opgehaald CBS-vierkant: de afstand tot de dichtstbijzijnde turbine ("sterkste effect
+// telt", net als bij TNO p.19 en bij de BAG-methode hierboven), gefilterd op het bereik dat bij
+// de huidige categorie/methode hoort.
+function m11CbsSquareRows() {
+  if (!state.m11CbsData) return null;
+  const meta = M11_CATEGORY_META[state.m11Category];
+  const useBand = state.m11Category === 'hoog' && state.m11Method === 'band';
+  const maxRadius = useBand ? M11_BAND_MAX_RADIUS : meta.radius;
+  const out = [];
+  state.m11CbsData.squares.forEach((sq) => {
+    let minD = Infinity;
+    state.turbines3a.forEach((t) => {
+      const d = haversineMeters(t.lat, t.lng, sq.lat, sq.lon);
+      if (d < minD) minD = d;
+    });
+    if (minD <= maxRadius) out.push({ ...sq, distance: minD });
+  });
+  return out;
+}
+
+// Zelfde optelling/4%-splitsing als m11ComputeResult(), maar op basis van CBS-vierkanten met TNO's
+// imputatieregel voor privacy-onderdrukte vierkanten (aangenomen aantal / landelijke WOZ-fallback).
+function m11CbsComputeResult() {
+  const rowsSquares = m11CbsSquareRows();
+  if (!rowsSquares) return { hasData: false };
+  const meta = M11_CATEGORY_META[state.m11Category];
+  const useBand = state.m11Category === 'hoog' && state.m11Method === 'band';
+  const fallbackWoz = state.m11Woz || 0;
+  const bands = useBand ? M11_DISTANCE_BANDS : [{ lo: 0, hi: meta.radius, pct: meta.flatPct }];
+
+  let totWoningen = 0, totWaarde = 0, totEigen = 0, totCompensabel = 0;
+  bands.forEach((b) => {
+    rowsSquares
+      .filter((s) => s.distance > b.lo && s.distance <= b.hi)
+      .forEach((s) => {
+        const woningen = s.woningen != null ? s.woningen : M11_CBS_ASSUMED_SUPPRESSED_WONINGEN;
+        const woz = s.woz != null ? s.woz : fallbackWoz;
+        totWoningen += woningen;
+        totWaarde += woningen * woz * (b.pct / 100);
+        totEigen += woningen * woz * (Math.min(b.pct, M11_NMR_THRESHOLD) / 100);
+        totCompensabel += woningen * woz * (Math.max(0, b.pct - M11_NMR_THRESHOLD) / 100);
+      });
+  });
+
+  return { hasData: true, nSquares: rowsSquares.length, totals: { woningen: totWoningen, waarde: totWaarde, eigen: totEigen, compensabel: totCompensabel } };
+}
+
+function renderModule11CbsComparison() {
+  const fetchBtn = document.getElementById('m11-cbs-fetch-btn');
+  const statusEl = document.getElementById('m11-cbs-status');
+  const tableWrap = document.getElementById('m11-cbs-table-wrap');
+  const tableBody = document.getElementById('m11-cbs-table-body');
+  const deltaEl = document.getElementById('m11-cbs-delta');
+  if (!fetchBtn) return;
+
+  const n = state.turbines3a.length;
+  fetchBtn.disabled = state.m11CbsFetching || n === 0;
+
+  if (statusEl) {
+    statusEl.className = 'hint';
+    if (n === 0) {
+      statusEl.textContent = 'Plaats minstens \u00e9\u00e9n turbine op de kaart in Module 3 om deze vergelijking te gebruiken.';
+    } else if (state.m11CbsFetching) {
+      statusEl.textContent = `Bezig met ophalen van CBS-vierkanten (100\u00d7100 m, jaargang ${M11_CBS_JAARCODE}) rond ${n} turbine${n === 1 ? '' : 's'}...`;
+    } else if (state.m11CbsError) {
+      statusEl.textContent = state.m11CbsError;
+      statusEl.classList.add('m8-status-error');
+    } else if (!state.m11CbsData) {
+      statusEl.textContent = 'Nog niet opgehaald \u2014 klik op "CBS-vierkanten ophalen" om de TNO-methode te berekenen.';
+    } else {
+      const stale = state.m11CbsData.turbineSnapshot !== m8TurbineSnapshot();
+      if (stale) {
+        statusEl.textContent = 'Turbines zijn gewijzigd sinds het ophalen van de CBS-vierkanten \u2014 klik opnieuw op de knop voor actuele cijfers.';
+        statusEl.classList.add('m8-status-error');
+      } else {
+        const when = state.m11CbsData.fetchedAt.toLocaleTimeString('nl-NL');
+        let txt = `${state.m11CbsData.squares.size} CBS-vierkanten opgehaald rond de geplaatste turbine(s) (om ${when}).`;
+        if (state.m11CbsData.truncated) txt += ' Let op: het ophalen is afgekapt op de paginalimiet \u2014 het aantal kan onvolledig zijn.';
+        statusEl.textContent = txt;
+        statusEl.classList.add('m8-status-ok');
+      }
+    }
+  }
+
+  const bagResult = m11ComputeResult();
+  const cbsResult = (state.m11CbsData && n > 0) ? m11CbsComputeResult() : { hasData: false };
+  window.__m11CbsLastResult = cbsResult; // t.b.v. QA-scripts
+  const showTable = bagResult.hasData || cbsResult.hasData;
+
+  if (tableWrap) tableWrap.style.display = showTable ? '' : 'none';
+  if (tableBody && showTable) {
+    const rowHtml = (label, sub, res) => {
+      if (!res.hasData) {
+        return `<tr><td>${label}<br><span class="cat-tab-sub">${sub}</span></td><td colspan="4" class="empty-row">Nog geen gegevens.</td></tr>`;
+      }
+      const t = res.totals;
+      return `<tr>
+        <td>${label}<br><span class="cat-tab-sub">${sub}</span></td>
+        <td>${Math.round(t.woningen).toLocaleString('nl-NL')}</td>
+        <td>${m9FmtEuro(t.waarde)}</td>
+        <td>${m9FmtEuro(t.eigen)}</td>
+        <td>${m9FmtEuro(t.compensabel)}</td>
+      </tr>`;
+    };
+    tableBody.innerHTML =
+      rowHtml('BAG-adressen', 'hoofdmethode \u2014 adresniveau, geen imputatie', bagResult) +
+      rowHtml('CBS-vierkanten', `TNO-methode \u2014 100\u00d7100 m, jaargang ${M11_CBS_JAARCODE}`, cbsResult);
+  }
+
+  if (deltaEl) {
+    if (bagResult.hasData && cbsResult.hasData && bagResult.totals.waarde > 0) {
+      const diff = cbsResult.totals.waarde - bagResult.totals.waarde;
+      const pct = (diff / bagResult.totals.waarde) * 100;
+      const richting = diff >= 0 ? 'hoger' : 'lager';
+      deltaEl.textContent = `De TNO-methode (CBS-vierkanten) komt hier op een totale waardedaling die ${m9FmtEuro(Math.abs(diff))} (${Math.abs(pct).toFixed(1)}%) ${richting} uitvalt dan de BAG-hoofdmethode \u2014 het verschil komt door de middelpuntbenadering van vierkanten, de imputatie bij privacy-onderdrukte vierkanten en (waar van toepassing) het gebruik van het landelijke WOZ-gemiddelde in plaats van de lokale CBS-waarde.`;
+    } else {
+      deltaEl.textContent = '';
+    }
+  }
+}
+
 function renderModule11() {
   const catTabsEl = document.getElementById('m11-category-tabs');
   const methodTabsEl = document.getElementById('m11-method-tabs');
@@ -2358,6 +2572,8 @@ function renderModule11() {
       tableBody.innerHTML = rowsHtml + totalRow;
     }
   }
+
+  renderModule11CbsComparison();
 }
 
 // ---------- Wire up turbine controls & init ----------
