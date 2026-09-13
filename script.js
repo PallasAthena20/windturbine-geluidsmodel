@@ -1903,32 +1903,21 @@ function renderModule8() {
       totalsTextEl.innerHTML = '<em>Nog geen gegevens \u2014 plaats turbines en haal de BAG-woningen op om het ontdubbelde totaal te zien.</em>';
     } else {
       totalsTextEl.innerHTML = totals
-        .map((t) => {
-          const hinderTxt = t.hinder
-            .map((h) => `${h.pct}%: <strong>${h.people != null ? Math.round(h.people).toLocaleString('nl-NL') : dashT} bewoners</strong>`)
-            .join(', ');
-          return `<div class="m8-totals-line"><strong>${M8_SCENARIO_LABEL[t.scenario]}</strong> (ontdubbelde ring ${m8RingLabel(t.ring)}, ${t.houses != null ? t.houses.toLocaleString('nl-NL') : dashT} unieke woningen, ${t.people != null ? Math.round(t.people).toLocaleString('nl-NL') : dashT} bewoners in totaal) \u2014 ${hinderTxt}.</div>`;
-        })
+        .map((t) => `<div class="m8-totals-line"><strong>${M8_SCENARIO_LABEL[t.scenario]}</strong> \u2014 ontdubbelde ring ${m8RingLabel(t.ring)}, ${t.houses != null ? t.houses.toLocaleString('nl-NL') : dashT} unieke woningen, ${t.people != null ? Math.round(t.people).toLocaleString('nl-NL') : dashT} bewoners in totaal.</div>`)
         .join('');
     }
   }
   if (totalsTableBody) {
     if (n === 0 || !state.m8AddressData) {
-      totalsTableBody.innerHTML = `<tr><td colspan="7" class="empty-row">Plaats een turbine op de kaart en klik op "Woningen ophalen (BAG)".</td></tr>`;
+      totalsTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Plaats een turbine op de kaart en klik op "Woningen ophalen (BAG)".</td></tr>`;
     } else {
       totalsTableBody.innerHTML = totals
-        .map((t) => {
-          const hinderCells = t.hinder
-            .map((h) => `<td>${h.people != null ? Math.round(h.people).toLocaleString('nl-NL') : dashT}</td>`)
-            .join('');
-          return `<tr class="m8-totals-row">
+        .map((t) => `<tr class="m8-totals-row">
             <td>${M8_SCENARIO_LABEL[t.scenario]}</td>
             <td>${m8RingLabel(t.ring)}</td>
             <td>${t.houses != null ? t.houses.toLocaleString('nl-NL') : dashT}</td>
             <td>${t.people != null ? Math.round(t.people).toLocaleString('nl-NL') : dashT}</td>
-            ${hinderCells}
-          </tr>`;
-        })
+          </tr>`)
         .join('');
     }
   }
@@ -2024,51 +2013,8 @@ function renderModule9() {
   const n = state.turbines3a.length;
   const hasData = !!state.m8AddressData;
   const rows = m8ComputeRows();
-  const totals = m8ComputeTotals();
   const costPerPerson = state.m9CostPerPersonYear;
   const horizon = state.m9Horizon;
-
-  const withCostTotals = totals.map((t) => ({
-    ...t,
-    hinder: t.hinder.map((h) => ({
-      ...h,
-      costYear: h.people != null ? h.people * costPerPerson : null,
-      costHorizon: h.people != null ? h.people * costPerPerson * horizon : null,
-    })),
-  }));
-  const totalsTextEl = document.getElementById('m9-totals-text');
-  const totalsTableBody = document.getElementById('m9-totals-table-body');
-  if (totalsTextEl) {
-    if (n === 0 || !hasData) {
-      totalsTextEl.innerHTML = '<em>Nog geen gegevens \u2014 zie Module 8.</em>';
-    } else {
-      totalsTextEl.innerHTML = withCostTotals
-        .map((t) => {
-          const line = t.hinder
-            .map((h) => `${h.pct}%: <strong>${m9FmtEuro(h.costHorizon)}</strong> over ${horizon} jaar (${m9FmtEuro(h.costYear)}/jaar)`)
-            .join(', ');
-          return `<div class="m9-totals-line"><strong>${M8_SCENARIO_LABEL[t.scenario]}</strong> \u2014 ${m9Fmt(t.people)} bewoners (ontdubbeld, ring ${m8RingLabel(t.ring)}) \u2014 ${line}.</div>`;
-        })
-        .join('');
-    }
-  }
-  if (totalsTableBody) {
-    if (n === 0 || !hasData) {
-      totalsTableBody.innerHTML = `<tr><td colspan="5" class="empty-row">${n === 0 ? 'Plaats een turbine op de kaart in Module 3.' : 'Haal eerst BAG-gegevens op bij Module 8.'}</td></tr>`;
-    } else {
-      totalsTableBody.innerHTML = withCostTotals
-        .flatMap((t) =>
-          t.hinder.map((h, hIdx) => `<tr class="m9-totals-row">
-            <td>${hIdx === 0 ? M8_SCENARIO_LABEL[t.scenario] : ''}</td>
-            <td>${h.pct}% (${h.label})</td>
-            <td>${m9Fmt(h.people)}</td>
-            <td>${m9FmtEuro(h.costYear)}</td>
-            <td>${m9FmtEuro(h.costHorizon)}</td>
-          </tr>`)
-        )
-        .join('');
-    }
-  }
 
   const withCost = rows.map((r) => ({
     scenario: r.scenario,
@@ -2081,6 +2027,27 @@ function renderModule9() {
       })),
     })),
   }));
+
+  const totalsTextEl = document.getElementById('m9-totals-text');
+  if (totalsTextEl) {
+    if (n === 0 || !hasData) {
+      totalsTextEl.innerHTML = '<em>Nog geen gegevens \u2014 zie Module 8.</em>';
+    } else {
+      totalsTextEl.innerHTML = withCost
+        .map((r) => {
+          const catLines = r.categories
+            .map((c) => {
+              const pctTxt = c.hinder
+                .map((h) => `${h.pct}%: ${m9Fmt(h.people)} bewoners \u2014 ${m9FmtEuro(h.costHorizon)} over ${horizon} jaar (${m9FmtEuro(h.costYear)}/jaar)`)
+                .join('; ');
+              return `<div>${c.label}: ${pctTxt}</div>`;
+            })
+            .join('');
+          return `<div class="m9-totals-line"><strong>${M8_SCENARIO_LABEL[r.scenario]}</strong>${catLines}</div>`;
+        })
+        .join('');
+    }
+  }
 
   if (n === 0 || !hasData) {
     grid.innerHTML = `<p class="hint">${n === 0 ? 'Plaats minstens één turbine op de kaart in Module 3.' : 'Haal eerst BAG-woninggegevens op bij Module 8 om de kosten te kunnen berekenen.'}</p>`;
@@ -2168,61 +2135,7 @@ function renderModule10() {
   const n = state.turbines3a.length;
   const hasData = !!state.m8AddressData;
   const rows = m8ComputeRows();
-  const totals = m8ComputeTotals();
   const dwTotal = M10_DW_SLAAP + M10_DW_HINDER;
-
-  const withDalyTotals = totals.map((t) => ({
-    ...t,
-    hinder: t.hinder.map((h) => {
-      const dalyYear = h.people != null ? h.people * dwTotal : null;
-      const dalyHorizon = dalyYear != null ? dalyYear * horizon : null;
-      const values = M10_VALUES.map((v) => ({
-        ...v,
-        euroYear: dalyYear != null ? dalyYear * v.euro : null,
-        euroHorizon: dalyHorizon != null ? dalyHorizon * v.euro : null,
-      }));
-      return { ...h, dalyYear, dalyHorizon, values };
-    }),
-  }));
-  const totalsTextEl = document.getElementById('m10-totals-text');
-  const totalsTableBody = document.getElementById('m10-totals-table-body');
-  if (totalsTextEl) {
-    if (n === 0 || !hasData) {
-      totalsTextEl.innerHTML = '<em>Nog geen gegevens \u2014 zie Module 8.</em>';
-    } else {
-      totalsTextEl.innerHTML = withDalyTotals
-        .map((t) => {
-          const line = t.hinder
-            .map((h) => `${h.pct}%: <strong>${m10FmtDaly(h.dalyHorizon)} DALY</strong> over ${horizon} jaar`)
-            .join(', ');
-          return `<div class="m10-totals-line"><strong>${M8_SCENARIO_LABEL[t.scenario]}</strong> \u2014 ${m9Fmt(t.people)} bewoners (ontdubbeld, ring ${m8RingLabel(t.ring)}) \u2014 ${line}.</div>`;
-        })
-        .join('');
-    }
-  }
-  if (totalsTableBody) {
-    if (n === 0 || !hasData) {
-      totalsTableBody.innerHTML = `<tr><td colspan="12" class="empty-row">${n === 0 ? 'Plaats een turbine op de kaart in Module 3.' : 'Haal eerst BAG-gegevens op bij Module 8.'}</td></tr>`;
-    } else {
-      totalsTableBody.innerHTML = withDalyTotals
-        .flatMap((t) =>
-          t.hinder.map((h, hIdx) => {
-            const valueCells = h.values
-              .flatMap((v) => [`<td>${m9FmtEuro(v.euroYear)}</td>`, `<td>${m9FmtEuro(v.euroHorizon)}</td>`])
-              .join('');
-            return `<tr class="m10-totals-row">
-              <td>${hIdx === 0 ? M8_SCENARIO_LABEL[t.scenario] : ''}</td>
-              <td>${h.pct}% (${h.label})</td>
-              <td>${m9Fmt(h.people)}</td>
-              <td>${m10FmtDaly(h.dalyYear)}</td>
-              <td>${m10FmtDaly(h.dalyHorizon)}</td>
-              ${valueCells}
-            </tr>`;
-          })
-        )
-        .join('');
-    }
-  }
 
   const withDaly = rows.map((r) => ({
     scenario: r.scenario,
@@ -2240,6 +2153,27 @@ function renderModule10() {
       }),
     })),
   }));
+
+  const totalsTextEl = document.getElementById('m10-totals-text');
+  if (totalsTextEl) {
+    if (n === 0 || !hasData) {
+      totalsTextEl.innerHTML = '<em>Nog geen gegevens \u2014 zie Module 8.</em>';
+    } else {
+      totalsTextEl.innerHTML = withDaly
+        .map((r) => {
+          const catLines = r.categories
+            .map((c) => {
+              const pctTxt = c.hinder
+                .map((h) => `${h.pct}%: ${m9Fmt(h.people)} bewoners \u2014 ${m10FmtDaly(h.dalyHorizon)} DALY over ${horizon} jaar (${m10FmtDaly(h.dalyYear)}/jaar)`)
+                .join('; ');
+              return `<div>${c.label}: ${pctTxt}</div>`;
+            })
+            .join('');
+          return `<div class="m10-totals-line"><strong>${M8_SCENARIO_LABEL[r.scenario]}</strong>${catLines}</div>`;
+        })
+        .join('');
+    }
+  }
 
   if (n === 0 || !hasData) {
     grid.innerHTML = `<p class="hint">${n === 0 ? 'Plaats minstens één turbine op de kaart in Module 3.' : 'Haal eerst BAG-woninggegevens op bij Module 8 om de DALY-berekening te kunnen maken.'}</p>`;
