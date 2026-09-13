@@ -155,6 +155,7 @@ const state = {
   // De bewolkingsklasse is niet meer los instelbaar: elk scenario (best/middel/worst) heeft een vaste,
   // vastgekoppelde bewolkingsklasse (M7_SCENARIO_CLOUD) en de koppeling naar Module 6 staat permanent aan.
   m7Ugeo: 9,
+  m7UgeoFetching: false, m7UgeoAutoInfo: null, m7UgeoAutoError: null,
   // Module 8: woningen (BAG) → bewoners → geschatte hinder per scenario — zie script.js §M8.
   m8HouseholdSize: 2.10, m8AddressData: null, m8Fetching: false, m8Error: null,
   // Module 9/10: kosten- en DALY-berekening op basis van Module 8's bewonersaantallen — zie script.js §M9/§M10.
@@ -324,7 +325,14 @@ curtailmentCheck.addEventListener('change', () => { state.curtailment = curtailm
 // De bewolkingsklasse per scenario ligt vast (M7_SCENARIO_CLOUD) en de koppeling naar Module 6 staat
 // permanent aan — er zijn dus geen cloud-tabs of een aan/uit-checkbox meer om te binden.
 const m7UgeoInput = document.getElementById('m7-ugeo-input');
-if (m7UgeoInput) m7UgeoInput.addEventListener('input', () => { state.m7Ugeo = parseFloat(m7UgeoInput.value); render(); });
+if (m7UgeoInput) m7UgeoInput.addEventListener('input', () => {
+  state.m7Ugeo = parseFloat(m7UgeoInput.value);
+  state.m7UgeoAutoInfo = null;
+  state.m7UgeoAutoError = null;
+  render();
+});
+const m7UgeoAutoBtnEl = document.getElementById('m7-ugeo-auto-btn');
+if (m7UgeoAutoBtnEl) m7UgeoAutoBtnEl.addEventListener('click', () => { m7FetchGeostrophicWind(); });
 
 const m8HouseholdInput = document.getElementById('m8-household-size');
 if (m8HouseholdInput) {
@@ -1454,6 +1462,92 @@ function m7ComparisonRows() {
   };
 }
 
+// ---------- Module 7: automatische U_geo-ophaling uit ERA5-luchtdrukgradiënt ----------
+// Fysische definitie: U_geo = |grad(p)| / (rho * f), met f = 2*Omega*sin(breedtegraad) de
+// Coriolisparameter en rho de luchtdichtheid. |grad(p)| wordt per uur geschat met een gecentreerd
+// eindige-differentieschema over vier hulppunten op ±1° breedte/lengte rond het zwaartepunt van de
+// geplaatste turbine(s) (~100-110 km afstand, reële afstand berekend via haversineMeters — geen
+// aanname van een vierkant grid). Per uur wordt eerst de snelheid berekend en pas daarna gemiddeld
+// over het jongste volledige kalenderjaar — het middelen van de druk zélf zou de gradiënt over een
+// jaar vrijwel wegmiddelen (windrichtingen wisselen), terwijl het middelen van de snelheid wél een
+// representatieve jaarklimatologie oplevert (zie beperkingen Module 7, punt 8).
+const M7_OMEGA = 7.2921159e-5; // rad/s, hoeksnelheid van de aarde
+const M7_RHO = 1.225; // kg/m3, standaard luchtdichtheid op zeeniveau (eigen benadering)
+const M7_GRID_OFFSET_DEG = 1.0; // ±1° breedte/lengte rond het zwaartepunt
+
+function m7TurbineCentroid() {
+  const turbines = state.turbines3a;
+  if (!turbines || turbines.length === 0) return null;
+  const lat = turbines.reduce((s, t) => s + t.lat, 0) / turbines.length;
+  const lng = turbines.reduce((s, t) => s + t.lng, 0) / turbines.length;
+  return { lat, lng };
+}
+
+async function m7FetchPressureSeries(lat, lng, year) {
+  const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&start_date=${year}-01-01&end_date=${year}-12-31&hourly=pressure_msl&timezone=UTC`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`ERA5-verzoek mislukt (${res.status})`);
+  const data = await res.json();
+  const values = data && data.hourly && data.hourly.pressure_msl;
+  if (!Array.isArray(values) || values.length === 0) throw new Error('Geen luchtdrukreeks ontvangen');
+  return values;
+}
+
+async function m7FetchGeostrophicWind() {
+  const centroid = m7TurbineCentroid();
+  if (!centroid) {
+    state.m7UgeoAutoError = 'Plaats minstens één turbine op de kaart in Module 3 om U_geo automatisch te berekenen.';
+    renderModule7();
+    return;
+  }
+  state.m7UgeoFetching = true;
+  state.m7UgeoAutoError = null;
+  renderModule7();
+  try {
+    const { lat, lng } = centroid;
+    const year = new Date().getFullYear() - 1; // jongste volledige kalenderjaar
+    const north = { lat: lat + M7_GRID_OFFSET_DEG, lng };
+    const south = { lat: lat - M7_GRID_OFFSET_DEG, lng };
+    const east = { lat, lng: lng + M7_GRID_OFFSET_DEG };
+    const west = { lat, lng: lng - M7_GRID_OFFSET_DEG };
+    const [pNorth, pSouth, pEast, pWest] = await Promise.all([
+      m7FetchPressureSeries(north.lat, north.lng, year),
+      m7FetchPressureSeries(south.lat, south.lng, year),
+      m7FetchPressureSeries(east.lat, east.lng, year),
+      m7FetchPressureSeries(west.lat, west.lng, year),
+    ]);
+    const distNS = haversineMeters(north.lat, north.lng, south.lat, south.lng);
+    const distEW = haversineMeters(east.lat, east.lng, west.lat, west.lng);
+    const f = 2 * M7_OMEGA * Math.sin((lat * Math.PI) / 180);
+    const n = Math.min(pNorth.length, pSouth.length, pEast.length, pWest.length);
+    let sum = 0, count = 0;
+    for (let i = 0; i < n; i++) {
+      const pn = pNorth[i], ps = pSouth[i], pe = pEast[i], pw = pWest[i];
+      if (pn == null || ps == null || pe == null || pw == null) continue;
+      const dpdy = (pn - ps) * 100 / distNS; // hPa -> Pa
+      const dpdx = (pe - pw) * 100 / distEW;
+      const gradMag = Math.sqrt(dpdx * dpdx + dpdy * dpdy);
+      const uGeo = gradMag / (M7_RHO * Math.abs(f));
+      if (Number.isFinite(uGeo)) { sum += uGeo; count++; }
+    }
+    if (count === 0) throw new Error('Geen bruikbare uurwaarden in de ERA5-reeks');
+    const avgUgeo = sum / count;
+    const clamped = Math.min(22, Math.max(1, avgUgeo));
+    const rounded = Math.round(clamped * 2) / 2; // afronden op stappen van 0,5 m/s (sliderstap)
+    state.m7Ugeo = rounded;
+    if (m7UgeoInputRef()) m7UgeoInputRef().value = rounded;
+    state.m7UgeoAutoInfo = { value: rounded, rawValue: avgUgeo, year, nHours: count, lat, lng, fetchedAt: new Date() };
+    state.m7UgeoAutoError = null;
+  } catch (e) {
+    state.m7UgeoAutoError = `Ophalen mislukt: ${e && e.message ? e.message : 'onbekende fout'}. Probeer het later opnieuw of vul U_geo handmatig in.`;
+  } finally {
+    state.m7UgeoFetching = false;
+    renderModule7();
+  }
+}
+
+function m7UgeoInputRef() { return document.getElementById('m7-ugeo-input'); }
+
 function renderModule7() {
   const ugeoReadout = document.getElementById('m7-ugeo-readout');
   const scenarioCloudGrid = document.getElementById('m7-scenario-cloud-grid');
@@ -1463,6 +1557,31 @@ function renderModule7() {
   if (!probGrid) return;
 
   if (ugeoReadout) ugeoReadout.textContent = state.m7Ugeo.toFixed(1) + ' m/s';
+
+  const ugeoAutoBtn = document.getElementById('m7-ugeo-auto-btn');
+  const ugeoAutoStatus = document.getElementById('m7-ugeo-auto-status');
+  const nTurbines7 = state.turbines3a.length;
+  if (ugeoAutoBtn) ugeoAutoBtn.disabled = state.m7UgeoFetching || nTurbines7 === 0;
+  if (ugeoAutoStatus) {
+    ugeoAutoStatus.classList.remove('m8-status-error', 'm8-status-ok');
+    if (state.m7UgeoFetching) {
+      ugeoAutoStatus.textContent = 'Bezig met ophalen van ERA5-luchtdrukreeksen rond de turbine(s) (vier hulppunten, één jaar per uur) — dit kan enkele seconden duren...';
+    } else if (state.m7UgeoAutoError) {
+      ugeoAutoStatus.textContent = state.m7UgeoAutoError;
+      ugeoAutoStatus.classList.add('m8-status-error');
+    } else if (nTurbines7 === 0) {
+      ugeoAutoStatus.textContent = 'Plaats eerst turbine(s) op de kaart in Module 3 om U_geo automatisch te berekenen.';
+    } else if (state.m7UgeoAutoInfo) {
+      const info = state.m7UgeoAutoInfo;
+      const snap = m7TurbineCentroid();
+      const stale = !snap || info.lat.toFixed(5) !== snap.lat.toFixed(5) || info.lng.toFixed(5) !== snap.lng.toFixed(5);
+      const tijd = info.fetchedAt instanceof Date ? info.fetchedAt.toLocaleTimeString('nl-NL') : '';
+      ugeoAutoStatus.textContent = `Automatisch ingevuld: ${info.value.toFixed(1)} m/s — jaargemiddelde uit de ERA5-luchtdrukgradiënt rond het zwaartepunt van de turbine(s) (${info.nHours} bruikbare uren, jaar ${info.year}, om ${tijd})${stale ? '. Let op: de turbineposities zijn sindsdien gewijzigd — klik opnieuw om bij te werken.' : '.'} Je kunt de waarde hierboven nog handmatig aanpassen.`;
+      ugeoAutoStatus.classList.add(stale ? 'm8-status-error' : 'm8-status-ok');
+    } else {
+      ugeoAutoStatus.textContent = 'Nog niet opgehaald — klik op de knop hierboven om een jaargemiddelde U_geo te berekenen uit de ERA5-luchtdrukgradiënt rond de geplaatste turbine(s).';
+    }
+  }
 
   const cmp = m7ComparisonRows();
   const { scAll, wsblShare } = cmp;
