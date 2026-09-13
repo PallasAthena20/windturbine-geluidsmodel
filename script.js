@@ -1994,6 +1994,7 @@ function renderModule8() {
   renderModule9();
   renderModule10();
   renderModule11();
+  renderModule13();
 }
 
 // ==================== MODULE 9: geschatte zorgkosten ====================
@@ -2925,11 +2926,13 @@ function m12AddGroup() {
   aantalInput.value = '';
   if (statusEl) { statusEl.textContent = ''; statusEl.className = 'hint'; }
   renderModule12();
+  renderModule13();
 }
 
 function m12RemoveGroup(id) {
   state.m12Groups = state.m12Groups.filter((g) => g.id !== id);
   renderModule12();
+  renderModule13();
 }
 
 function m12ComputeRow(g, idx) {
@@ -3064,8 +3067,487 @@ function renderModule12() {
   }
 }
 
+// ---------- Module 13: kritisch PDF-rapport (synthese van Module 1-12) ----------
+// Dit is een pure synthese-/rapportagelaag: er wordt geen enkele formule opnieuw
+// geïmplementeerd. Alle cijfers komen rechtstreeks uit de bestaande compute-functies
+// van Module 6 (m6ComputeAll), 8 (m8ComputeRows/m8ComputeTotals), 9/10 (zelfde formules
+// als renderModule9/renderModule10, hier gerepliceerd op de totals8-array), 11
+// (m11ComputeResult) en 12 (m12ComputeRow), zodat het rapport per definitie consistent
+// is met wat de rest van de app op het scherm toont.
+
+function m13Readiness() {
+  const nTurbines = state.turbines3a.length;
+  const norm = getActiveNorm();
+  const normOk = norm.lnight != null;
+  const hasBag = !!state.m8AddressData;
+  const bagStale = hasBag && state.m8AddressData.turbineSnapshot !== m8TurbineSnapshot();
+  const hasM12 = state.m12Groups.length > 0;
+  return { nTurbines, norm, normOk, hasBag, bagStale, hasM12 };
+}
+
+function m13StatusMessages() {
+  const r = m13Readiness();
+  const msgs = [];
+  if (r.nTurbines === 0) msgs.push('Plaats minstens één turbine in Module 3 (kaart) — het rapport heeft een locatie nodig voor de scenario- en woningberekeningen.');
+  if (!r.normOk) msgs.push(`De huidige norm bij Module 5 (${r.norm.label}) heeft geen Lnight-waarde, waardoor geen overschrijdingsafstand (en dus geen woningen/bewoners) bepaald kan worden — kies een andere norm.`);
+  if (r.nTurbines > 0 && r.normOk && !r.hasBag) msgs.push('Nog geen BAG-woningen opgehaald bij Module 8 — het rapport toont zonder die stap geen woningen-, bewoners-, hinder-, zorgkosten- of DALY-cijfers.');
+  if (r.hasBag && r.bagStale) msgs.push('De turbine(s) zijn gewijzigd sinds de laatste BAG-ophaling bij Module 8 — haal opnieuw op voor cijfers die bij de huidige plaatsing passen.');
+  if (!r.hasM12) msgs.push('Nog geen turbinegroep toegevoegd bij Module 12 — zonder investeringscijfers ontbreekt de vergelijking maatschappelijke kosten vs. investeringskosten in het rapport (de rest van het rapport werkt wel).');
+  return msgs;
+}
+
+function renderModule13() {
+  const statusEl = document.getElementById('m13-status');
+  const btn = document.getElementById('m13-generate-btn');
+  if (!statusEl || !btn) return;
+  const r = m13Readiness();
+  const msgs = m13StatusMessages();
+  const canGenerate = r.nTurbines > 0 && r.normOk;
+  btn.disabled = !canGenerate;
+  if (msgs.length === 0) {
+    statusEl.className = 'hint m8-status-ok';
+    statusEl.innerHTML = 'Alle onderliggende modules zijn ingevuld — het rapport bevat volledige cijfers voor deze locatie.';
+  } else {
+    statusEl.className = 'hint' + (canGenerate ? '' : ' m8-status-error');
+    statusEl.innerHTML = (canGenerate
+      ? '<strong>Rapport kan al gegenereerd worden, maar is nog niet volledig:</strong><br>'
+      : '<strong>Nog niet mogelijk:</strong><br>') + msgs.map((m) => '• ' + escapeHtml(m)).join('<br>');
+  }
+}
+
+function m13Pct(n, d) {
+  if (n == null || Number.isNaN(n)) return '—';
+  return n.toLocaleString('nl-NL', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 }) + '%';
+}
+function m13Int(n) {
+  return n == null || Number.isNaN(n) ? '—' : Math.round(n).toLocaleString('nl-NL');
+}
+
+// Bouwt de volledige rapport-HTML als losstaand document (eigen <style>, geen afhankelijkheid
+// van style.css) zodat het exact zo afdrukt/PDF't als getoond, ook nadat de tab losstaat van de app.
+function m13BuildReportHtml() {
+  const now = new Date();
+  const genDate = now.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+  const genTime = now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+
+  const r = m13Readiness();
+  const catLw = computeCategoryLw(state.lwa);
+  const turbines = state.turbines3a;
+  const n = turbines.length;
+  const norm = r.norm;
+  const m6 = r.nTurbines > 0 ? m6ComputeAll() : null;
+  const rows8 = m8ComputeRows();
+  const totals8 = m8ComputeTotals();
+  const horizon = state.m9Horizon;
+  const costPerPerson = state.m9CostPerPersonYear;
+  const dwTotal = M10_DW_SLAAP + M10_DW_HINDER;
+  const m11 = m11ComputeResult();
+  const m12rows = state.m12Groups.map(m12ComputeRow);
+  const m12TotalInvest = m12rows.reduce((s, row) => s + row.investeringTotaal, 0);
+  const m12TotalVermogen = m12rows.reduce((s, row) => s + row.vermogenTotaalMw, 0);
+  const hasBag = r.hasBag;
+  const hasM12 = r.hasM12;
+
+  // Gedeelde matrix: per scenario (best/middel/worst), per hinderpercentage (9/30/46%):
+  // bewoners, zorgkosten (jaar + horizon) en DALY's (jaar + horizon, en × 3 monetaire waarden).
+  const matrix = totals8.map((t) => ({
+    ...t,
+    hinder: t.hinder.map((h) => {
+      const costYear = h.people != null ? h.people * costPerPerson : null;
+      const costHorizon = costYear != null ? costYear * horizon : null;
+      const dalyYear = h.people != null ? h.people * dwTotal : null;
+      const dalyHorizon = dalyYear != null ? dalyYear * horizon : null;
+      const values = M10_VALUES.map((v) => ({
+        ...v,
+        euroHorizon: dalyHorizon != null ? dalyHorizon * v.euro : null,
+      }));
+      return { ...h, costYear, costHorizon, dalyYear, dalyHorizon, values };
+    }),
+  }));
+
+  // Maatschappelijke kosten-totaal (over de volledige horizon, alle drie hinderpercentages
+  // naast elkaar getoond — er is geen "enige juiste" percentage, zie de kritische analyse).
+  const socTotalsByPct = M8_HINDER_SCENARIOS.map((hs, hIdx) => {
+    // som over de drie scenario's (best+middel+worst) is NIET zinvol (een woning ligt niet
+    // gelijktijdig in drie scenario's) — in plaats daarvan tonen we het jaargewogen gemiddelde:
+    // gewicht = aandeel nachten (m6.pct), zodat dit de daadwerkelijke jaargemiddelde blootstelling weerspiegelt.
+    let costHorizonWeighted = 0, dalyHorizonWeighted = 0, peopleWeighted = 0;
+    let anyData = false;
+    matrix.forEach((t) => {
+      const h = t.hinder[hIdx];
+      const weight = m6 ? (m6.pct[t.scenario] / 100) : (1 / 3);
+      if (h.people != null) { peopleWeighted += h.people * weight; anyData = true; }
+      if (h.costHorizon != null) costHorizonWeighted += h.costHorizon * weight;
+      if (h.dalyHorizon != null) dalyHorizonWeighted += h.dalyHorizon * weight;
+    });
+    return {
+      pct: hs.pct, label: hs.label,
+      people: anyData ? peopleWeighted : null,
+      costHorizon: anyData ? costHorizonWeighted : null,
+      dalyHorizon: anyData ? dalyHorizonWeighted : null,
+      euro50k: anyData ? dalyHorizonWeighted * 50000 : null,
+      euro70k: anyData ? dalyHorizonWeighted * 70000 : null,
+      euro80k: anyData ? dalyHorizonWeighted * 80000 : null,
+    };
+  });
+
+  const warningBanner = (!r.normOk || r.nTurbines === 0)
+    ? `<div class="rp-callout rp-warn"><strong>Let op — onvolledige basis:</strong> ${
+        r.nTurbines === 0
+          ? 'er is geen turbine geplaatst in Module 3; dit rapport toont daarom alleen de methodologie, geen locatiespecifieke cijfers.'
+          : `de geselecteerde norm (${escapeHtml(norm.label)}) heeft geen Lnight-waarde, waardoor geen overschrijdingsafstanden bepaald konden worden.`
+      }</div>`
+    : (!hasBag
+        ? `<div class="rp-callout rp-warn"><strong>Let op — geen BAG-gegevens:</strong> bij Module 8 zijn nog geen woningen opgehaald voor deze turbinepositie(s). Woningen-, bewoners-, hinder-, zorgkosten- en DALY-cijfers hieronder staan op "—" totdat dat is gedaan.</div>`
+        : (r.bagStale ? `<div class="rp-callout rp-warn"><strong>Let op — mogelijk verouderd:</strong> de turbinepositie(s) zijn gewijzigd sinds de laatste BAG-ophaling bij Module 8; de cijfers hieronder kunnen niet meer bij de huidige plaatsing passen.</div>` : ''));
+
+  const m12Banner = !hasM12
+    ? `<div class="rp-callout rp-warn"><strong>Let op — geen investeringscijfers:</strong> bij Module 12 is nog geen turbinegroep toegevoegd. De vergelijking maatschappelijke kosten vs. investeringskosten in dit rapport kan daardoor niet worden gemaakt.</div>`
+    : '';
+
+  const turbineList = n > 0
+    ? turbines.map((t, i) => `#${i + 1}: ${t.lat.toFixed(5)}, ${t.lng.toFixed(5)}`).join(' · ')
+    : 'geen turbine geplaatst';
+
+  const scenarioRow = (label, key) => {
+    const days = m6 ? m6.days[key] : null;
+    const pct = m6 ? m6.pct[key] : null;
+    return `<tr><td>${label}</td><td>${pct != null ? m13Pct(pct) : '—'}</td><td>${days != null ? days + ' nachten/jaar' : '—'}</td></tr>`;
+  };
+
+  // ---- Sectie: Module 1-12 samenvatting ----
+  const summarySection = `
+  <section class="rp-section">
+    <h2>1. Samenvatting — wat berekent elke module</h2>
+    <p>Dit rapport is een synthese van de twaalf rekenmodules van het model; de onderstaande tabel geeft per module een korte uitleg en, waar van toepassing, de actuele uitkomst voor de hierboven vermelde turbinepositie(s).</p>
+    <table class="rp-table">
+      <thead><tr><th style="width:8%">Module</th><th style="width:32%">Wat het berekent</th><th>Actuele uitkomst voor deze locatie</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Bronvermogen (L<sub>WA</sub>) van de turbine, opgesplitst in drie categorieën met eigen weging.</td><td>L<sub>WA</sub> = ${state.lwa.toFixed(1)} dB(A) → hoorbaar ${catLw.hoorbaar.toFixed(1)} dB(A), laagfrequent ${catLw.laagfrequent.toFixed(1)} dB(Lin), infrasoon ${catLw.infrasoon.toFixed(1)} dB(G)</td></tr>
+        <tr><td>2</td><td>Omstandighedenfactoren (windschering/inversie, torenzog, amplitudemodulatie, curtailment) die 's nachts geluid kunnen versterken.</td><td>Bepaalt samen met Module 6/7 het onderscheid tussen best/middel/worst case hieronder.</td></tr>
+        <tr><td>3</td><td>Plaatsing van turbine(s) op kaart en live geluidsniveau per categorie/afstand/richting.</td><td>${n} turbine(s) geplaatst — ${escapeHtml(turbineList)}</td></tr>
+        <tr><td>4</td><td>Cumulatie: energetische optelling van meerdere turbines op een rekenpunt.</td><td>Zie Module 4 in de app voor het live cumulatie-resultaat op een zelf te kiezen punt.</td></tr>
+        <tr><td>5</td><td>Toetsing van het berekende geluidsniveau aan een wettelijke/advies-norm (Lnight).</td><td>Actieve norm: ${escapeHtml(norm.label)}${norm.lnight != null ? ` (Lnight ≤ ${norm.lnight} dB)` : ' (geen Lnight-waarde)'}</td></tr>
+        <tr><td>6</td><td>Hoe vaak de nachtelijke best/middel/worst-omstandigheden voorkomen, op basis van klimatologie.</td><td>${m6 ? `Best ${m13Pct(m6.pct.best)} (${m6.days.best} nachten/jr), middel ${m13Pct(m6.pct.middel)} (${m6.days.middel} nachten/jr), worst ${m13Pct(m6.pct.worst)} (${m6.days.worst} nachten/jr)` : '— (geen turbine geplaatst)'}</td></tr>
+        <tr><td>7</td><td>Wetenschappelijke onderbouwing (shear-capacity, Bosveld/Abraham &amp; Monahan) van de middel/worst-splitsing in Module 6.</td><td>Geostrofische wind (ERA5) ter plaatse: U<sub>geo</sub> ≈ ${state.m7Ugeo} m/s</td></tr>
+        <tr><td>8</td><td>Aantal woningen (BAG) en bewoners binnen de overschrijdingsring per scenario, met hinderpercentage 9/30/46%.</td><td>${hasBag ? `Zie hindertabel in §4 hieronder` : '— (nog geen BAG-gegevens opgehaald)'}</td></tr>
+        <tr><td>9</td><td>Geschatte jaarlijkse zorgkosten per gehinderde bewoner (Godono e.a. 2023).</td><td>€${costPerPerson.toFixed(2)}/bewoner/jaar, horizon ${horizon} jaar — zie §5</td></tr>
+        <tr><td>10</td><td>DALY-verlies (disability-adjusted life years) door slaapverstoring + hinder, in drie monetaire waarderingen.</td><td>${dwTotal.toFixed(3)} DALY/bewoner/jaar × €50.000/€70.000/€80.000 per DALY — zie §6</td></tr>
+        <tr><td>11</td><td>Waardedaling van woningen (Droës &amp; Koster 2021), naar tiphoogte-categorie.</td><td>${m11.hasData ? `${m11.totals.woningen.toLocaleString('nl-NL')} woningen, €${Math.round(m11.totals.waarde).toLocaleString('nl-NL')} totale waardedaling` : '— (geen BAG-gegevens of geen turbine geplaatst)'}</td></tr>
+        <tr><td>12</td><td>Bouw-/investeringskosten per turbine(groep), PBL-eindadvies SDE++ 2026.</td><td>${hasM12 ? `${m12rows.length} groep(en), ${m12TotalVermogen.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW totaal, €${Math.round(m12TotalInvest).toLocaleString('nl-NL')} investering` : '— (nog geen turbinegroep toegevoegd)'}</td></tr>
+      </tbody>
+    </table>
+  </section>`;
+
+  // ---- Sectie: waarom de nacht ----
+  const nightSection = `
+  <section class="rp-section">
+    <h2>2. Waarom dit rapport zich richt op de nacht</h2>
+    <p>Windturbinegeluid is een dosis-effectrelatie die 's nachts structureel ongunstiger uitvalt dan overdag: bij een stabiele nachtelijke grenslaag kan de turbine op ashoogte nog hard doordraaien terwijl het windstil is op maaiveld, waardoor het geluidsniveau op leefniveau met naar schatting 10 tot 15 dB kan stijgen ten opzichte van de jaargemiddelde situatie (Module 2, gebaseerd op de bijgevoegde Positioning Paper Laagfrequent Geluid en Windturbines). Slaapverstoring is bovendien de gezondheidsroute waarvoor het bewijs het meest consistent is (zie §6, DALY-berekening). Alle scenario- en hindercijfers in dit rapport betreffen daarom uitsluitend de <strong>nachtperiode</strong> (22.00–07.00 uur), niet de etmaalgemiddelde Lden.</p>
+  </section>`;
+
+  // ---- Sectie: uitgangspunt bronvermogen en positie ----
+  const basisSection = `
+  <section class="rp-section">
+    <h2>3. Uitgangspunt: bronvermogen en turbinepositie</h2>
+    <p>Alle berekeningen in dit rapport zijn afgeleid van twee vaste invoerwaarden:</p>
+    <table class="rp-table">
+      <thead><tr><th>Invoer</th><th>Waarde</th></tr></thead>
+      <tbody>
+        <tr><td>Bronvermogen L<sub>WA</sub> (Module 1)</td><td>${state.lwa.toFixed(1)} dB(A) totaal → hoorbaar ${catLw.hoorbaar.toFixed(1)} dB(A) / laagfrequent ${catLw.laagfrequent.toFixed(1)} dB(Lin) / infrasoon ${catLw.infrasoon.toFixed(1)} dB(G)</td></tr>
+        <tr><td>Aantal turbines (Module 3)</td><td>${n}</td></tr>
+        <tr><td>Positie(s)</td><td>${escapeHtml(turbineList)}</td></tr>
+        <tr><td>Actieve norm (Module 5)</td><td>${escapeHtml(norm.label)}${norm.lnight != null ? `, Lnight ≤ ${norm.lnight} dB` : ''}</td></tr>
+      </tbody>
+    </table>
+    <p>Vanuit dit bronvermogen en deze positie(s) berekent het model per categorie (hoorbaar/laagfrequent/infrasoon) en per scenario (best/middel/worst) de afstand waarop het geluidsniveau de norm overschrijdt (de "overschrijdingsring"), en telt het de unieke BAG-woningen binnen die ring.</p>
+  </section>`;
+
+  // ---- Sectie: scenarioberekening (hoorbaar/LF/infrasoon) ----
+  const catRowsHtml = (scenario) => {
+    const row = rows8.find((rr) => rr.scenario === scenario);
+    if (!row) return '';
+    return row.categories.map((c, idx) => `<tr>
+      <td>${idx === 0 ? M8_SCENARIO_LABEL[scenario] : ''}</td>
+      <td>${c.label}</td>
+      <td>${m8RingLabel(c.ring)}</td>
+      <td>${c.houses != null ? c.houses.toLocaleString('nl-NL') : '—'}</td>
+      <td>${c.people != null ? m13Int(c.people) : '—'}</td>
+    </tr>`).join('');
+  };
+  const scenarioSection = `
+  <section class="rp-section rp-avoid-break">
+    <h2>4. Scenarioberekening: hoorbaar, laagfrequent en infrasoon geluid</h2>
+    <p>Per scenario (best/middel/worst — zie §7 voor hoe vaak elk scenario voorkomt) en per geluidscategorie: de afstand waarbinnen de norm wordt overschreden, het aantal unieke BAG-woningen daarbinnen, en het geschat aantal bewoners (huishoudgrootte ${state.m8HouseholdSize.toFixed(2)} personen/woning).</p>
+    <table class="rp-table">
+      <thead><tr><th>Scenario</th><th>Categorie</th><th>Overschrijdingsring</th><th>Woningen (BAG)</th><th>Bewoners</th></tr></thead>
+      <tbody>${catRowsHtml('best')}${catRowsHtml('middel')}${catRowsHtml('worst')}</tbody>
+    </table>
+    <p class="rp-note">Ontdubbeld totaal per scenario (grootste ring van de drie categorieën, geen dubbeltelling): ${matrix.map((t) => `<strong>${M8_SCENARIO_LABEL[t.scenario]}</strong> ${m8RingLabel(t.ring)}, ${t.houses != null ? t.houses.toLocaleString('nl-NL') : '—'} woningen, ${t.people != null ? m13Int(t.people) : '—'} bewoners`).join(' · ')}.</p>
+  </section>`;
+
+  // ---- Sectie: hinderpercentages RIVM/illustratief/kritisch ----
+  const hinderRowsHtml = matrix.map((t) => t.hinder.map((h, hIdx) => `<tr>
+    <td>${hIdx === 0 ? M8_SCENARIO_LABEL[t.scenario] : ''}</td>
+    <td>${h.pct}% <span class="rp-src">(${escapeHtml(h.label)})</span></td>
+    <td>${t.people != null ? m13Int(t.people) : '—'}</td>
+    <td>${h.people != null ? m13Int(h.people) : '—'}</td>
+  </tr>`).join('')).join('');
+  const hinderSection = `
+  <section class="rp-section rp-avoid-break">
+    <h2>5. Hindercijfers: RIVM, illustratief en kritisch scenario</h2>
+    <p>Het aantal ernstig gehinderde bewoners hangt sterk af van welk hinderpercentage wordt toegepast op de bewonersaantallen uit §4. Dit model toetst drie percentages naast elkaar, in plaats van er één als "de" uitkomst te presenteren:</p>
+    <ul class="rp-list">
+      <li><strong>9% — RIVM-basisscenario:</strong> ernstige hinder binnenshuis bij de oude 47 dB Lden-norm, uit de <a href="https://www.rivm.nl/sites/default/files/2026-02/Factsheet-gezondheidseffecten-van-windturbinegeluid.pdf" target="_blank" rel="noopener">RIVM-factsheet gezondheidseffecten van windturbinegeluid</a>.</li>
+      <li><strong>30% — illustratief tussenscenario:</strong> geen uitkomst van één specifiek onderzoek, maar een tussenwaarde om de gevoeligheid van de uitkomst voor deze aanname te tonen.</li>
+      <li><strong>46% — kritisch scenario:</strong> uit <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC6121431/" target="_blank" rel="noopener">Pawlaczyk-Łuszczyńska e.a. (2018)</a>, gerapporteerd voor bewoners die aangeven windturbinegeluid 's nachts te horen.</li>
+    </ul>
+    <table class="rp-table">
+      <thead><tr><th>Scenario</th><th>Hinderpercentage</th><th>Bewoners (ontdubbeld)</th><th>Ernstig gehinderd</th></tr></thead>
+      <tbody>${hinderRowsHtml}</tbody>
+    </table>
+  </section>`;
+
+  // ---- Sectie: zorgkosten ----
+  const costRowsHtml = matrix.map((t) => t.hinder.map((h, hIdx) => `<tr>
+    <td>${hIdx === 0 ? M8_SCENARIO_LABEL[t.scenario] : ''}</td>
+    <td>${h.pct}%</td>
+    <td>${h.costYear != null ? m9FmtEuro(h.costYear) : '—'}</td>
+    <td>${h.costHorizon != null ? m9FmtEuro(h.costHorizon) : '—'}</td>
+  </tr>`).join('')).join('');
+  const costSection = `
+  <section class="rp-section rp-avoid-break">
+    <h2>6. Zorgkosten</h2>
+    <p>Geschatte zorgkosten volgen de formule <code>kosten = bewoners × €${costPerPerson.toFixed(2)}/persoon/jaar</code>, gebaseerd op <a href="https://doi.org/10.1016/j.ijheh.2023.114273" target="_blank" rel="noopener">Godono e.a. (2023)</a>, over een horizon van ${horizon} jaar.</p>
+    <table class="rp-table">
+      <thead><tr><th>Scenario</th><th>Hinder%</th><th>Kosten/jaar</th><th>Kosten over ${horizon} jaar</th></tr></thead>
+      <tbody>${costRowsHtml}</tbody>
+    </table>
+  </section>`;
+
+  // ---- Sectie: DALY's ----
+  const dalyRowsHtml = matrix.map((t) => t.hinder.map((h, hIdx) => `<tr>
+    <td>${hIdx === 0 ? M8_SCENARIO_LABEL[t.scenario] : ''}</td>
+    <td>${h.pct}%</td>
+    <td>${h.dalyHorizon != null ? m10FmtDaly(h.dalyHorizon) : '—'}</td>
+    <td>${h.values[0].euroHorizon != null ? m9FmtEuro(h.values[0].euroHorizon) : '—'}</td>
+    <td>${h.values[1].euroHorizon != null ? m9FmtEuro(h.values[1].euroHorizon) : '—'}</td>
+    <td>${h.values[2].euroHorizon != null ? m9FmtEuro(h.values[2].euroHorizon) : '—'}</td>
+  </tr>`).join('')).join('');
+  const dalySection = `
+  <section class="rp-section rp-avoid-break">
+    <h2>7. DALY's — gezondheidsverlies in monetaire termen</h2>
+    <p>Disability weight slaapverstoring (0,010) + hinder (0,011) = <strong>${dwTotal.toFixed(3)} DALY per gehinderde bewoner per jaar</strong> (<a href="https://www.who.int/europe/publications/i/item/WHO-EURO-2024-9196-48968-72969" target="_blank" rel="noopener">WHO Europe 2024</a>), over ${horizon} jaar gewaardeerd tegen drie erkende Nederlandse referentiewaarden per DALY: <a href="https://www.pbl.nl/sites/default/files/downloads/PBL_2012_Gezondheid_in_MKBAs_van_omgevingsbeleid_550051004.pdf" target="_blank" rel="noopener">RIVM €50.000 en PBL €70.000</a>, en Zorginstituut Nederland €80.000.</p>
+    <table class="rp-table">
+      <thead><tr><th>Scenario</th><th>Hinder%</th><th>DALY (${horizon} jr)</th><th>€50k/DALY (RIVM)</th><th>€70k/DALY (PBL)</th><th>€80k/DALY (ZiN)</th></tr></thead>
+      <tbody>${dalyRowsHtml}</tbody>
+    </table>
+  </section>`;
+
+  // ---- Sectie: kritische analyse frequentie + jaargemiddelden ----
+  const bestDays = m6 ? m6.days.best : null, middelDays = m6 ? m6.days.middel : null, worstDays = m6 ? m6.days.worst : null;
+  const analysisSection = `
+  <section class="rp-section">
+    <h2>8. Kritische analyse — hoe vaak, en waarom de kosten sowieso optreden</h2>
+    <h3>8.1 Hoe vaak komt elk scenario voor?</h3>
+    ${m6 ? `
+    <table class="rp-table">
+      <thead><tr><th>Scenario</th><th>Aandeel nachten/jaar</th><th>Aantal nachten/jaar</th></tr></thead>
+      <tbody>
+        ${scenarioRow('Best case (bewolkt, neutrale/goed-gemengde grenslaag)', 'best')}
+        ${scenarioRow('Middel case (half bewolkt, zwak stabiele grenslaag — wSBL)', 'middel')}
+        ${scenarioRow('Worst case (helder, zeer stabiele grenslaag — vSBL)', 'worst')}
+      </tbody>
+    </table>
+    <p>Deze verdeling is gebaseerd op de klimatologie van Cabauw en Lutjewad (Module 6/7: Van den Berg 2004/2008, Abraham &amp; Monahan 2019a/b, Baas e.a. 2009) en varieert met de afstand van de turbine tot de kust en de breedtegraad (maandverdeling). Zie de "Beperkingen"-callout bij Module 6/7 in de app voor de volledige onderbouwing.</p>` : '<p><em>Geen turbine geplaatst — deze verdeling kan niet worden getoond.</em></p>'}
+
+    <h3>8.2 Waarom maatschappelijke kosten sowieso optreden</h3>
+    <p>De kern van deze analyse is dat <strong>Module 9 en 10 werken met jaargemiddelden</strong> (zorgkosten per jaar, DALY's per jaar), niet met een eenmalige worst-case-schatting. Dat heeft een directe consequentie die vaak wordt gemist in het maatschappelijke debat: het is <em>geen</em> vereiste dat een omwonende voortdurend in het worst-case-scenario zit om toch reële jaarlijkse kosten te ondervinden.</p>
+    <ul class="rp-list">
+      ${m6 ? `<li>Zelfs in het <strong>beste geval</strong> (bewolkt) doet het gunstigste regime zich ${bestDays} van de 365 nachten voor — de overige ${365 - bestDays} nachten (${m13Pct(100 - m6.pct.best)}) vallen in het middel- of worst-case-regime.</li>
+      <li>Het <strong>worst-case-scenario</strong> is met ${worstDays} nachten per jaar (${m13Pct(m6.pct.worst)}) geen zeldzame uitschieter, maar een terugkerend, voorspelbaar onderdeel van het jaar — geconcentreerd in heldere, koude en meestal winterse/vroege-voorjaarsnachten (zie de maandverdeling in Module 6).</li>` : '<li><em>Geen turbine geplaatst — de precieze verdeling kan hier niet worden getoond, maar het onderliggende principe (zie hierna) geldt onafhankelijk van de locatie.</em></li>'}
+      <li>Omdat elk jaar <em>alle drie</em> de regimes met zekerheid optreden (in wisselende verhouding), is een jaargemiddelde zorgkosten- of DALY-schatting geen overschatting gebaseerd op een hypothetisch ergst geval — het is een <strong>gewogen gemiddelde van drie regimes die elk jaar daadwerkelijk plaatsvinden</strong>. De vraag is dus niet <em>of</em> deze kosten optreden, maar uitsluitend hoe ze zich verdelen over het jaar en welk hinderpercentage (9/30/46%, zie §5) het meest representatief is voor de specifieke situatie.</li>
+      <li>Dit maakt de maatschappelijke kosten in §9 hieronder structureel, terugkerend en niet-hypothetisch — in tegenstelling tot de investeringskosten in Module 12, die eenmalig zijn.</li>
+    </ul>
+  </section>`;
+
+  // ---- Sectie: waardedaling (los van scenario) ----
+  const valueSection = `
+  <section class="rp-section">
+    <h2>9. Waardedaling van woningen</h2>
+    <p><strong>Let op — dit is de uitzondering op de best/middel/worst-indeling:</strong> waardedaling door de aanwezigheid van een turbine is, anders dan §4–7 hierboven, <strong>niet</strong> gekoppeld aan het nachtelijke geluidsscenario. Het is een blijvend effect van de turbine op de woningmarkt, niet een functie van de heersende atmosferische omstandigheden op een gegeven nacht — vandaar één vaste waarde in plaats van een best/middel/worst-uitsplitsing.</p>
+    ${m11.hasData ? `
+    <table class="rp-table">
+      <thead><tr><th>Tiphoogte-categorie</th><th>Methode</th><th>Woningen</th><th>Totale waardedaling</th><th>Eigen risico (NMR ≤4%)</th><th>Compensabele planschade (&gt;4%)</th></tr></thead>
+      <tbody><tr>
+        <td>${escapeHtml(m11.meta.label)}</td>
+        <td>${m11.method === 'band' ? 'Afstandsbanden (Fig. 6)' : 'Vlak percentage'}</td>
+        <td>${m11.totals.woningen.toLocaleString('nl-NL')}</td>
+        <td>€${Math.round(m11.totals.waarde).toLocaleString('nl-NL')}</td>
+        <td>€${Math.round(m11.totals.eigen).toLocaleString('nl-NL')}</td>
+        <td>€${Math.round(m11.totals.compensabel).toLocaleString('nl-NL')}</td>
+      </tr></tbody>
+    </table>
+    <p>Bron: <a href="https://doi.org/10.1016/j.enpol.2021.112327" target="_blank" rel="noopener">Droës &amp; Koster (2021), "Wind turbines, solar farms, and house prices", Energy Policy 155, 112327</a>. WOZ-uitgangswaarde: €${state.m11Woz.toLocaleString('nl-NL')}.</p>` : '<p><em>Geen BAG-gegevens of geen turbine geplaatst — waardedaling kan niet worden berekend.</em></p>'}
+  </section>`;
+
+  // ---- Sectie: maatschappelijke kosten vs. investeringskosten ----
+  const socRowsHtml = socTotalsByPct.map((s) => `<tr>
+    <td>${s.pct}% <span class="rp-src">(${escapeHtml(s.label)})</span></td>
+    <td>${s.people != null ? m13Int(s.people) : '—'}</td>
+    <td>${s.costHorizon != null ? m9FmtEuro(s.costHorizon) : '—'}</td>
+    <td>${s.dalyHorizon != null ? m10FmtDaly(s.dalyHorizon) : '—'}</td>
+    <td>${s.euro70k != null ? m9FmtEuro(s.euro70k) : '—'}</td>
+    <td>${(s.costHorizon != null && s.euro70k != null) ? m9FmtEuro(s.costHorizon + s.euro70k + (m11.hasData ? m11.totals.waarde : 0)) : '—'}</td>
+  </tr>`).join('');
+  const compareSection = `
+  <section class="rp-section">
+    <h2>10. Kritische vergelijking: maatschappelijke kosten versus investeringskosten</h2>
+    <p>De "maatschappelijke kosten" hieronder zijn de som van drie componenten: waardedaling van woningen (§9, eenmalig maar reëel verlies voor eigenaren), zorgkosten (§6, jaarlijks terugkerend over ${horizon} jaar) en het DALY-verlies gewaardeerd tegen €70.000/DALY (§7, PBL-waarde, jaarlijks terugkerend over ${horizon} jaar). Omdat het jaargemiddelde blootstelling betreft (§8.2), is dit geen worst-case-optelsom maar een <strong>jaargewogen gemiddelde</strong> over het best/middel/worst-scenario, per hinderpercentage.</p>
+    <table class="rp-table">
+      <thead><tr><th>Hinderpercentage</th><th>Bewoners (jaargewogen)</th><th>Zorgkosten (${horizon} jr)</th><th>DALY (${horizon} jr)</th><th>DALY-waarde (€70k)</th><th>Totaal maatsch. kosten¹</th></tr></thead>
+      <tbody>${socRowsHtml}</tbody>
+    </table>
+    <p class="rp-note">¹ Zorgkosten + DALY-waarde (€70k) + waardedaling (§9, eenmalig, niet scenarioafhankelijk — daarom in elke rij hetzelfde bedrag opgeteld).</p>
+    ${hasM12 ? `
+    <p><strong>Investeringskosten (Module 12):</strong> ${m12rows.length} turbinegroep(en), totaal ${m12TotalVermogen.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW, totale investering <strong>${m9FmtEuro(m12TotalInvest)}</strong>.</p>
+    <div class="rp-callout rp-warn">
+      <strong>Dit is geen appels-met-appels-vergelijking — en dat is precies het kritische punt:</strong>
+      <ul class="rp-list">
+        <li>De investeringskosten zijn <strong>eenmalig kapitaal</strong> van de projectontwikkelaar/investeerder, terugverdiend over de exploitatieperiode via energieverkoop (en doorgaans SDE++-subsidie) — een bedrijfseconomische kostenpost voor één partij.</li>
+        <li>De maatschappelijke kosten zijn grotendeels <strong>jaarlijks terugkerende, gespreide lasten voor omwonenden</strong> — een andere partij, die geen deel heeft in de opbrengsten van de turbine.</li>
+        <li>Het is dus geen directe "aftrekpost" op de business case van de investeerder, maar wel een indicatie van hoe groot de externe kosten zijn ten opzichte van de kapitaalinzet: bij het meest kritische hinderpercentage (46%) bedraagt de geschatte maatschappelijke kostenpost over ${horizon} jaar <strong>${socTotalsByPct[2].costHorizon != null && socTotalsByPct[2].euro70k != null ? m9FmtEuro(socTotalsByPct[2].costHorizon + socTotalsByPct[2].euro70k + (m11.hasData ? m11.totals.waarde : 0)) : '—'}</strong>, tegenover een investering van <strong>${m9FmtEuro(m12TotalInvest)}</strong> — dat is <strong>${(socTotalsByPct[2].costHorizon != null && socTotalsByPct[2].euro70k != null && m12TotalInvest > 0) ? ((socTotalsByPct[2].costHorizon + socTotalsByPct[2].euro70k + (m11.hasData ? m11.totals.waarde : 0)) / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong> van de investering, puur aan externe kosten die niet in de businesscase van de ontwikkelaar zitten.</li>
+        <li>Deze externe kosten worden in de huidige vergunningverlening <strong>niet gecompenseerd of geïnternaliseerd</strong> (behalve, deels, via planschadevergoeding bij waardedaling boven de 4% NMR-drempel, §9) — ze blijven bij de omwonenden liggen, wat de aanleiding is voor het advies in §11.</li>
+      </ul>
+    </div>` : m12Banner}
+  </section>`;
+
+  // ---- Sectie: advies ----
+  const advisorySection = `
+  <section class="rp-section">
+    <h2>11. Advies — internationale voorbeelden en normstelling</h2>
+    <p>Nederland toetst windturbinegeluid uitsluitend op hoorbaar geluid (dB(A), Lden/Lnight) en kent <strong>geen enkele normstelling voor laagfrequent of infrasoon geluid</strong> — een leemte die drie landen om ons heen op uiteenlopende manieren hebben ingevuld.</p>
+
+    <h3>11.1 Denemarken — expliciete LFN-norm</h3>
+    <p>Denemarken hanteert sinds de <a href="https://eng.mst.dk/media/urbm0xut/statutory-order-on-noise-from-wind-turbines-2019-version.pdf" target="_blank" rel="noopener">Bekendtgørelse nr. 1284 van 15 december 2011</a> een bindende, <strong>berekende</strong> (niet gemeten) binnenwaarde voor laagfrequent geluid van windturbines: <strong>20 dB(A) in de avond (19-22u) en nacht (22-07u)</strong>, en 25 dB(A) overdag, in het 10-160 Hz-gebied per 1/3-octaafband. Deze norm bestond al als algemene richtlijn voor andere geluidsbronnen (<a href="https://eng.mst.dk/industry/noise/wind-turbines" target="_blank" rel="noopener">Deense Milieuagentschap</a>), maar werd in 2011 specifiek voor windturbines tot een verplichte, bij vergunningverlening te berekenen grenswaarde gemaakt — zie ook <a href="https://journals.sagepub.com/doi/pdf/10.1260/0263-0923.31.4.239" target="_blank" rel="noopener">Jakobsen (2012)</a> voor de onderliggende motivatie.</p>
+
+    <h3>11.2 Duitsland — dynamische, weersafhankelijke nachtmodus</h3>
+    <p>Duitsland heeft geen apart LFN-getal, maar kent via de <a href="https://de.wikipedia.org/wiki/Technische_Anleitung_zum_Schutz_gegen_L%C3%A4rm" target="_blank" rel="noopener">TA Lärm</a> gebiedsafhankelijke nachtnormen (35 dB(A) in reine Wohngebiete, 40 dB(A) in allgemeine Wohngebiete, 45 dB(A) in dorps-/mengbestemmingen) én de praktijk van <strong>"schallreduzierter nächtlicher Betrieb"</strong>: vergunningen kunnen een nachtelijke bedrijfsmodus voorschrijven die <em>afhankelijk van de heersende windsnelheid</em> vermogen (en daarmee geluid) terugregelt, om overschrijding te voorkomen zonder de turbine het hele jaar op verminderd vermogen te laten draaien. Deze aanpak — vermogensreductie precies op de momenten dat de omstandigheden risicovol zijn — werd nog in januari 2026 door het Bundesverwaltungsgericht bevestigd als toelaatbare vergunningsvoorwaarde (<a href="https://www.bverwg.de/pm/2025/4" target="_blank" rel="noopener">BVerwG, persbericht nr. 4/2025</a>).</p>
+
+    <h3>11.3 WHO 2018 — een expliciete leemte, juist voor de nacht</h3>
+    <p>De <a href="https://iris.who.int/bitstream/handle/10665/343936/WHO-EURO-2018-3287-43046-60243-eng.pdf" target="_blank" rel="noopener">WHO Environmental Noise Guidelines (2018)</a> geven voor windturbines een voorwaardelijke aanbeveling van Lden &lt;45 dB, maar <strong>expliciet geen Lnight-aanbeveling</strong> — als enige geluidsbron in de gehele richtlijn (wegverkeer, spoor en luchtvaart krijgen alle drie wél een Lnight-waarde). De WHO motiveert dit met de te lage bewijskwaliteit van de beschikbare nachtstudies, niet met de conclusie dat nachtelijke blootstelling onbelangrijk zou zijn (<a href="https://www.wbm.co.uk/wp-content/uploads/2018/11/WBM-WHO-2018-Summary-Nov-2018.pdf" target="_blank" rel="noopener">WBM-samenvatting</a>). Dit is relevant omdat dit rapport net laat zien dat de nacht de kern van het probleem is — precies waar de WHO geen harde ondergrens durft te trekken.</p>
+
+    <h3>11.4 Aanbeveling voor Nederland</h3>
+    <ol class="rp-list">
+      <li><strong>Introduceer een Nederlandse LFN-norm naar Deens voorbeeld:</strong> een berekende binnenwaarde van orde 20 dB(A) in de 10-160 Hz-band voor de avond/nacht (met een ruimere dagwaarde), als aanvulling op — niet vervanging van — de bestaande hoorbaar-geluidnorm. Dit dicht de leemte die dit rapport in §4/§5 blootlegt: laagfrequent en infrasoon geluid worden nu alleen indicatief getoond, niet getoetst.</li>
+      <li><strong>Koppel operationele maatregelen aan de scenario-detectie van Module 6/7:</strong> verplicht een noise-reduced-operation-modus (vermogensreductie) op nachten waarin de klimatologische/shear-capacity-indicatoren een worst-case (vSBL-)regime voorspellen, naar het Duitse precedent van een weersafhankelijke nachtmodus — in plaats van het hele jaar een vaste, permanente afregeling die op de meeste nachten onnodig is en op de kritieke nachten mogelijk nog steeds ontoereikend.</li>
+      <li><strong>Houd cumulatie in de gaten (Module 4):</strong> bij meerdere turbines of naburige windparken moet de geluidsbijdrage energetisch worden opgeteld op het rekenpunt, niet per turbine afzonderlijk getoetst — een op zichzelf toelaatbare turbine kan gecombineerd met naburige turbines de norm alsnog doen overschrijden. Dit rapport rekent per turbinepositie; bij meerdere naburige projecten dient een gezamenlijke cumulatietoets te worden uitgevoerd.</li>
+      <li><strong>Onafhankelijke verificatie na realisatie:</strong> vul de vooraf berekende prognose (zoals in dit model) aan met verplichte post-constructiemeting, zoals in de Duitse praktijk gebruikelijk is bij een schallreduzierter Betrieb — een berekende prognose is per definitie een model, geen meting van de werkelijke situatie.</li>
+    </ol>
+  </section>`;
+
+  const bronnenSection = `
+  <section class="rp-section">
+    <h2>Bronnen</h2>
+    <ul class="rp-sources">
+      <li>RIVM (2026), <a href="https://www.rivm.nl/sites/default/files/2026-02/Factsheet-gezondheidseffecten-van-windturbinegeluid.pdf" target="_blank" rel="noopener">Factsheet gezondheidseffecten van windturbinegeluid</a></li>
+      <li>Pawlaczyk-Łuszczyńska e.a. (2018), <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC6121431/" target="_blank" rel="noopener">PMC6121431</a></li>
+      <li>Godono e.a. (2023), <a href="https://doi.org/10.1016/j.ijheh.2023.114273" target="_blank" rel="noopener">doi.org/10.1016/j.ijheh.2023.114273</a></li>
+      <li>WHO Europe (2024), <a href="https://www.who.int/europe/publications/i/item/WHO-EURO-2024-9196-48968-72969" target="_blank" rel="noopener">Disability weights</a></li>
+      <li>PBL (2012), <a href="https://www.pbl.nl/sites/default/files/downloads/PBL_2012_Gezondheid_in_MKBAs_van_omgevingsbeleid_550051004.pdf" target="_blank" rel="noopener">Gezondheid in MKBA's van omgevingsbeleid</a></li>
+      <li>Droës &amp; Koster (2021), <a href="https://doi.org/10.1016/j.enpol.2021.112327" target="_blank" rel="noopener">Energy Policy 155, 112327</a></li>
+      <li>PBL (2026), <a href="https://www.pbl.nl/publicaties/advies-basisbedragen-sde-2026" target="_blank" rel="noopener">Advies basisbedragen SDE++ 2026</a></li>
+      <li>Deens Milieuagentschap, <a href="https://eng.mst.dk/media/urbm0xut/statutory-order-on-noise-from-wind-turbines-2019-version.pdf" target="_blank" rel="noopener">Statutory Order on Noise from Wind Turbines</a> en <a href="https://eng.mst.dk/industry/noise/wind-turbines" target="_blank" rel="noopener">overzichtspagina</a></li>
+      <li>Jakobsen (2012), <a href="https://journals.sagepub.com/doi/pdf/10.1260/0263-0923.31.4.239" target="_blank" rel="noopener">Noise & Vibration Worldwide 31(4), 239</a></li>
+      <li>Technische Anleitung zum Schutz gegen Lärm, <a href="https://de.wikipedia.org/wiki/Technische_Anleitung_zum_Schutz_gegen_L%C3%A4rm" target="_blank" rel="noopener">overzicht</a></li>
+      <li>Bundesverwaltungsgericht, <a href="https://www.bverwg.de/pm/2025/4" target="_blank" rel="noopener">persbericht nr. 4/2025 (schallreduzierter Betrieb)</a></li>
+      <li>WHO (2018), <a href="https://iris.who.int/bitstream/handle/10665/343936/WHO-EURO-2018-3287-43046-60243-eng.pdf" target="_blank" rel="noopener">Environmental Noise Guidelines for the European Region</a>, samengevat door <a href="https://www.wbm.co.uk/wp-content/uploads/2018/11/WBM-WHO-2018-Summary-Nov-2018.pdf" target="_blank" rel="noopener">WBM (2018)</a></li>
+    </ul>
+    <p class="rp-note">Zie ook de uitgebreide methodologie- en bronnenlijst onderaan de webapplicatie (sectie "Methodologie &amp; bronnen") voor de volledige onderbouwing van Module 1-8.</p>
+  </section>`;
+
+  return `<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Windturbinegeluid — nachtelijke hinder, maatschappelijke kosten en normstelling</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Georgia', 'Times New Roman', serif; color: #1c2b28; background: #ffffff; font-size: 10.5pt; line-height: 1.5; margin: 0; }
+  .rp-page { max-width: 800px; margin: 0 auto; padding: 10mm 4mm; }
+  .rp-header { border-bottom: 3px solid #0e4a4a; padding-bottom: 14px; margin-bottom: 20px; }
+  .rp-header .rp-eyebrow { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 9pt; letter-spacing: 0.08em; text-transform: uppercase; color: #a3651b; font-weight: 700; margin-bottom: 6px; }
+  .rp-header h1 { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 19pt; font-weight: 700; color: #0e4a4a; margin: 0 0 8px; line-height: 1.25; }
+  .rp-header .rp-sub { font-size: 10pt; color: #5c6a63; }
+  .rp-toolbar { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 14px; }
+  .rp-print-btn { font-family: 'Helvetica', 'Arial', sans-serif; background: #0e4a4a; color: #f5f3ee; border: none; border-radius: 6px; padding: 10px 18px; font-size: 10pt; font-weight: 700; cursor: pointer; }
+  .rp-print-btn:hover { background: #0a3838; }
+  h2 { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 13pt; color: #0e4a4a; border-bottom: 1px solid #cfc6ae; padding-bottom: 4px; margin: 26px 0 10px; }
+  h3 { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11pt; color: #1c2b28; margin: 16px 0 6px; }
+  p { margin: 0 0 10px; }
+  .rp-section { margin-bottom: 6px; }
+  .rp-avoid-break { break-inside: avoid; page-break-inside: avoid; }
+  .rp-table { width: 100%; border-collapse: collapse; margin: 10px 0 14px; font-size: 9.3pt; }
+  .rp-table th, .rp-table td { border: 1px solid #cfc6ae; padding: 5px 7px; text-align: left; vertical-align: top; }
+  .rp-table thead th { background: #d3e0dd; font-family: 'Helvetica', 'Arial', sans-serif; font-weight: 700; font-size: 8.8pt; }
+  .rp-table tbody tr:nth-child(even) { background: #f5f3ee; }
+  .rp-src { color: #5c6a63; font-size: 8.6pt; }
+  .rp-note { font-size: 9pt; color: #5c6a63; font-style: italic; }
+  .rp-list { margin: 6px 0 12px 18px; }
+  .rp-list li { margin-bottom: 6px; }
+  .rp-callout { border-left: 4px solid #a3651b; background: #ecdcc4; border-radius: 4px; padding: 10px 14px; margin: 10px 0 16px; font-size: 9.6pt; }
+  .rp-callout.rp-warn { border-left-color: #a1332f; background: #ecd4cf; }
+  .rp-sources { margin: 8px 0 0 18px; font-size: 9pt; }
+  .rp-sources li { margin-bottom: 4px; }
+  code { font-family: 'Courier New', monospace; background: #ece8de; padding: 1px 4px; border-radius: 3px; font-size: 0.92em; }
+  .rp-footer { margin-top: 24px; padding-top: 10px; border-top: 1px solid #cfc6ae; font-size: 8.3pt; color: #92998f; }
+  a { color: #0e4a4a; }
+  @media print { .rp-toolbar { display: none !important; } .rp-page { max-width: none; padding: 0; } }
+</style>
+</head>
+<body>
+<div class="rp-page">
+  <div class="rp-toolbar no-print"><button class="rp-print-btn" onclick="window.print()">Afdrukken / opslaan als PDF</button></div>
+  <div class="rp-header">
+    <div class="rp-eyebrow">Kritisch rapport — Module 13</div>
+    <h1>Windturbinegeluid 's nachts: hinder, maatschappelijke kosten en normstelling</h1>
+    <div class="rp-sub">Gegenereerd op ${genDate} om ${genTime} · Bronvermogen ${state.lwa.toFixed(1)} dB(A) · ${n} turbine(s): ${escapeHtml(turbineList)}</div>
+  </div>
+  ${warningBanner}
+  ${summarySection}
+  ${nightSection}
+  ${basisSection}
+  ${scenarioSection}
+  ${hinderSection}
+  ${costSection}
+  ${dalySection}
+  ${analysisSection}
+  ${valueSection}
+  ${compareSection}
+  ${advisorySection}
+  ${bronnenSection}
+  <div class="rp-footer">Automatisch gegenereerd door het interactieve windturbinegeluidsmodel (Module 13). Dient ter beleidsmatige illustratie — vervangt geen formeel akoestisch onderzoek, planschadetaxatie of gezondheidskundig advies. Klik linksboven op "Afdrukken / opslaan als PDF" en kies als bestemming "Opslaan als PDF" om dit rapport te downloaden.</div>
+</div>
+</body>
+</html>`;
+}
+
+function m13OpenReport() {
+  const html = m13BuildReportHtml();
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank');
+  if (!win) {
+    alert('De pop-up werd geblokkeerd door de browser — sta pop-ups toe voor deze pagina en klik opnieuw op "Rapport genereren (PDF)".');
+  }
+}
+
 // ---------- Wire up turbine controls & init ----------
 initMap3a();
 render();
 renderModule12();
+renderModule13();
 initCalcTooltip();
+const m13Btn = document.getElementById('m13-generate-btn');
+if (m13Btn) m13Btn.addEventListener('click', m13OpenReport);
