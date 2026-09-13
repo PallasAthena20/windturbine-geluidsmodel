@@ -3283,27 +3283,35 @@ function m13BuildReportHtml() {
     </table>
   </section>`;
 
-  // ---- Sectie: DALY's — PER CATEGORIE ----
-  const m13DalyCell = (h) => {
+  // ---- Sectie: DALY's — PER CATEGORIE, PER MONETAIRE WAARDERING (RIVM/PBL/Zorginstituut, tabellen onder elkaar) ----
+  const m13DalyCellFor = (h, vIdx) => {
     if (h.people == null) return '—';
-    const v70 = h.values.find((v) => v.key === 'pbl');
-    return `${m13Int(h.people)} bew. → <strong>${m10FmtDaly(h.dalyHorizon)} DALY</strong><br><span class="rp-src">€70k/DALY (PBL): ${v70 && v70.euroHorizon != null ? m9FmtEuro(v70.euroHorizon) : '—'}</span>`;
+    const v = h.values[vIdx];
+    return `${m13Int(h.people)} bew. → <strong>${m10FmtDaly(h.dalyHorizon)} DALY</strong><br><span class="rp-src">${v && v.euroHorizon != null ? m9FmtEuro(v.euroHorizon) : '—'}</span>`;
   };
-  const dalyRowsHtml = catMatrix.map((t) => t.categories.map((c, cIdx) => `<tr>
-    ${cIdx === 0 ? `<td rowspan="3">${M8_SCENARIO_LABEL[t.scenario]}</td>` : ''}
-    <td>${c.label}</td>
-    <td>${m13DalyCell(c.hinder[0])}</td>
-    <td>${m13DalyCell(c.hinder[1])}</td>
-    <td>${m13DalyCell(c.hinder[2])}</td>
-  </tr>`).join('')).join('');
-  const dalySection = `
-  <section class="rp-section rp-avoid-break">
-    <h2>7. DALY's — gezondheidsverlies in monetaire termen</h2>
-    <p>Disability weight slaapverstoring (0,010) + hinder (0,011) = <strong>${dwTotal.toFixed(3)} DALY per gehinderde bewoner per jaar</strong> (<a href="https://www.who.int/europe/publications/i/item/WHO-EURO-2024-9196-48968-72969" target="_blank" rel="noopener">WHO Europe 2024</a>), over ${horizon} jaar, per categorie/ring en per hinderpercentage — zelfde populatie-logica als §5–§6. Onderstaande tabel toont de PBL-referentiewaarde (€70.000/DALY); de RIVM- (€50.000) en Zorginstituut-waarderingen (€80.000) per scenario/categorie/hinderpercentage staan in Module 10 van de webapplicatie zelf.</p>
+  const dalyTableFor = (vIdx) => {
+    const meta = M10_VALUES[vIdx];
+    const rows = catMatrix.map((t) => t.categories.map((c, cIdx) => `<tr>
+      ${cIdx === 0 ? `<td rowspan="3">${M8_SCENARIO_LABEL[t.scenario]}</td>` : ''}
+      <td>${c.label}</td>
+      <td>${m13DalyCellFor(c.hinder[0], vIdx)}</td>
+      <td>${m13DalyCellFor(c.hinder[1], vIdx)}</td>
+      <td>${m13DalyCellFor(c.hinder[2], vIdx)}</td>
+    </tr>`).join('')).join('');
+    return `
+    <h3>7.${vIdx + 1} ${escapeHtml(meta.label)} — €${meta.euro.toLocaleString('nl-NL')}/DALY</h3>
     <table class="rp-table rp-table-compact">
       <thead><tr><th>Scenario</th><th>Categorie</th><th>${M8_HINDER_SCENARIOS[0].pct}% <span class="rp-src">(${escapeHtml(M8_HINDER_SCENARIOS[0].label)})</span></th><th>${M8_HINDER_SCENARIOS[1].pct}% <span class="rp-src">(${escapeHtml(M8_HINDER_SCENARIOS[1].label)})</span></th><th>${M8_HINDER_SCENARIOS[2].pct}% <span class="rp-src">(${escapeHtml(M8_HINDER_SCENARIOS[2].label)})</span></th></tr></thead>
-      <tbody>${dalyRowsHtml}</tbody>
-    </table>
+      <tbody>${rows}</tbody>
+    </table>`;
+  };
+  const dalySection = `
+  <section class="rp-section">
+    <h2>7. DALY's — gezondheidsverlies in monetaire termen</h2>
+    <p>Disability weight slaapverstoring (0,010) + hinder (0,011) = <strong>${dwTotal.toFixed(3)} DALY per gehinderde bewoner per jaar</strong> (<a href="https://www.who.int/europe/publications/i/item/WHO-EURO-2024-9196-48968-72969" target="_blank" rel="noopener">WHO Europe 2024</a>), over ${horizon} jaar, per categorie/ring en per hinderpercentage — zelfde populatie-logica als §5–§6. Het aantal gehinderde bewoners en DALY's is in elke tabel hieronder identiek; alleen de monetaire waardering per DALY verschilt (€50.000 RIVM, €70.000 PBL, €80.000 Zorginstituut Nederland) — daarom staan de drie waarderingen hier volledig uitgeschreven, niet slechts één ervan.</p>
+    ${dalyTableFor(0)}
+    ${dalyTableFor(1)}
+    ${dalyTableFor(2)}
   </section>`;
 
   // ---- Sectie: kritische analyse frequentie + jaargemiddelden ----
@@ -3331,6 +3339,24 @@ function m13BuildReportHtml() {
       <li>Omdat elk jaar <em>alle drie</em> de regimes met zekerheid optreden (in wisselende verhouding), is een jaargemiddelde zorgkosten- of DALY-schatting geen overschatting gebaseerd op een hypothetisch ergst geval — het is een <strong>gewogen gemiddelde van drie regimes die elk jaar daadwerkelijk plaatsvinden</strong>. De vraag is dus niet <em>of</em> deze kosten optreden, maar uitsluitend hoe ze zich verdelen over het jaar en welk hinderpercentage (9/30/46%, zie §5) het meest representatief is voor de specifieke situatie.</li>
       <li>Dit maakt de maatschappelijke kosten in §9 hieronder structureel, terugkerend en niet-hypothetisch — in tegenstelling tot de investeringskosten in Module 12, die eenmalig zijn.</li>
     </ul>
+
+    <h3>8.3 Het jaargemiddelde is een beleidsgetal, geen ervaringsgetal</h3>
+    <p><strong>Wie wil weten wat een omwonende daadwerkelijk als beperking van zijn geluidshinder ervaart, moet het jaargemiddelde uit §10 loslaten en naar de worst-case-kolom in §5–§7 kijken.</strong> Een jaargemiddelde is een nuttig getal voor een langjarige maatschappelijke-kostenraming (§8.2), maar het is per definitie een afgevlakt gemiddelde over drie regimes — en verhult daardoor precies de piekbelasting die de norm zou moeten begrenzen. Een omwonende ligt niet 's nachts in een "gewogen gemiddelde" wakker; die ervaart op ${worstDays != null ? worstDays : 'de'} worst-case-nachten per jaar (${m6 ? m13Pct(m6.pct.worst) : '—'} van alle nachten) het volle, ongedempte niveau.</p>
+    ${(() => {
+      const worstRow = catMatrix.find((t) => t.scenario === 'worst');
+      const wHoorbaar = worstRow ? worstRow.categories.find((c) => c.key === 'hoorbaar') : null;
+      const wInfrasoon = worstRow ? worstRow.categories.find((c) => c.key === 'infrasoon') : null;
+      const wH46 = wHoorbaar ? wHoorbaar.hinder[2] : null;
+      const wI46 = wInfrasoon ? wInfrasoon.hinder[2] : null;
+      if (!wH46 || wH46.people == null) {
+        return '<p class="rp-note"><em>Geen BAG-gegevens of geen turbine geplaatst — het worst-case-piekcijfer kan hier niet worden getoond.</em></p>';
+      }
+      return `<ul class="rp-list">
+        <li>Op een worst-case-nacht vallen <strong>${wHoorbaar.houses.toLocaleString('nl-NL')} woningen</strong> binnen de hoorbaar-overschrijdingsring, met bij het kritische 46%-hinderpercentage naar schatting <strong>${m13Int(wH46.people)} gehinderde bewoners</strong> — dit is het getal dat de daadwerkelijke ernst van een worst-case-nacht weergeeft, niet het over drie regimes uitgesmeerde jaargemiddelde uit §10 (${hoorbaarCrit && hoorbaarCrit.people != null ? m13Int(hoorbaarCrit.people) : '—'} bewoners, hoorbaar/46%).</li>
+        ${wI46 && wI46.people != null ? `<li>Wordt hetzelfde kritische percentage illustratief op de (grotere) infrasoonring toegepast, loopt dit op tot <strong>${m13Int(wI46.people)} bewoners</strong> op een enkele worst-case-nacht — een cijfer dat in een jaargemiddelde volledig verdwijnt tussen de rustiger best- en middel-case-nachten.</li>` : ''}
+        <li>Beleid dat uitsluitend het jaargemiddelde rapporteert (zoals de vergelijking in §10) onderschat daarmee systematisch wat er op de kritieke nachten zelf gebeurt. Voor toetsing aan een gezondheidskundige norm — in plaats van een financiële raming — is het worst-case-cijfer de relevante maatstaf, niet het gemiddelde.</li>
+      </ul>`;
+    })()}
   </section>`;
 
   // ---- Sectie: waardedaling (los van scenario) ----
@@ -3406,6 +3432,7 @@ function m13BuildReportHtml() {
       <li><strong>Koppel operationele maatregelen aan de scenario-detectie van Module 6/7:</strong> verplicht een noise-reduced-operation-modus (vermogensreductie) op nachten waarin de klimatologische/shear-capacity-indicatoren een worst-case (vSBL-)regime voorspellen, naar het Duitse precedent van een weersafhankelijke nachtmodus — in plaats van het hele jaar een vaste, permanente afregeling die op de meeste nachten onnodig is en op de kritieke nachten mogelijk nog steeds ontoereikend.</li>
       <li><strong>Houd cumulatie in de gaten (Module 4):</strong> bij meerdere turbines of naburige windparken moet de geluidsbijdrage energetisch worden opgeteld op het rekenpunt, niet per turbine afzonderlijk getoetst — een op zichzelf toelaatbare turbine kan gecombineerd met naburige turbines de norm alsnog doen overschrijden. Dit rapport rekent per turbinepositie; bij meerdere naburige projecten dient een gezamenlijke cumulatietoets te worden uitgevoerd.</li>
       <li><strong>Onafhankelijke verificatie na realisatie:</strong> vul de vooraf berekende prognose (zoals in dit model) aan met verplichte post-constructiemeting, zoals in de Duitse praktijk gebruikelijk is bij een schallreduzierter Betrieb — een berekende prognose is per definitie een model, geen meting van de werkelijke situatie.</li>
+      <li><strong>Verplicht het worst-case-cijfer naast het jaargemiddelde te rapporteren, niet in plaats daarvan:</strong> zie §8.3 — een jaargemiddelde maatschappelijke-kostenraming (§10) is toelaatbaar voor een financiële afweging, maar ontoereikend als gezondheidskundige toets. Vergunningverlening moet dwingend het piekcijfer op een worst-case-nacht (§5, 46%-scenario) laten zien, anders wordt de daadwerkelijke beperking van omwonenden weggemiddeld tot een cijfer dat niemand op de kritieke nachten zelf ervaart.</li>
     </ol>
   </section>`;
 
