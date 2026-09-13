@@ -1851,6 +1851,35 @@ function m8ComputeTotals() {
   });
 }
 
+// ---------- Module 8: jaargemiddelde toetsing van de Lnight-norm (best/middel/worst-mix) ----------
+// De Lnight-norm (Module 5) is wettelijk een JAARGEMIDDELDE over alle nachten van het jaar, geen
+// grenswaarde per afzonderlijke nacht. Deze functie rekent, voor elke overschrijdingsring die Module 8
+// hierboven al voor hoorbaar geluid vindt (best/middel/worst hebben elk hun eigen ring), het energetisch
+// (logaritmisch) jaargemiddelde Lnight uit op die afstand — gewogen met de werkelijke scenario-
+// percentages per jaar uit Module 6 (locatieafhankelijk: afstand tot de kust en shear-capaciteit, zie
+// Module 7) — en toetst dat jaargemiddelde opnieuw aan de norm. Formule:
+//   L_jaar = 10·log10( Σ p_i · 10^(L_i/10) ),  p_best + p_middel + p_worst = 1
+// Energetische (logaritmische) jaarmiddeling is de gangbare rekenmethode voor Lden/Lnight-toetsing.
+function m8JaarnormRows() {
+  const norm = getActiveNorm();
+  if (norm.lnight == null || state.turbines3a.length === 0) return null;
+  const anchor = m6TurbineAnchor();
+  const pct = m6ScenarioPercentages(anchor.lat, anchor.lng);
+  const lwCat = computeCategoryLw(state.lwa).hoorbaar;
+  const levelAt = (scenario, d) => lpAt(d, 1, 'hoorbaar', lwCat, { scenario, daynight: 'nacht', curtailment: state.curtailment });
+  const weightedAvgAt = (d) => 10 * Math.log10(
+    ['best', 'middel', 'worst'].reduce((acc, s) => acc + (pct[s] / 100) * Math.pow(10, levelAt(s, d) / 10), 0)
+  );
+  const rows = ['best', 'middel', 'worst'].map((scenario) => {
+    const ring = m8ExceedanceRadius(scenario, 'hoorbaar');
+    if (ring == null) return { scenario, ring: null, levels: null, jaargemiddelde: null, exceeds: null };
+    const levels = { best: levelAt('best', ring), middel: levelAt('middel', ring), worst: levelAt('worst', ring) };
+    const jaargemiddelde = weightedAvgAt(ring);
+    return { scenario, ring, levels, jaargemiddelde, exceeds: jaargemiddelde > norm.lnight };
+  });
+  return { pct, anchor, rows };
+}
+
 // ==================== MODULE 8a: gevolgen van A-weging op laagfrequent/infrasoon ====================
 // Zelfde methodiek als Module 8 (ring → BAG-woningen → bewoners), maar nu berekend voor de twee
 // categorieën die normaal NIET A-gewogen worden (laagfrequent: dB(Lin); infrasoon: dB(G)), en voor
@@ -2124,11 +2153,54 @@ function renderModule8() {
     }
   }
 
+  renderModule8Jaarnorm();
   renderModule8a();
   renderModule9();
   renderModule10();
   renderModule11();
   renderModule13();
+}
+
+// Weergave van m8JaarnormRows() — zie functiecommentaar hierboven voor de rekenmethode.
+function renderModule8Jaarnorm() {
+  const pctEl = document.getElementById('m8-jaarnorm-pct');
+  const tableBody = document.getElementById('m8-jaarnorm-table-body');
+  if (!tableBody) return;
+  const n = state.turbines3a.length;
+  const norm = getActiveNorm();
+  if (n === 0) {
+    if (pctEl) pctEl.innerHTML = '';
+    tableBody.innerHTML = `<tr><td colspan="7" class="empty-row">Plaats minstens één turbine op de kaart in Module 3.</td></tr>`;
+    return;
+  }
+  if (norm.lnight == null) {
+    if (pctEl) pctEl.innerHTML = '';
+    tableBody.innerHTML = `<tr><td colspan="7" class="empty-row">De geselecteerde norm (${escapeHtml(norm.label)}) heeft geen Lnight-waarde — jaargemiddelde toetsing is hiermee niet mogelijk.</td></tr>`;
+    return;
+  }
+  const result = m8JaarnormRows();
+  if (!result) {
+    tableBody.innerHTML = `<tr><td colspan="7" class="empty-row">Geen gegevens.</td></tr>`;
+    return;
+  }
+  const { pct, anchor } = result;
+  if (pctEl) {
+    pctEl.innerHTML = `Voor deze turbinepositie (${anchor.isDefault ? 'standaardlocatie' : `${pct.distKm.toFixed(0)} km landinwaarts`}, Module 6): <strong>best ${pct.best.toFixed(1)}%</strong>, <strong>middel ${pct.middel.toFixed(1)}%</strong>, <strong>worst ${pct.worst.toFixed(1)}%</strong> van alle nachten per jaar.`;
+  }
+  tableBody.innerHTML = result.rows.map((r) => {
+    if (r.ring == null) {
+      return `<tr><td>${M8_SCENARIO_LABEL[r.scenario]}-ring</td><td colspan="6" class="empty-row">Geen overschrijding op de vaste ringen (hoorbaar geluid).</td></tr>`;
+    }
+    return `<tr class="${r.exceeds ? 'm8-jaarnorm-exceeds' : 'm8-jaarnorm-ok'}">
+      <td>${M8_SCENARIO_LABEL[r.scenario]}-ring</td>
+      <td>${m8RingLabel(r.ring)}</td>
+      <td>${r.levels.best.toFixed(1)} dB(A)</td>
+      <td>${r.levels.middel.toFixed(1)} dB(A)</td>
+      <td>${r.levels.worst.toFixed(1)} dB(A)</td>
+      <td><strong>${r.jaargemiddelde.toFixed(1)} dB(A)</strong></td>
+      <td>${r.exceeds ? 'Overschrijding' : 'Binnen de norm'}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ==================== MODULE 9: geschatte zorgkosten ====================
@@ -3503,6 +3575,33 @@ function m13BuildReportHtml(mapImages) {
         ${wI46 && wI46.people != null ? `<li>Wordt hetzelfde kritische percentage illustratief op de (grotere) infrasoonring toegepast, loopt dit op tot <strong>${m13Int(wI46.people)} bewoners</strong> op een enkele worst-case-nacht — een cijfer dat in een jaargemiddelde volledig verdwijnt tussen de rustiger best- en middel-case-nachten.</li>` : ''}
         <li>Beleid dat uitsluitend het jaargemiddelde rapporteert (zoals de vergelijking in §10) onderschat daarmee systematisch wat er op de kritieke nachten zelf gebeurt. Voor toetsing aan een gezondheidskundige norm — in plaats van een financiële raming — is het worst-case-cijfer de relevante maatstaf, niet het gemiddelde.</li>
       </ul>`;
+    })()}
+
+    <h3>8.4 Rekenvoorbeeld: haalt de nachtnorm het als jaargemiddelde tóch, ondanks deze piekwaarden?</h3>
+    <p>Het jaargemiddelde in §8.3 was een kwalitatief punt; hier volgt het concrete rekenvoorbeeld. De Lnight-norm bij Module 5 (${norm.lnight != null ? norm.lnight + ' dB(A)' : '—'}) is zelf wettelijk óók een jaargemiddelde, geen grenswaarde per nacht. De vraag is dus: als een woning op de worst-case-overschrijdingsring van §5 ligt, wordt de norm dán als jaargemiddelde alsnog gehaald, doordat de meeste nachten milder zijn? Onderstaande tabel rekent dit uit door voor elke scenario-eigen overschrijdingsring (best/middel/worst, hoorbaar geluid) het energetisch jaargemiddelde Lnight te bepalen — gewogen met de daadwerkelijke scenarioverdeling van §8.1 — en dat gemiddelde opnieuw aan de norm te toetsen: <code>L_jaar = 10·log₁₀(Σ p_i·10^(L_i/10))</code>.</p>
+    ${(() => {
+      const jn = m8JaarnormRows();
+      if (!jn) {
+        return '<p class="rp-note"><em>Geen turbine geplaatst, of de gekozen norm heeft geen Lnight-waarde — dit rekenvoorbeeld kan niet worden getoond.</em></p>';
+      }
+      const rowsHtml = jn.rows.map((row) => {
+        if (row.ring == null) {
+          return `<tr><td>${M8_SCENARIO_LABEL[row.scenario]}-ring</td><td colspan="5"><em>Geen overschrijding op de vaste ringen (hoorbaar geluid).</em></td></tr>`;
+        }
+        return `<tr>
+          <td>${M8_SCENARIO_LABEL[row.scenario]}-ring</td>
+          <td>${m8RingLabel(row.ring)}</td>
+          <td>${row.levels.best.toFixed(1)} / ${row.levels.middel.toFixed(1)} / ${row.levels.worst.toFixed(1)} dB(A)</td>
+          <td><strong>${row.jaargemiddelde.toFixed(1)} dB(A)</strong></td>
+          <td>${row.exceeds ? '<strong>Overschrijding</strong>' : 'Binnen de norm'}</td>
+        </tr>`;
+      }).join('');
+      return `<p>Scenarioverdeling op deze locatie (§8.1, Module 6): best ${jn.pct.best.toFixed(1)}%, middel ${jn.pct.middel.toFixed(1)}%, worst ${jn.pct.worst.toFixed(1)}% van alle nachten per jaar.</p>
+      <table class="rp-table rp-table-compact">
+        <thead><tr><th>Ring (bepaald door)</th><th>Afstand</th><th>Lnight best / middel / worst</th><th>Jaargemiddelde</th><th>Toetsing</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      <p class="rp-note"><strong>Methodologische kanttekening:</strong> ook dit rekenvoorbeeld is een modelmatige schatting, geen meting. De scenario-percentages zijn afgeleid uit de afstand tot de kust en de shear-capaciteit (§8.1, Module 6/7) — geen gemeten jaarstatistiek van weerscondities per nacht op deze exacte locatie. De berekening neemt bovendien aan dat een hele nacht steeds volledig in één scenario valt (geen overgangen binnen één nacht), en gebruikt voor alle drie de scenario's dezelfde (downwind-)richting die ook voor de overschrijdingsringen in §5 wordt gebruikt.</p>`;
     })()}
   </section>`;
 

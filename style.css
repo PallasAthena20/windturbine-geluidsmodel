@@ -589,6 +589,8 @@ footer { text-align: center; padding: var(--space-10) var(--space-6); color: var
 .module-subhead h3 { font-size: var(--text-base); font-weight: 700; color: var(--color-text); margin-bottom: var(--space-2); }
 .callout.m8-totals-highlight, .callout.m9-totals-highlight, .callout.m10-totals-highlight, .callout.m11-totals-highlight { background: var(--color-success-highlight); border-left: 3px solid var(--color-success); }
 .callout.m8-totals-highlight h3, .callout.m9-totals-highlight h3, .callout.m10-totals-highlight h3, .callout.m11-totals-highlight h3 { font-size: var(--text-base); font-weight: 700; margin-bottom: var(--space-2); color: var(--color-text); }
+.m8-jaarnorm-table tr.m8-jaarnorm-exceeds td:last-child { color: var(--color-error); font-weight: 700; }
+.m8-jaarnorm-table tr.m8-jaarnorm-ok td:last-child { color: var(--color-success); font-weight: 700; }
 
 /* Module 11: waardedaling woningen */
 .m11-method-tabs { margin-bottom: var(--space-3); }
