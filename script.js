@@ -1861,10 +1861,6 @@ const M8A_PERIODS = [
   { key: 'dag', label: 'Dag' },
   { key: 'nacht', label: 'Nacht' },
 ];
-const M8A_WEGINGEN = [
-  { key: 'ongewogen', label: 'Ongewogen' },
-  { key: 'gewogen', label: 'Gewogen (A)' },
-];
 
 // Zoals m8ExceedanceRadius(), maar met expliciete daynight EN een meegegeven lwCat (i.p.v. altijd
 // 'nacht' en altijd de standaard-Lw van de categorie) zodat dezelfde ring/woningen-machinerie ook
@@ -1881,12 +1877,15 @@ function m8aExceedanceRadius(scenarioKey, categoryKey, daynightKey, lwCat) {
   return radius;
 }
 
-// Bouwt, per scenario (best/middel/worst — "in alle scenario's"), de 2 (categorie) × 2 (dag/nacht)
-// × 2 (ongewogen/gewogen) = 8-rijen-staatje. Let op: er bestaat geen aparte, wettelijk vastgestelde
-// dag-norm in dit model (zie Module 8/methodologie — toetsing gebeurt uitsluitend op Lnight); de
-// dag-rijen hieronder toetsen daarom één-op-één aan datzelfde Lnight-getal, uitsluitend om het
-// effect van de nachtelijke windschering/inversietoeslag (Module 2) te isoleren — net zoals Module 8
-// de dB(A)-Lnight-norm ook al als indicatief referentiepunt voor infrasoon (dB(G)) gebruikt.
+// Bouwt, per scenario (best/middel/worst — "in alle scenario's"), een directe rij-voor-rij
+// vergelijking tussen Module 8 (ongewogen/G-gewogen — de vakliteratuur-juiste toetsing) en
+// Module 8a (A-gewogen — de praktijk-toetsing die de dB(A)-Lnight-norm impliceert), per categorie
+// (laagfrequent/infrasoon) en per periode (dag/nacht): 2 × 2 = 4 vergelijkingsrijen per scenario.
+// Let op: er bestaat geen aparte, wettelijk vastgestelde dag-norm in dit model (zie Module 8/
+// methodologie — toetsing gebeurt uitsluitend op Lnight); de dag-rijen hieronder toetsen daarom
+// één-op-één aan datzelfde Lnight-getal, uitsluitend om het effect van de nachtelijke windschering/
+// inversietoeslag (Module 2) te isoleren — net zoals Module 8 de dB(A)-Lnight-norm ook al als
+// indicatief referentiepunt voor infrasoon (dB(G)) gebruikt.
 function m8aComputeRows() {
   const catLw = computeCategoryLw(state.lwa);
   const hasData = !!state.m8AddressData;
@@ -1894,18 +1893,26 @@ function m8aComputeRows() {
     const rows = [];
     M8A_CATEGORIES.forEach((cat) => {
       M8A_PERIODS.forEach((period) => {
-        M8A_WEGINGEN.forEach((weging) => {
-          const isWeighted = weging.key === 'gewogen';
-          const lwCat = isWeighted ? catLw[cat.lwKeyA] : catLw[cat.lwKey];
-          const unit = isWeighted ? 'dB(A)' : cat.unweightedUnit;
-          const ring = m8aExceedanceRadius(scenario, cat.key, period.key, lwCat);
-          const houses = hasData ? m8CountUnique(ring) : null;
-          const people = houses != null ? houses * state.m8HouseholdSize : null;
-          rows.push({
-            catKey: cat.key, catLabel: cat.label, periodLabel: period.label,
-            wegingKey: weging.key, wegingLabel: weging.label,
-            lw: lwCat, unit, ring, houses, people,
-          });
+        const lwOngewogen = catLw[cat.lwKey];
+        const lwGewogen = catLw[cat.lwKeyA];
+        const ringM8 = m8aExceedanceRadius(scenario, cat.key, period.key, lwOngewogen);
+        const ringM8a = m8aExceedanceRadius(scenario, cat.key, period.key, lwGewogen);
+        const housesM8 = hasData ? m8CountUnique(ringM8) : null;
+        const housesM8a = hasData ? m8CountUnique(ringM8a) : null;
+        const peopleM8 = housesM8 != null ? housesM8 * state.m8HouseholdSize : null;
+        const peopleM8a = housesM8a != null ? housesM8a * state.m8HouseholdSize : null;
+        const deltaDb = (lwOngewogen != null && lwGewogen != null) ? (lwGewogen - lwOngewogen) : null;
+        let afnamePct = null;
+        if (housesM8 != null && housesM8a != null) {
+          afnamePct = housesM8 === 0 ? 0 : ((housesM8 - housesM8a) / housesM8) * 100;
+        }
+        rows.push({
+          catKey: cat.key, catLabel: cat.label, periodLabel: period.label,
+          unweightedUnit: cat.unweightedUnit,
+          lwM8: lwOngewogen, lwM8a: lwGewogen, deltaDb,
+          ringM8, ringM8a,
+          housesM8, housesM8a, peopleM8, peopleM8a,
+          afnamePct,
         });
       });
     });
@@ -1933,25 +1940,37 @@ function renderModule8a() {
   }
   const rows = m8aComputeRows();
   const dash = '—';
+  const arrow = (a, b) => `${a}<span class="m8a-arrow">→</span>${b}`;
   container.innerHTML = rows.map((r) => `
     <div class="data-table-card m8a-scenario-card">
       <h3>${M8_SCENARIO_LABEL[r.scenario]}</h3>
       <div class="cum-result-wrap">
       <table class="data-table m8a-table">
         <thead>
-          <tr><th>Categorie</th><th>Periode</th><th>Weging</th><th>Bronniveau</th><th>Overschrijdingsring</th><th>Woningen (BAG)</th><th>Bewoners</th></tr>
+          <tr>
+            <th>Categorie</th><th>Periode</th>
+            <th>Bronniveau<br><span class="m8a-subhead">Module 8 → 8a</span></th>
+            <th>Δ (dB)</th>
+            <th>Overschrijdingsring<br><span class="m8a-subhead">Module 8 → 8a</span></th>
+            <th>Woningen (BAG)<br><span class="m8a-subhead">Module 8 → 8a</span></th>
+            <th>Bewoners<br><span class="m8a-subhead">Module 8 → 8a</span></th>
+            <th>Afname</th>
+          </tr>
         </thead>
         <tbody>
-          ${n === 0 ? `<tr><td colspan="7" class="empty-row">Plaats een turbine op de kaart en klik bij Module 8 op "Woningen ophalen (BAG)".</td></tr>` : r.rows.map((row, idx) => {
-            const firstOfCat = idx % 4 === 0;
-            return `<tr class="${row.wegingKey === 'gewogen' ? 'm8a-row-gewogen' : ''}">
+          ${n === 0 ? `<tr><td colspan="8" class="empty-row">Plaats een turbine op de kaart en klik bij Module 8 op "Woningen ophalen (BAG)".</td></tr>` : r.rows.map((row, idx) => {
+            const firstOfCat = idx % 2 === 0;
+            const hasExceedanceLeft = row.afnamePct != null && Math.round(row.afnamePct) < 100 && row.ringM8a != null;
+            const rowClass = row.afnamePct != null && Math.round(row.afnamePct) >= 100 ? 'm8a-row-erased' : (hasExceedanceLeft ? 'm8a-row-partial' : '');
+            return `<tr class="${rowClass}">
               <td>${firstOfCat ? row.catLabel : ''}</td>
               <td>${row.periodLabel}</td>
-              <td>${row.wegingLabel}</td>
-              <td>${row.lw != null ? row.lw.toFixed(1) + ' ' + row.unit : dash}</td>
-              <td>${m8RingLabel(row.ring)}</td>
-              <td>${row.houses != null ? row.houses.toLocaleString('nl-NL') : dash}</td>
-              <td>${row.people != null ? Math.round(row.people).toLocaleString('nl-NL') : dash}</td>
+              <td>${row.lwM8 != null ? arrow(row.lwM8.toFixed(1) + ' ' + row.unweightedUnit, row.lwM8a.toFixed(1) + ' dB(A)') : dash}</td>
+              <td>${row.deltaDb != null ? row.deltaDb.toFixed(1) : dash}</td>
+              <td>${arrow(m8RingLabel(row.ringM8), m8RingLabel(row.ringM8a))}</td>
+              <td>${row.housesM8 != null ? arrow(row.housesM8.toLocaleString('nl-NL'), row.housesM8a.toLocaleString('nl-NL')) : dash}</td>
+              <td>${row.peopleM8 != null ? arrow(Math.round(row.peopleM8).toLocaleString('nl-NL'), Math.round(row.peopleM8a).toLocaleString('nl-NL')) : dash}</td>
+              <td class="m8a-afname">${row.afnamePct != null ? '−' + Math.round(row.afnamePct) + '%' : dash}</td>
             </tr>`;
           }).join('')}
         </tbody>
