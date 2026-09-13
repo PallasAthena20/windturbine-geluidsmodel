@@ -3843,6 +3843,13 @@ function m13MapImagesHtml(mapViews, turbineListStr) {
 async function m13OpenReport() {
   const btn = document.getElementById('m13-generate-btn');
   const originalBtnText = btn ? btn.textContent : '';
+  // Het venster meteen synchroon openen, binnen dezelfde click-gebeurtenis, zodat de browser
+  // dit niet als pop-up blokkeert (dat gebeurt zodra window.open() pas na een 'await' — en dus
+  // buiten de directe user-gesture — wordt aangeroepen, zoals nodig is voor de kaartcapture).
+  const win = window.open('', '_blank');
+  if (win) {
+    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rapport wordt opgebouwd…</title></head><body style="font-family:sans-serif;padding:40px;color:#333;">Rapport wordt opgebouwd, inclusief kaartafbeelding van de geplaatste turbine(s)…</body></html>');
+  }
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Kaart wordt vastgelegd…';
@@ -3857,8 +3864,9 @@ async function m13OpenReport() {
   const html = m13BuildReportHtml(mapViews);
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
-  const win = window.open(url, '_blank');
-  if (!win) {
+  if (win) {
+    win.location.href = url;
+  } else {
     alert('De pop-up werd geblokkeerd door de browser — sta pop-ups toe voor deze pagina en klik opnieuw op "Rapport genereren (PDF)".');
   }
   if (btn) {
