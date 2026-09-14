@@ -505,6 +505,31 @@ function turbineIcon(selected) {
   });
 }
 
+// Gedeelde rijbouwer voor de norm-toetsingstabel (gebruikt door zowel Module 3's ingebedde
+// toetsingswidget als Module 5): toont per vaste afstand de dagwaarde (referentie, downwind) en
+// vervolgens DRIE aparte nachtwaarden + toetsingen — downwind (kritisch, verst dragend), upwind
+// (snelst dempend) en zijwind/crosswind (tussenliggend) — in plaats van, zoals voorheen, uitsluitend
+// downwind. Dit maakt expliciet zichtbaar dat een woning die niet exact downwind van de turbine
+// ligt, op dezelfde afstand een lager niveau ondervindt en dus mogelijk niet overschrijdt.
+function m5NormTableRowsHtml(categoryKey, baseState, norm) {
+  const lwCat = computeCategoryLw(baseState.lwa)[categoryKey];
+  const dayState = Object.assign({}, baseState, { daynight: 'dag' });
+  const nightState = Object.assign({}, baseState, { daynight: 'nacht' });
+  const toetsCell = (lval) => {
+    if (norm.lnight == null) return `<td class="norm-na">n.v.t.</td>`;
+    const exceed = lval > norm.lnight;
+    const diff = lval - norm.lnight;
+    return `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${exceed ? 'Overschrijding' : 'Binnen norm'} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)} dB)</td>`;
+  };
+  return DISTANCES.map((d) => {
+    const lday = lpAt(d, 1, categoryKey, lwCat, dayState);
+    const lDown = lpAt(d, 1, categoryKey, lwCat, nightState);
+    const lUp = lpAt(d, -1, categoryKey, lwCat, nightState);
+    const lCross = lpAt(d, 0, categoryKey, lwCat, nightState);
+    return `<tr><td>${d} m</td><td>${lday.toFixed(1)}</td><td>${lDown.toFixed(1)}</td>${toetsCell(lDown)}<td>${lUp.toFixed(1)}</td>${toetsCell(lUp)}<td>${lCross.toFixed(1)}</td>${toetsCell(lCross)}</tr>`;
+  }).join('');
+}
+
 function renderNormModule() {
   if (!normTableBody) return;
   const n = state.turbines3a.length;
@@ -529,29 +554,11 @@ function renderNormModule() {
 
   const selected = state.turbines3a.find(t => t.id === state.selectedTurbineId3a);
   if (!selected) {
-    normTableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Plaats een turbine op de kaart in Module 3 om te toetsen.</td></tr>`;
+    normTableBody.innerHTML = `<tr><td colspan="8" class="empty-row">Plaats een turbine op de kaart in Module 3 om te toetsen.</td></tr>`;
     return;
   }
 
-  const lwCat = computeCategoryLw(state.lwa)[state.category];
-  const dayState = Object.assign({}, state, { daynight: 'dag' });
-  const nightState = Object.assign({}, state, { daynight: 'nacht' });
-
-  normTableBody.innerHTML = DISTANCES.map(d => {
-    const lday = lpAt(d, 1, state.category, lwCat, dayState);
-    const lnight = lpAt(d, 1, state.category, lwCat, nightState);
-
-    let lnightCell;
-    if (norm.lnight != null) {
-      const exceed = lnight > norm.lnight;
-      const diff = (lnight - norm.lnight);
-      lnightCell = `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${exceed ? 'Overschrijding' : 'Binnen norm'} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)} dB)</td>`;
-    } else {
-      lnightCell = `<td class="norm-na">n.v.t.</td>`;
-    }
-
-    return `<tr><td>${d} m</td><td>${lday.toFixed(1)}</td><td>${lnight.toFixed(1)}</td>${lnightCell}</tr>`;
-  }).join('');
+  normTableBody.innerHTML = m5NormTableRowsHtml(state.category, state, norm);
 }
 
 function updateWorstCaseReadout() {
@@ -966,29 +973,11 @@ function renderNormTable3a() {
 
   const selected = state.turbines3a.find(t => t.id === state.selectedTurbineId3a);
   if (!selected) {
-    normTableBody3a.innerHTML = `<tr><td colspan="4" class="empty-row">Plaats een turbine op de kaart hierboven om te toetsen.</td></tr>`;
+    normTableBody3a.innerHTML = `<tr><td colspan="8" class="empty-row">Plaats een turbine op de kaart hierboven om te toetsen.</td></tr>`;
     return;
   }
 
-  const lwCat = computeCategoryLw(state.lwa)[state.category];
-  const dayState = Object.assign({}, state, { daynight: 'dag' });
-  const nightState = Object.assign({}, state, { daynight: 'nacht' });
-
-  normTableBody3a.innerHTML = DISTANCES.map(d => {
-    const lday = lpAt(d, 1, state.category, lwCat, dayState);
-    const lnight = lpAt(d, 1, state.category, lwCat, nightState);
-
-    let lnightCell;
-    if (norm.lnight != null) {
-      const exceed = lnight > norm.lnight;
-      const diff = (lnight - norm.lnight);
-      lnightCell = `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${exceed ? 'Overschrijding' : 'Binnen norm'} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)} dB)</td>`;
-    } else {
-      lnightCell = `<td class="norm-na">n.v.t.</td>`;
-    }
-
-    return `<tr><td>${d} m</td><td>${lday.toFixed(1)}</td><td>${lnight.toFixed(1)}</td>${lnightCell}</tr>`;
-  }).join('');
+  normTableBody3a.innerHTML = m5NormTableRowsHtml(state.category, state, norm);
 }
 
 function renderModule3a() {
@@ -1687,20 +1676,30 @@ function haversineMeters(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-// Bepaalt, voor het gegeven scenario/categorie, de verste van de zes vaste ringen (Module 3)
-// waar de downwind-nachtwaarde de actieve Lnight-norm (Module 5) nog overschrijdt.
-// Hergebruikt lpAt()/getActiveNorm() zodat dit altijd meeloopt met lwa/norm/curtailment-wijzigingen.
-function m8ExceedanceRadius(scenarioKey, categoryKey) {
+// Bepaalt, voor het gegeven scenario/categorie/richting/periode, de verste van de zes vaste ringen
+// (Module 3) waar het geluidsniveau de actieve Lnight-norm (Module 5) nog overschrijdt.
+// x = richtingscosinus t.o.v. de downwind-as: 1 = downwind (kritisch, verst dragend), -1 = upwind
+// (snelst dempend), 0 = zijwind/crosswind (tussenliggend). Generalisatie van de vroegere, altijd-
+// downwind m8ExceedanceRadius(), zodat Module 5/8/8a/9/10 dezelfde richtingslogica delen i.p.v. elk
+// impliciet aan te nemen dat een ontvangpunt binnen een ring ook daadwerkelijk downwind ligt.
+function m8ExceedanceRadiusX(scenarioKey, categoryKey, x, daynightKey, lwCatOverride) {
   const norm = getActiveNorm();
   if (norm.lnight == null) return null; // bv. WHO-preset heeft geen Lnight-waarde
-  const lwCat = computeCategoryLw(state.lwa)[categoryKey];
-  const nightState = { scenario: scenarioKey, daynight: 'nacht', curtailment: state.curtailment, windBearing: state.windBearing };
+  const lwCat = lwCatOverride != null ? lwCatOverride : computeCategoryLw(state.lwa)[categoryKey];
+  const testState = { scenario: scenarioKey, daynight: daynightKey || 'nacht', curtailment: state.curtailment, windBearing: state.windBearing };
   let radius = null;
   DISTANCES.forEach((d) => {
-    const lnight = lpAt(d, 1, categoryKey, lwCat, nightState);
-    if (lnight > norm.lnight) radius = d;
+    const lp = lpAt(d, x, categoryKey, lwCat, testState);
+    if (lp > norm.lnight) radius = d;
   });
   return radius;
+}
+
+// Downwind-ring (x=1, nacht) — kortere naam voor de plekken waar uitsluitend de kritische
+// (verst dragende) richting getoond hoeft te worden, bv. de gecombineerde downwind-context in
+// tekstuele samenvattingen. Rekenkundig identiek aan m8ExceedanceRadiusX(s, c, 1, 'nacht').
+function m8ExceedanceRadius(scenarioKey, categoryKey) {
+  return m8ExceedanceRadiusX(scenarioKey, categoryKey, 1, 'nacht');
 }
 
 async function m8FetchAddressesForTurbine(turbine, radiusM) {
@@ -1792,6 +1791,52 @@ function m8RingLabel(radius) {
   return radius == null ? 'geen overschrijding' : `≤ ${radius} m`;
 }
 
+// Compacte weergave van alle drie de richtingsringen tegelijk — downwind/upwind/zijwind — zodat in
+// tabellen en kaarten in één oogopslag zichtbaar is dat de overschrijdingsafstand per richting
+// verschilt (downwind draagt het verst, upwind het minst ver, zijwind zit ertussenin).
+function m8RingLabelMulti(ringDown, ringUp, ringCross) {
+  return `downwind ${m8RingLabel(ringDown)} · zijwind ${m8RingLabel(ringCross)} · upwind ${m8RingLabel(ringUp)}`;
+}
+
+// Toetst één BAG-adres exact aan de norm op basis van zijn WERKELIJKE afstand en peilrichting (bearing)
+// t.o.v. de turbine — in plaats van aan te nemen dat elk adres binnen de (downwind-)overschrijdingsring
+// ook daadwerkelijk downwind ligt. Een woning die toevallig binnen de downwind-ring valt maar in
+// werkelijkheid upwind of zijwind van de turbine ligt, ondervindt een lager geluidsniveau en kan dus
+// alsnog binnen de norm vallen — dit is de kern van de richtingsnuance in de woningtelling.
+function m8AddressExceeds(turbine, addr, scenarioKey, categoryKey, daynightKey, lwCatOverride) {
+  const norm = getActiveNorm();
+  if (norm.lnight == null) return false;
+  const lwCat = lwCatOverride != null ? lwCatOverride : computeCategoryLw(state.lwa)[categoryKey];
+  const dist = Math.max(haversineMeters(turbine.lat, turbine.lng, addr.lat, addr.lon), 1);
+  const downwindBearing = (state.windBearing + 180) % 360;
+  const bearing = bearingBetween(turbine.lat, turbine.lng, addr.lat, addr.lon);
+  const x = xFromAngle(bearing, downwindBearing);
+  const testState = { scenario: scenarioKey, daynight: daynightKey || 'nacht', curtailment: state.curtailment, windBearing: state.windBearing };
+  const lp = lpAt(dist, x, categoryKey, lwCat, testState);
+  return lp > norm.lnight;
+}
+
+// Telt unieke BAG-adressen die — getoetst op hun werkelijke afstand+richting t.o.v. minstens één
+// geplaatste turbine (niet via een isotrope ring) — de norm daadwerkelijk overschrijden. Dit vervangt
+// de eerdere ring-gebaseerde telling (m8CountUnique) overal waar het gaat om de norm-overschrijding,
+// zodat adressen die binnen de downwind-ring liggen maar in werkelijkheid upwind/zijwind staan,
+// terecht buiten de telling vallen.
+function m8CountExceedingUnique(scenarioKey, categoryKey, daynightKey, lwCatOverride) {
+  if (!state.m8AddressData) return 0;
+  const seen = new Set();
+  state.turbines3a.forEach((t) => {
+    const addrs = state.m8AddressData.byTurbine.get(t.id) || [];
+    addrs.forEach((a) => {
+      const id = a.id || `${a.lat.toFixed(6)},${a.lon.toFixed(6)}`;
+      if (seen.has(id)) return;
+      if (m8AddressExceeds(t, a, scenarioKey, categoryKey, daynightKey, lwCatOverride)) {
+        seen.add(id);
+      }
+    });
+  });
+  return seen.size;
+}
+
 const M8_CATEGORY_META = [
   { key: 'hoorbaar', label: 'Hoorbaar (dB(A))' },
   { key: 'laagfrequent', label: 'Laagfrequent (dB(Lin))' },
@@ -1812,10 +1857,16 @@ function m8ComputeRows() {
     }));
   return ['best', 'middel', 'worst'].map((scenario) => {
     const categories = M8_CATEGORY_META.map((meta) => {
-      const ring = normHasLnight ? m8ExceedanceRadius(scenario, meta.key) : null;
-      const houses = hasData ? m8CountUnique(ring) : null;
+      const ring = normHasLnight ? m8ExceedanceRadiusX(scenario, meta.key, 1, 'nacht') : null;
+      const ringUp = normHasLnight ? m8ExceedanceRadiusX(scenario, meta.key, -1, 'nacht') : null;
+      const ringCross = normHasLnight ? m8ExceedanceRadiusX(scenario, meta.key, 0, 'nacht') : null;
+      // Woningen/bewoners worden NIET meer via de (downwind-)ring geteld, maar per BAG-adres exact
+      // getoetst op zijn werkelijke afstand en peilrichting t.o.v. de turbine (zie m8AddressExceeds).
+      // Zo telt een woning die binnen de downwind-ring ligt maar in werkelijkheid upwind/zijwind staat,
+      // terecht niet mee als deze op haar eigen richting binnen de norm blijft.
+      const houses = hasData ? m8CountExceedingUnique(scenario, meta.key, 'nacht') : null;
       const people = houses != null ? houses * state.m8HouseholdSize : null;
-      return { key: meta.key, label: meta.label, ring, houses, people, hinder: hinderFor(people) };
+      return { key: meta.key, label: meta.label, ring, ringUp, ringCross, houses, people, hinder: hinderFor(people) };
     });
     return { scenario, categories };
   });
@@ -1838,16 +1889,35 @@ function m8ComputeTotals() {
       people: people != null ? people * (h.pct / 100) : null,
     }));
   return ['best', 'middel', 'worst'].map((scenario) => {
-    let unionRing = null;
+    let unionRing = null, unionRingUp = null, unionRingCross = null;
     if (normHasLnight) {
       M8_CATEGORY_META.forEach((meta) => {
-        const r = m8ExceedanceRadius(scenario, meta.key);
+        const r = m8ExceedanceRadiusX(scenario, meta.key, 1, 'nacht');
         if (r != null && (unionRing == null || r > unionRing)) unionRing = r;
+        const rUp = m8ExceedanceRadiusX(scenario, meta.key, -1, 'nacht');
+        if (rUp != null && (unionRingUp == null || rUp > unionRingUp)) unionRingUp = rUp;
+        const rCross = m8ExceedanceRadiusX(scenario, meta.key, 0, 'nacht');
+        if (rCross != null && (unionRingCross == null || rCross > unionRingCross)) unionRingCross = rCross;
       });
     }
-    const houses = hasData ? m8CountUnique(unionRing) : null;
+    // Exacte telling: een adres telt mee in het ontdubbelde totaal zodra het — op zijn eigen,
+    // werkelijke afstand+richting — de norm overschrijdt voor MINSTENS één van de drie categorieën.
+    let houses = null;
+    if (hasData) {
+      const seen = new Set();
+      state.turbines3a.forEach((t) => {
+        const addrs = state.m8AddressData.byTurbine.get(t.id) || [];
+        addrs.forEach((a) => {
+          const id = a.id || `${a.lat.toFixed(6)},${a.lon.toFixed(6)}`;
+          if (seen.has(id)) return;
+          const exceedsAny = normHasLnight && M8_CATEGORY_META.some((meta) => m8AddressExceeds(t, a, scenario, meta.key, 'nacht'));
+          if (exceedsAny) seen.add(id);
+        });
+      });
+      houses = seen.size;
+    }
     const people = houses != null ? houses * state.m8HouseholdSize : null;
-    return { scenario, ring: unionRing, houses, people, hinder: hinderFor(people) };
+    return { scenario, ring: unionRing, ringUp: unionRingUp, ringCross: unionRingCross, houses, people, hinder: hinderFor(people) };
   });
 }
 
@@ -1860,22 +1930,39 @@ function m8ComputeTotals() {
 // Module 7) — en toetst dat jaargemiddelde opnieuw aan de norm. Formule:
 //   L_jaar = 10·log10( Σ p_i · 10^(L_i/10) ),  p_best + p_middel + p_worst = 1
 // Energetische (logaritmische) jaarmiddeling is de gangbare rekenmethode voor Lden/Lnight-toetsing.
+// De drie canonieke toetsrichtingen die Module 5/8/8a/9/10 delen: downwind (kritisch, x=1),
+// upwind (snelst dempend, x=-1) en zijwind/crosswind (tussenliggend, x=0).
+const M8_DIRECTIONS = [
+  { key: 'downwind', label: 'Downwind', x: 1 },
+  { key: 'zijwind', label: 'Zijwind (crosswind)', x: 0 },
+  { key: 'upwind', label: 'Upwind', x: -1 },
+];
+
 function m8JaarnormRows() {
   const norm = getActiveNorm();
   if (norm.lnight == null || state.turbines3a.length === 0) return null;
   const anchor = m6TurbineAnchor();
   const pct = m6ScenarioPercentages(anchor.lat, anchor.lng);
   const lwCat = computeCategoryLw(state.lwa).hoorbaar;
-  const levelAt = (scenario, d) => lpAt(d, 1, 'hoorbaar', lwCat, { scenario, daynight: 'nacht', curtailment: state.curtailment });
-  const weightedAvgAt = (d) => 10 * Math.log10(
-    ['best', 'middel', 'worst'].reduce((acc, s) => acc + (pct[s] / 100) * Math.pow(10, levelAt(s, d) / 10), 0)
+  const levelAt = (scenario, d, x) => lpAt(d, x, 'hoorbaar', lwCat, { scenario, daynight: 'nacht', curtailment: state.curtailment });
+  const weightedAvgAt = (d, x) => 10 * Math.log10(
+    ['best', 'middel', 'worst'].reduce((acc, s) => acc + (pct[s] / 100) * Math.pow(10, levelAt(s, d, x) / 10), 0)
   );
-  const rows = ['best', 'middel', 'worst'].map((scenario) => {
-    const ring = m8ExceedanceRadius(scenario, 'hoorbaar');
-    if (ring == null) return { scenario, ring: null, levels: null, jaargemiddelde: null, exceeds: null };
-    const levels = { best: levelAt('best', ring), middel: levelAt('middel', ring), worst: levelAt('worst', ring) };
-    const jaargemiddelde = weightedAvgAt(ring);
-    return { scenario, ring, levels, jaargemiddelde, exceeds: jaargemiddelde > norm.lnight };
+  // Per scenario één rij per richting (downwind/zijwind/upwind): elke richting heeft zijn eigen
+  // overschrijdingsring (downwind draagt het verst, dus de grootste ring; upwind het minst ver) en dus
+  // ook zijn eigen jaargemiddelde en toetsing — in plaats van, zoals voorheen, uitsluitend downwind.
+  const rows = [];
+  ['best', 'middel', 'worst'].forEach((scenario) => {
+    M8_DIRECTIONS.forEach((dir) => {
+      const ring = m8ExceedanceRadiusX(scenario, 'hoorbaar', dir.x, 'nacht');
+      if (ring == null) {
+        rows.push({ scenario, direction: dir.key, directionLabel: dir.label, ring: null, levels: null, jaargemiddelde: null, exceeds: null });
+        return;
+      }
+      const levels = { best: levelAt('best', ring, dir.x), middel: levelAt('middel', ring, dir.x), worst: levelAt('worst', ring, dir.x) };
+      const jaargemiddelde = weightedAvgAt(ring, dir.x);
+      rows.push({ scenario, direction: dir.key, directionLabel: dir.label, ring, levels, jaargemiddelde, exceeds: jaargemiddelde > norm.lnight });
+    });
   });
   return { pct, anchor, rows };
 }
@@ -1896,21 +1983,6 @@ const M8A_PERIODS = [
   { key: 'nacht', label: 'Nacht' },
 ];
 
-// Zoals m8ExceedanceRadius(), maar met expliciete daynight EN een meegegeven lwCat (i.p.v. altijd
-// 'nacht' en altijd de standaard-Lw van de categorie) zodat dezelfde ring/woningen-machinerie ook
-// voor de dag-kolom en voor de A-gewogen variant kan worden hergebruikt.
-function m8aExceedanceRadius(scenarioKey, categoryKey, daynightKey, lwCat) {
-  const norm = getActiveNorm();
-  if (norm.lnight == null) return null;
-  const nightState = { scenario: scenarioKey, daynight: daynightKey, curtailment: state.curtailment, windBearing: state.windBearing };
-  let radius = null;
-  DISTANCES.forEach((d) => {
-    const lp = lpAt(d, 1, categoryKey, lwCat, nightState);
-    if (lp > norm.lnight) radius = d;
-  });
-  return radius;
-}
-
 // Bouwt, per scenario (best/middel/worst — "in alle scenario's"), een directe rij-voor-rij
 // vergelijking tussen Module 8 (ongewogen/G-gewogen — de vakliteratuur-juiste toetsing) en
 // Module 8a (A-gewogen — de praktijk-toetsing die de dB(A)-Lnight-norm impliceert), per categorie
@@ -1929,10 +2001,18 @@ function m8aComputeRows() {
       M8A_PERIODS.forEach((period) => {
         const lwOngewogen = catLw[cat.lwKey];
         const lwGewogen = catLw[cat.lwKeyA];
-        const ringM8 = m8aExceedanceRadius(scenario, cat.key, period.key, lwOngewogen);
-        const ringM8a = m8aExceedanceRadius(scenario, cat.key, period.key, lwGewogen);
-        const housesM8 = hasData ? m8CountUnique(ringM8) : null;
-        const housesM8a = hasData ? m8CountUnique(ringM8a) : null;
+        // Ring per richting (downwind/zijwind/upwind) — uitsluitend ter context: laat zien dat ook hier
+        // downwind het verst draagt. De woningen/bewonerstelling hieronder gebruikt NIET deze ring,
+        // maar toetst elk BAG-adres exact op zijn eigen werkelijke afstand+richting (zie m8AddressExceeds),
+        // net als Module 8 hierboven.
+        const ringM8 = m8ExceedanceRadiusX(scenario, cat.key, 1, period.key, lwOngewogen);
+        const ringM8Cross = m8ExceedanceRadiusX(scenario, cat.key, 0, period.key, lwOngewogen);
+        const ringM8Up = m8ExceedanceRadiusX(scenario, cat.key, -1, period.key, lwOngewogen);
+        const ringM8a = m8ExceedanceRadiusX(scenario, cat.key, 1, period.key, lwGewogen);
+        const ringM8aCross = m8ExceedanceRadiusX(scenario, cat.key, 0, period.key, lwGewogen);
+        const ringM8aUp = m8ExceedanceRadiusX(scenario, cat.key, -1, period.key, lwGewogen);
+        const housesM8 = hasData ? m8CountExceedingUnique(scenario, cat.key, period.key, lwOngewogen) : null;
+        const housesM8a = hasData ? m8CountExceedingUnique(scenario, cat.key, period.key, lwGewogen) : null;
         const peopleM8 = housesM8 != null ? housesM8 * state.m8HouseholdSize : null;
         const peopleM8a = housesM8a != null ? housesM8a * state.m8HouseholdSize : null;
         const deltaDb = (lwOngewogen != null && lwGewogen != null) ? (lwGewogen - lwOngewogen) : null;
@@ -1944,7 +2024,7 @@ function m8aComputeRows() {
           catKey: cat.key, catLabel: cat.label, periodLabel: period.label,
           unweightedUnit: cat.unweightedUnit,
           lwM8: lwOngewogen, lwM8a: lwGewogen, deltaDb,
-          ringM8, ringM8a,
+          ringM8, ringM8Cross, ringM8Up, ringM8a, ringM8aCross, ringM8aUp,
           housesM8, housesM8a, peopleM8, peopleM8a,
           afnamePct,
         });
@@ -2001,7 +2081,7 @@ function renderModule8a() {
               <td>${row.periodLabel}</td>
               <td>${row.lwM8 != null ? arrow(row.lwM8.toFixed(1) + ' ' + row.unweightedUnit, row.lwM8a.toFixed(1) + ' dB(A)') : dash}</td>
               <td>${row.deltaDb != null ? row.deltaDb.toFixed(1) : dash}</td>
-              <td>${arrow(m8RingLabel(row.ringM8), m8RingLabel(row.ringM8a))}</td>
+              <td>${arrow(m8RingLabel(row.ringM8), m8RingLabel(row.ringM8a))} <span class="m8a-subhead">(downwind)</span><br>${arrow(m8RingLabel(row.ringM8Cross), m8RingLabel(row.ringM8aCross))} <span class="m8a-subhead">(zijwind)</span><br>${arrow(m8RingLabel(row.ringM8Up), m8RingLabel(row.ringM8aUp))} <span class="m8a-subhead">(upwind)</span></td>
               <td>${row.housesM8 != null ? arrow(row.housesM8.toLocaleString('nl-NL'), row.housesM8a.toLocaleString('nl-NL')) : dash}</td>
               <td>${row.peopleM8 != null ? arrow(Math.round(row.peopleM8).toLocaleString('nl-NL'), Math.round(row.peopleM8a).toLocaleString('nl-NL')) : dash}</td>
               <td class="m8a-afname">${row.afnamePct != null ? '−' + Math.round(row.afnamePct) + '%' : dash}</td>
@@ -2076,7 +2156,7 @@ function renderModule8() {
       totalsTextEl.innerHTML = '<em>Nog geen gegevens \u2014 plaats turbines en haal de BAG-woningen op om het ontdubbelde totaal te zien.</em>';
     } else {
       totalsTextEl.innerHTML = totals
-        .map((t) => `<div class="m8-totals-line"><strong>${M8_SCENARIO_LABEL[t.scenario]}</strong> \u2014 ontdubbelde ring ${m8RingLabel(t.ring)}, ${t.houses != null ? t.houses.toLocaleString('nl-NL') : dashT} unieke woningen, ${t.people != null ? Math.round(t.people).toLocaleString('nl-NL') : dashT} bewoners in totaal.</div>`)
+        .map((t) => `<div class="m8-totals-line"><strong>${M8_SCENARIO_LABEL[t.scenario]}</strong> \u2014 ontdubbelde ring ${m8RingLabelMulti(t.ring, t.ringUp, t.ringCross)}, ${t.houses != null ? t.houses.toLocaleString('nl-NL') : dashT} unieke woningen, ${t.people != null ? Math.round(t.people).toLocaleString('nl-NL') : dashT} bewoners in totaal (per adres getoetst op de werkelijke afstand+richting tot de turbine).</div>`)
         .join('');
     }
   }
@@ -2087,7 +2167,7 @@ function renderModule8() {
       totalsTableBody.innerHTML = totals
         .map((t) => `<tr class="m8-totals-row">
             <td>${M8_SCENARIO_LABEL[t.scenario]}</td>
-            <td>${m8RingLabel(t.ring)}</td>
+            <td>${m8RingLabelMulti(t.ring, t.ringUp, t.ringCross)}</td>
             <td>${t.houses != null ? t.houses.toLocaleString('nl-NL') : dashT}</td>
             <td>${t.people != null ? Math.round(t.people).toLocaleString('nl-NL') : dashT}</td>
           </tr>`)
@@ -2103,7 +2183,7 @@ function renderModule8() {
           (c) => `
         <div class="m8-cat-block">
           <span class="m8-cat-title">${c.label}</span>
-          <div class="m8-row"><span class="m8-row-label">Overschrijdingsring</span><span class="m8-row-value">${m8RingLabel(c.ring)}</span></div>
+          <div class="m8-row"><span class="m8-row-label">Overschrijdingsring</span><span class="m8-row-value">${m8RingLabelMulti(c.ring, c.ringUp, c.ringCross)}</span></div>
           <div class="m8-row"><span class="m8-row-label">Woningen in dat gebied (BAG)</span><span class="m8-row-value">${c.houses != null ? c.houses.toLocaleString('nl-NL') : dash}</span></div>
           <div class="m8-row"><span class="m8-row-label">Geschat aantal bewoners</span><span class="m8-row-value">${c.people != null ? Math.round(c.people).toLocaleString('nl-NL') : dash}</span></div>
           <div class="m8-hinder-matrix">
@@ -2142,7 +2222,7 @@ function renderModule8() {
             return `<tr>
             <td>${idx === 0 ? M8_SCENARIO_LABEL[r.scenario] : ''}</td>
             <td>${c.label}</td>
-            <td>${m8RingLabel(c.ring)}</td>
+            <td>${m8RingLabelMulti(c.ring, c.ringUp, c.ringCross)}</td>
             <td>${c.houses != null ? c.houses.toLocaleString('nl-NL') : dash}</td>
             <td>${c.people != null ? Math.round(c.people).toLocaleString('nl-NL') : dash}</td>
             ${hinderCells}
@@ -2170,17 +2250,17 @@ function renderModule8Jaarnorm() {
   const norm = getActiveNorm();
   if (n === 0) {
     if (pctEl) pctEl.innerHTML = '';
-    tableBody.innerHTML = `<tr><td colspan="7" class="empty-row">Plaats minstens één turbine op de kaart in Module 3.</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="8" class="empty-row">Plaats minstens één turbine op de kaart in Module 3.</td></tr>`;
     return;
   }
   if (norm.lnight == null) {
     if (pctEl) pctEl.innerHTML = '';
-    tableBody.innerHTML = `<tr><td colspan="7" class="empty-row">De geselecteerde norm (${escapeHtml(norm.label)}) heeft geen Lnight-waarde — jaargemiddelde toetsing is hiermee niet mogelijk.</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="8" class="empty-row">De geselecteerde norm (${escapeHtml(norm.label)}) heeft geen Lnight-waarde — jaargemiddelde toetsing is hiermee niet mogelijk.</td></tr>`;
     return;
   }
   const result = m8JaarnormRows();
   if (!result) {
-    tableBody.innerHTML = `<tr><td colspan="7" class="empty-row">Geen gegevens.</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="8" class="empty-row">Geen gegevens.</td></tr>`;
     return;
   }
   const { pct, anchor } = result;
@@ -2189,10 +2269,11 @@ function renderModule8Jaarnorm() {
   }
   tableBody.innerHTML = result.rows.map((r) => {
     if (r.ring == null) {
-      return `<tr><td>${M8_SCENARIO_LABEL[r.scenario]}-ring</td><td colspan="6" class="empty-row">Geen overschrijding op de vaste ringen (hoorbaar geluid).</td></tr>`;
+      return `<tr><td>${M8_SCENARIO_LABEL[r.scenario]}-ring</td><td>${r.directionLabel}</td><td colspan="6" class="empty-row">Geen overschrijding op de vaste ringen (hoorbaar geluid).</td></tr>`;
     }
     return `<tr class="${r.exceeds ? 'm8-jaarnorm-exceeds' : 'm8-jaarnorm-ok'}">
       <td>${M8_SCENARIO_LABEL[r.scenario]}-ring</td>
+      <td>${r.directionLabel}</td>
       <td>${m8RingLabel(r.ring)}</td>
       <td>${r.levels.best.toFixed(1)} dB(A)</td>
       <td>${r.levels.middel.toFixed(1)} dB(A)</td>
@@ -3441,7 +3522,7 @@ function m13BuildReportHtml(mapImages) {
     return row.categories.map((c, idx) => `<tr>
       <td>${idx === 0 ? M8_SCENARIO_LABEL[scenario] : ''}</td>
       <td>${c.label}</td>
-      <td>${m8RingLabel(c.ring)}</td>
+      <td>${m8RingLabelMulti(c.ring, c.ringUp, c.ringCross)}</td>
       <td>${c.houses != null ? c.houses.toLocaleString('nl-NL') : '—'}</td>
       <td>${c.people != null ? m13Int(c.people) : '—'}</td>
     </tr>`).join('');
@@ -3454,14 +3535,14 @@ function m13BuildReportHtml(mapImages) {
       <thead><tr><th>Scenario</th><th>Categorie</th><th>Overschrijdingsring</th><th>Woningen (BAG)</th><th>Bewoners</th></tr></thead>
       <tbody>${catRowsHtml('best')}${catRowsHtml('middel')}${catRowsHtml('worst')}</tbody>
     </table>
-    <p class="rp-note">Ontdubbeld totaal per scenario (grootste ring van de drie categorieën, geen dubbeltelling — uitsluitend informatief, dit cijfer wordt <strong>niet</strong> gebruikt in de hinder-, zorgkosten- of DALY-berekening hieronder; daarvoor geldt steeds het bewonersaantal van de eigen ring per categorie, zie §5–§7): ${totals8.map((t) => `<strong>${M8_SCENARIO_LABEL[t.scenario]}</strong> ${m8RingLabel(t.ring)}, ${t.houses != null ? t.houses.toLocaleString('nl-NL') : '—'} woningen, ${t.people != null ? m13Int(t.people) : '—'} bewoners`).join(' · ')}.</p>
+    <p class="rp-note">Ontdubbeld totaal per scenario (grootste ring van de drie categorieën, geen dubbeltelling — uitsluitend informatief, dit cijfer wordt <strong>niet</strong> gebruikt in de hinder-, zorgkosten- of DALY-berekening hieronder; daarvoor geldt steeds het bewonersaantal van de eigen ring per categorie, zie §5–§7; woningen/bewoners worden per BAG-adres exact getoetst op de eigen werkelijke afstand+richting tot elke turbine, niet op basis van deze ring): ${totals8.map((t) => `<strong>${M8_SCENARIO_LABEL[t.scenario]}</strong> ${m8RingLabelMulti(t.ring, t.ringUp, t.ringCross)}, ${t.houses != null ? t.houses.toLocaleString('nl-NL') : '—'} woningen, ${t.people != null ? m13Int(t.people) : '—'} bewoners`).join(' · ')}.</p>
   </section>`;
 
   // ---- Sectie: hinderpercentages RIVM/illustratief/kritisch — PER CATEGORIE (hoorbaar/laagfrequent/infrasoon) ----
   const hinderRowsHtml = catMatrix.map((t) => t.categories.map((c, cIdx) => `<tr>
     ${cIdx === 0 ? `<td rowspan="3">${M8_SCENARIO_LABEL[t.scenario]}</td>` : ''}
     <td>${c.label}</td>
-    <td>${m8RingLabel(c.ring)}</td>
+    <td>${m8RingLabelMulti(c.ring, c.ringUp, c.ringCross)}</td>
     <td>${c.houses != null ? c.houses.toLocaleString('nl-NL') : '—'}</td>
     <td>${c.people != null ? m13Int(c.people) : '—'}</td>
     <td>${c.hinder[0].people != null ? m13Int(c.hinder[0].people) : '—'}</td>
@@ -3578,7 +3659,7 @@ function m13BuildReportHtml(mapImages) {
     })()}
 
     <h3>8.4 Rekenvoorbeeld: haalt de nachtnorm het als jaargemiddelde tóch, ondanks deze piekwaarden?</h3>
-    <p>Het jaargemiddelde in §8.3 was een kwalitatief punt; hier volgt het concrete rekenvoorbeeld. De Lnight-norm bij Module 5 (${norm.lnight != null ? norm.lnight + ' dB(A)' : '—'}) is zelf wettelijk óók een jaargemiddelde, geen grenswaarde per nacht. De vraag is dus: als een woning op de worst-case-overschrijdingsring van §5 ligt, wordt de norm dán als jaargemiddelde alsnog gehaald, doordat de meeste nachten milder zijn? Onderstaande tabel rekent dit uit door voor elke scenario-eigen overschrijdingsring (best/middel/worst, hoorbaar geluid) het energetisch jaargemiddelde Lnight te bepalen — gewogen met de daadwerkelijke scenarioverdeling van §8.1 — en dat gemiddelde opnieuw aan de norm te toetsen: <code>L_jaar = 10·log₁₀(Σ p_i·10^(L_i/10))</code>.</p>
+    <p>Het jaargemiddelde in §8.3 was een kwalitatief punt; hier volgt het concrete rekenvoorbeeld. De Lnight-norm bij Module 5 (${norm.lnight != null ? norm.lnight + ' dB(A)' : '—'}) is zelf wettelijk óók een jaargemiddelde, geen grenswaarde per nacht. De vraag is dus: als een woning op de worst-case-overschrijdingsring van §5 ligt, wordt de norm dán als jaargemiddelde alsnog gehaald, doordat de meeste nachten milder zijn? Onderstaande tabel rekent dit uit per scenario én per richting — downwind (kritisch), zijwind en upwind (het minst belastend) hebben elk hun eigen overschrijdingsring en dus een eigen jaargemiddelde — door voor elke scenario/richting-combinatie het energetisch jaargemiddelde Lnight te bepalen — gewogen met de daadwerkelijke scenarioverdeling van §8.1 — en dat gemiddelde opnieuw aan de norm te toetsen: <code>L_jaar = 10·log₁₀(Σ p_i·10^(L_i/10))</code>.</p>
     ${(() => {
       const jn = m8JaarnormRows();
       if (!jn) {
@@ -3586,10 +3667,11 @@ function m13BuildReportHtml(mapImages) {
       }
       const rowsHtml = jn.rows.map((row) => {
         if (row.ring == null) {
-          return `<tr><td>${M8_SCENARIO_LABEL[row.scenario]}-ring</td><td colspan="5"><em>Geen overschrijding op de vaste ringen (hoorbaar geluid).</em></td></tr>`;
+          return `<tr><td>${M8_SCENARIO_LABEL[row.scenario]}-ring</td><td>${row.directionLabel}</td><td colspan="5"><em>Geen overschrijding op de vaste ringen (hoorbaar geluid).</em></td></tr>`;
         }
         return `<tr>
           <td>${M8_SCENARIO_LABEL[row.scenario]}-ring</td>
+          <td>${row.directionLabel}</td>
           <td>${m8RingLabel(row.ring)}</td>
           <td>${row.levels.best.toFixed(1)} / ${row.levels.middel.toFixed(1)} / ${row.levels.worst.toFixed(1)} dB(A)</td>
           <td><strong>${row.jaargemiddelde.toFixed(1)} dB(A)</strong></td>
@@ -3598,10 +3680,10 @@ function m13BuildReportHtml(mapImages) {
       }).join('');
       return `<p>Scenarioverdeling op deze locatie (§8.1, Module 6): best ${jn.pct.best.toFixed(1)}%, middel ${jn.pct.middel.toFixed(1)}%, worst ${jn.pct.worst.toFixed(1)}% van alle nachten per jaar.</p>
       <table class="rp-table rp-table-compact">
-        <thead><tr><th>Ring (bepaald door)</th><th>Afstand</th><th>Lnight best / middel / worst</th><th>Jaargemiddelde</th><th>Toetsing</th></tr></thead>
+        <thead><tr><th>Ring (bepaald door)</th><th>Richting</th><th>Afstand</th><th>Lnight best / middel / worst</th><th>Jaargemiddelde</th><th>Toetsing</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>
-      <p class="rp-note"><strong>Methodologische kanttekening:</strong> ook dit rekenvoorbeeld is een modelmatige schatting, geen meting. De scenario-percentages zijn afgeleid uit de afstand tot de kust en de shear-capaciteit (§8.1, Module 6/7) — geen gemeten jaarstatistiek van weerscondities per nacht op deze exacte locatie. De berekening neemt bovendien aan dat een hele nacht steeds volledig in één scenario valt (geen overgangen binnen één nacht), en gebruikt voor alle drie de scenario's dezelfde (downwind-)richting die ook voor de overschrijdingsringen in §5 wordt gebruikt.</p>`;
+      <p class="rp-note"><strong>Methodologische kanttekening:</strong> ook dit rekenvoorbeeld is een modelmatige schatting, geen meting. De scenario-percentages zijn afgeleid uit de afstand tot de kust en de shear-capaciteit (§8.1, Module 6/7) — geen gemeten jaarstatistiek van weerscondities per nacht op deze exacte locatie. De berekening neemt bovendien aan dat een hele nacht steeds volledig in één scenario valt (geen overgangen binnen één nacht). Anders dan in eerdere versies van dit model wordt de jaargemiddelde toetsing hier expliciet voor drie richtingen apart doorgerekend (downwind/zijwind/upwind), in plaats van uitsluitend voor de kritische downwind-richting — zodat zichtbaar is dat een woning die niet downwind van de turbine ligt bij hetzelfde scenario een lager jaargemiddelde ondervindt en de norm eerder haalt.</p>`;
     })()}
   </section>`;
 

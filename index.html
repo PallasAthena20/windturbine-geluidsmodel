@@ -270,9 +270,9 @@
           <div class="cum-result-wrap">
             <table class="data-table norm-table">
               <thead>
-                <tr><th>Afstand</th><th>Dag</th><th>Nacht</th><th>Toetsing Nacht</th></tr>
+                <tr><th>Afstand</th><th>Dag</th><th>Nacht downwind</th><th>Toetsing downwind</th><th>Nacht upwind</th><th>Toetsing upwind</th><th>Nacht zijwind</th><th>Toetsing zijwind</th></tr>
               </thead>
-              <tbody id="norm-table-body-3a"><tr><td colspan="4" class="empty-row">Plaats een turbine op de kaart om te toetsen.</td></tr></tbody>
+              <tbody id="norm-table-body-3a"><tr><td colspan="8" class="empty-row">Plaats een turbine op de kaart om te toetsen.</td></tr></tbody>
             </table>
           </div>
           <p class="callout" id="norm-aweight-note-3a" style="display:none;"></p>
@@ -318,7 +318,7 @@
       <span class="module-num">Module 5</span>
       <h2>Toetsing aan wettelijke normen</h2>
     </div>
-    <p class="module-desc">Sinds de <a href="https://www.raadvanstate.nl/@126772/202008065-1-r3/" target="_blank" rel="noopener">Delfzijluitspraak</a> (Afdeling bestuursrechtspraak van de Raad van State, 30 juni 2021) gelden de oude landelijke geluidsnormen uit het Activiteitenbesluit/Activiteitenregeling milieubeheer (47 dB Lden / 41 dB Lnight) <strong>niet meer</strong> voor windparken van drie of meer turbines, zolang er geen plan-MER is doorlopen (<a href="https://www.rvo.nl/onderwerpen/windenergie-op-land/wonen-windturbine/geluidnormering-windturbines" target="_blank" rel="noopener">RVO.nl</a>). Voor 1–2 turbines blijven deze normen wel gewoon van kracht. Voor 3+ turbines stelt het bevoegd gezag (gemeente/provincie) zelf een gemotiveerde norm vast — in de praktijk meestal nog 45–47 dB Lden / 41 dB Lnight, soms de WHO-advieswaarde van 45 dB Lden (<a href="https://repository.officiele-overheidspublicaties.nl/externebijlagen/exb-2026-25019/1/bijlage/exb-2026-25019.pdf" target="_blank" rel="noopener">Notitie geluidsnorm windturbines Gelderland, nov. 2025</a>). Er bestaat dus momenteel <strong>geen uniforme landelijke norm</strong> voor windparken — kies hieronder tegen welke referentiewaarde je wilt toetsen. Deze module gebruikt de berekening voor de actieve geluidscategorie (Hoorbaar/Laagfrequent/Infrasoon, in te stellen bij Module 3) van de geselecteerde turbine, downwind (de kritische richting).</p>
+    <p class="module-desc">Sinds de <a href="https://www.raadvanstate.nl/@126772/202008065-1-r3/" target="_blank" rel="noopener">Delfzijluitspraak</a> (Afdeling bestuursrechtspraak van de Raad van State, 30 juni 2021) gelden de oude landelijke geluidsnormen uit het Activiteitenbesluit/Activiteitenregeling milieubeheer (47 dB Lden / 41 dB Lnight) <strong>niet meer</strong> voor windparken van drie of meer turbines, zolang er geen plan-MER is doorlopen (<a href="https://www.rvo.nl/onderwerpen/windenergie-op-land/wonen-windturbine/geluidnormering-windturbines" target="_blank" rel="noopener">RVO.nl</a>). Voor 1–2 turbines blijven deze normen wel gewoon van kracht. Voor 3+ turbines stelt het bevoegd gezag (gemeente/provincie) zelf een gemotiveerde norm vast — in de praktijk meestal nog 45–47 dB Lden / 41 dB Lnight, soms de WHO-advieswaarde van 45 dB Lden (<a href="https://repository.officiele-overheidspublicaties.nl/externebijlagen/exb-2026-25019/1/bijlage/exb-2026-25019.pdf" target="_blank" rel="noopener">Notitie geluidsnorm windturbines Gelderland, nov. 2025</a>). Er bestaat dus momenteel <strong>geen uniforme landelijke norm</strong> voor windparken — kies hieronder tegen welke referentiewaarde je wilt toetsen. Deze module gebruikt de berekening voor de actieve geluidscategorie (Hoorbaar/Laagfrequent/Infrasoon, in te stellen bij Module 3) van de geselecteerde turbine en toetst nu expliciet voor drie richtingen apart: downwind (de kritische, verst dragende richting), upwind (het snelst dempend) en zijwind/crosswind (tussenliggend) — een woning die niet downwind van de turbine ligt kan op dezelfde afstand een lager niveau ondervinden en zo binnen de norm blijven.</p>
 
     <p class="callout" id="norm-context-callout"></p>
 
@@ -341,9 +341,9 @@
       <h3 id="norm-table-title" style="font-size:var(--text-sm);font-weight:700;margin-bottom:var(--space-3);">Toetsing geselecteerde turbine (hoorbaar geluid, dB(A))</h3>
       <table class="data-table norm-table">
         <thead>
-          <tr><th>Afstand</th><th>Dag</th><th>Nacht</th><th>Toetsing Nacht</th></tr>
+          <tr><th>Afstand</th><th>Dag</th><th>Nacht downwind</th><th>Toetsing downwind</th><th>Nacht upwind</th><th>Toetsing upwind</th><th>Nacht zijwind</th><th>Toetsing zijwind</th></tr>
         </thead>
-        <tbody id="norm-table-body"><tr><td colspan="4" class="empty-row">Plaats een turbine op de kaart in Module 3 om te toetsen.</td></tr></tbody>
+        <tbody id="norm-table-body"><tr><td colspan="8" class="empty-row">Plaats een turbine op de kaart in Module 3 om te toetsen.</td></tr></tbody>
       </table>
       <p class="callout" id="norm-aweight-note" style="display:none;"></p>
       <p class="callout" id="norm-lden-callout">De Lden-benadering is voor nu verwijderd uit deze tabel — dat was een indicatieve schatting (dag/avond/nacht-weging met de avond benaderd op het dagniveau) en <strong>geen</strong> formele Lden-berekening volgens het Reken- en meetvoorschrift windturbines. Toetsing gebeurt hier rechtstreeks op de dB-waarde Nacht t.o.v. de Lnight-norm, voor het huidige scenario (Module 2) en de huidige windrichting (Module 3).</p>
@@ -478,7 +478,7 @@
       <span class="module-num">Module 8</span>
       <h2>Woningen, bewoners en geschatte hinder per scenario (nacht)</h2>
     </div>
-    <p class="module-desc">Deze module koppelt drie eerdere onderdelen aan elkaar: de <strong>overschrijdingsafstand</strong> per scenario (het scenario-toeslagmodel van Module 2/3 getoetst aan de norm van Module 5), het <strong>werkelijke aantal woningen</strong> binnen die afstand via de BAG-adressenregistratie (Kadaster/PDOK), en een omrekening naar <strong>bewoners</strong> en <strong>geschatte hinder</strong> op basis van drie scenario's uit de vakliteratuur. Voor elk nacht-scenario wordt apart bepaald tot welke vaste ring (500/900/1300/1500/2000/5000 m, Module 3) het <strong>hoorbare</strong> (dB(A)) en het <strong>laagfrequente</strong> geluid de gekozen Lnight-norm nog overschrijdt — precies de twee overschrijdingsgrenzen die Module 5 al per afstand berekent, hier automatisch bepaald in plaats van afgelezen.</p>
+    <p class="module-desc">Deze module koppelt drie eerdere onderdelen aan elkaar: de <strong>overschrijdingsafstand</strong> per scenario (het scenario-toeslagmodel van Module 2/3 getoetst aan de norm van Module 5), het <strong>werkelijke aantal woningen</strong> binnen die afstand via de BAG-adressenregistratie (Kadaster/PDOK), en een omrekening naar <strong>bewoners</strong> en <strong>geschatte hinder</strong> op basis van drie scenario's uit de vakliteratuur. De getoonde overschrijdingsringen (downwind/zijwind/upwind) dienen uitsluitend ter context: elk BAG-adres wordt daarnaast individueel getoetst op zijn eigen werkelijke afstand én richting tot elke turbine, zodat een woning die weliswaar binnen de (downwind-)ring ligt maar in werkelijkheid zijwind of upwind van de turbine staat, niet ten onrechte als overschrijding wordt meegeteld — en omgekeerd.</p>
 
     <div class="callout" id="m8-context-callout">Plaats minstens één turbine op de kaart in Module 3 om deze module te gebruiken.</div>
 
@@ -555,7 +555,7 @@
 
     <div class="module-subhead">
       <h3>Jaargemiddelde toetsing: hoe de nachtnorm ondanks piekwaarden toch gehaald kan worden</h3>
-      <p class="hint">De Lnight-norm hierboven (Module 5) is wettelijk een <strong>jaargemiddelde</strong> over alle nachten van het jaar, geen grenswaarde per afzonderlijke nacht. Deze paragraaf rekent, voor elke overschrijdingsring van hoorbaar geluid hierboven, het energetisch (logaritmisch) jaargemiddelde Lnight uit — gewogen met de werkelijke scenario-percentages per jaar uit Module 6, die voor deze turbinelocatie gelden — en toetst dat jaargemiddelde opnieuw aan de norm: <code>L_jaar = 10·log₁₀(Σ p_i·10^(L_i/10))</code>.</p>
+      <p class="hint">De Lnight-norm hierboven (Module 5) is wettelijk een <strong>jaargemiddelde</strong> over alle nachten van het jaar, geen grenswaarde per afzonderlijke nacht. Deze paragraaf rekent, voor elke overschrijdingsring van hoorbaar geluid hierboven én voor elke richting apart (downwind, zijwind, upwind — elk met een eigen ring en dus eigen jaargemiddelde), het energetisch (logaritmisch) jaargemiddelde Lnight uit — gewogen met de werkelijke scenario-percentages per jaar uit Module 6, die voor deze turbinelocatie gelden — en toetst dat jaargemiddelde opnieuw aan de norm: <code>L_jaar = 10·log₁₀(Σ p_i·10^(L_i/10))</code>.</p>
     </div>
 
     <div class="callout" id="m8-jaarnorm-callout">
@@ -563,12 +563,12 @@
       <div class="cum-result-wrap">
         <table class="data-table m8-jaarnorm-table">
           <thead>
-            <tr><th>Ring (bepaald door)</th><th>Afstand</th><th>Lnight best</th><th>Lnight middel</th><th>Lnight worst</th><th>Jaargemiddelde</th><th>Toetsing jaargemiddelde</th></tr>
+            <tr><th>Ring (bepaald door)</th><th>Richting</th><th>Afstand</th><th>Lnight best</th><th>Lnight middel</th><th>Lnight worst</th><th>Jaargemiddelde</th><th>Toetsing jaargemiddelde</th></tr>
           </thead>
-          <tbody id="m8-jaarnorm-table-body"><tr><td colspan="7" class="empty-row">Plaats minstens één turbine op de kaart in Module 3.</td></tr></tbody>
+          <tbody id="m8-jaarnorm-table-body"><tr><td colspan="8" class="empty-row">Plaats minstens één turbine op de kaart in Module 3.</td></tr></tbody>
         </table>
       </div>
-      <p class="hint">Methodologische kanttekening: dit is zelf ook een modelmatige schatting. De scenario-percentages hierboven zijn afgeleid uit de afstand tot de kust en de shear-capaciteit (Module 6/7) — geen gemeten jaarstatistiek van weerscondities per nacht op deze exacte locatie. De berekening neemt aan dat een hele nacht steeds volledig in één scenario valt (geen overgangen binnen één nacht) en gebruikt voor alle drie de scenario's dezelfde (downwind-)richting, dezelfde richting die Module 8 ook al voor de overschrijdingsringen gebruikt.</p>
+      <p class="hint">Methodologische kanttekening: dit is zelf ook een modelmatige schatting. De scenario-percentages hierboven zijn afgeleid uit de afstand tot de kust en de shear-capaciteit (Module 6/7) — geen gemeten jaarstatistiek van weerscondities per nacht op deze exacte locatie. De berekening neemt aan dat een hele nacht steeds volledig in één scenario valt (geen overgangen binnen één nacht). Anders dan voorheen wordt hier niet uitsluitend downwind gerekend: elke rij hierboven wordt expliciet voor één van de drie richtingen (downwind, zijwind of upwind) apart doorgerekend, met een eigen ring en een eigen jaargemiddelde per richting.</p>
     </div>
 
     <div class="callout m6-limitations">
@@ -581,7 +581,7 @@
       <span class="module-num">Module 8a</span>
       <h2>Gevolgen van A-weging op laagfrequent en infrasoon geluid</h2>
     </div>
-    <p class="module-desc">Module 8 hierboven rekent laagfrequent geluid <strong>ongewogen</strong> (dB(Lin)) en infrasoon geluid <strong>G-gewogen</strong> (dB(G)) — de eenheden waarin deze twee geluidssoorten volgens de vakliteratuur daadwerkelijk beoordeeld moeten worden. In de praktijk wordt windturbinegeluid echter vrijwel altijd getoetst met de wettelijke dB(A)-Lnight-norm, dus met A-weging over <em>alle</em> frequenties inclusief laagfrequent en infrasoon. Deze module rekent dat scenario door en zet het <strong>rechtstreeks naast Module 8</strong>: elke rij hieronder toont bronniveau, overschrijdingsring, woningen en bewoners eerst zoals Module 8 ze berekent (ongewogen/G-gewogen), dan de pijl naar wat er overblijft na A-weging, plus de procentuele afname.</p>
+    <p class="module-desc">Module 8 hierboven rekent laagfrequent geluid <strong>ongewogen</strong> (dB(Lin)) en infrasoon geluid <strong>G-gewogen</strong> (dB(G)) — de eenheden waarin deze twee geluidssoorten volgens de vakliteratuur daadwerkelijk beoordeeld moeten worden. In de praktijk wordt windturbinegeluid echter vrijwel altijd getoetst met de wettelijke dB(A)-Lnight-norm, dus met A-weging over <em>alle</em> frequenties inclusief laagfrequent en infrasoon. Deze module rekent dat scenario door en zet het <strong>rechtstreeks naast Module 8</strong>: elke rij hieronder toont bronniveau, overschrijdingsring (downwind/zijwind/upwind, ter context), woningen en bewoners eerst zoals Module 8 ze berekent (ongewogen/G-gewogen, per BAG-adres exact getoetst op de eigen richting), dan de pijl naar wat er overblijft na A-weging, plus de procentuele afname.</p>
 
     <div class="callout" id="m8a-context-callout">Plaats minstens één turbine op de kaart in Module 3 om deze module te gebruiken.</div>
 
