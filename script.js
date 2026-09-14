@@ -163,7 +163,7 @@ const state = {
   m7Ugeo: 9,
   m7UgeoFetching: false, m7UgeoAutoInfo: null, m7UgeoAutoError: null,
   // Module 8: woningen (BAG) → bewoners → geschatte hinder per scenario — zie script.js §M8.
-  m8HouseholdSize: 2.10, m8AddressData: null, m8Fetching: false, m8Error: null,
+  m8HouseholdSize: 2.10, m8AddressData: null, m8Fetching: false, m8Error: null, m8StilstandNachten: 0,
   // Module 9/10: kosten- en DALY-berekening op basis van Module 8's bewonersaantallen — zie script.js §M9/§M10.
   m9CostPerPersonYear: 609.60, m9Horizon: 25,
   // Module 11: waardedaling woningen (Droës & Koster 2021) — zie script.js §M11. Tiphoogte-categorie
@@ -353,6 +353,19 @@ if (m8HouseholdInput) {
 }
 const m8FetchBtnEl = document.getElementById('m8-fetch-btn');
 if (m8FetchBtnEl) m8FetchBtnEl.addEventListener('click', () => { m8RunFetch(); });
+
+// Stilstandnachten-invoer (jaargemiddelde-sectie, Module 8) — los van state.curtailment (dat is de
+// bestaande "stalgeluid"-functionaliteit die dB toevoegt, geen gerelateerd concept).
+const m8StilstandInputEl = document.getElementById('m8-stilstand-input');
+if (m8StilstandInputEl) {
+  m8StilstandInputEl.addEventListener('input', () => {
+    let v = parseInt(m8StilstandInputEl.value, 10);
+    if (Number.isNaN(v)) v = 0;
+    v = Math.max(0, Math.min(365, v));
+    state.m8StilstandNachten = v;
+    renderModule8Jaarnorm();
+  });
+}
 
 const m9CostInput = document.getElementById('m9-cost-per-person');
 if (m9CostInput) {
@@ -1937,14 +1950,27 @@ const M8_DIRECTIONS = [
   { key: 'zijwind', label: 'Zijwind (crosswind)', x: 0 },
   { key: 'upwind', label: 'Upwind', x: -1 },
 ];
+// De drie geluidscategorieën die de jaargemiddelde-toetsing hieronder apart doorrekent — bewust
+// NIET tot één getal samengevoegd: dB(A)/dB(Lin)/dB(G) zijn verschillende wegingscurven over
+// verschillende frequentiebanden, energetisch bij elkaar optellen of middelen tussen categorieën
+// heeft geen natuurkundige betekenis (zie ook de "geen optelling over categorieën"-kanttekening
+// bij Module 8 hierboven). Voor laagfrequent/infrasoon geldt geen wettelijke Lnight-norm in hun
+// eigen eenheid — de dB(A)-norm dient daar, net als bij Module 8a, uitsluitend als indicatief
+// referentiepunt, niet als wettelijk toetsingskader.
+const JAARNORM_CATEGORIES = [
+  { key: 'hoorbaar', label: 'Hoorbaar geluid', unit: 'dB(A)', indicatief: false },
+  { key: 'laagfrequent', label: 'Laagfrequent geluid', unit: 'dB(Lin)', indicatief: true },
+  { key: 'infrasoon', label: 'Infrasoon geluid', unit: 'dB(G)', indicatief: true },
+];
 
-function m8JaarnormRows() {
+function m8JaarnormRows(categoryKey) {
+  const catKey = categoryKey || 'hoorbaar';
   const norm = getActiveNorm();
   if (norm.lnight == null || state.turbines3a.length === 0) return null;
   const anchor = m6TurbineAnchor();
   const pct = m6ScenarioPercentages(anchor.lat, anchor.lng);
-  const lwCat = computeCategoryLw(state.lwa).hoorbaar;
-  const levelAt = (scenario, d, x) => lpAt(d, x, 'hoorbaar', lwCat, { scenario, daynight: 'nacht', curtailment: state.curtailment });
+  const lwCat = computeCategoryLw(state.lwa)[catKey];
+  const levelAt = (scenario, d, x) => lpAt(d, x, catKey, lwCat, { scenario, daynight: 'nacht', curtailment: state.curtailment });
   const weightedAvgAt = (d, x) => 10 * Math.log10(
     ['best', 'middel', 'worst'].reduce((acc, s) => acc + (pct[s] / 100) * Math.pow(10, levelAt(s, d, x) / 10), 0)
   );
@@ -1954,7 +1980,7 @@ function m8JaarnormRows() {
   const rows = [];
   ['best', 'middel', 'worst'].forEach((scenario) => {
     M8_DIRECTIONS.forEach((dir) => {
-      const ring = m8ExceedanceRadiusX(scenario, 'hoorbaar', dir.x, 'nacht');
+      const ring = m8ExceedanceRadiusX(scenario, catKey, dir.x, 'nacht');
       if (ring == null) {
         rows.push({ scenario, direction: dir.key, directionLabel: dir.label, ring: null, levels: null, jaargemiddelde: null, exceeds: null });
         return;
@@ -1965,6 +1991,60 @@ function m8JaarnormRows() {
     });
   });
   return { pct, anchor, rows };
+}
+
+// ---------- Stilstandnachten: effect van X nachten volledige turbinestilstand op het jaargemiddelde ----------
+// Zet de scenario-percentages (Module 6/7) om in een concreet aantal nachten van de 365, en "verwijdert"
+// daaruit het opgegeven aantal stilstandnachten — volgens de gebruikerskeuze bij voorrang uit de zwaarste
+// nachten (worst case eerst, dan middel, dan best case): dat is de realistische volgorde voor een
+// stilstandvoorziening, die zich in de praktijk juist op de zwaarste condities richt en zo het grootste
+// effect per stilgezette nacht geeft. Op een stilstandnacht wordt de turbinebijdrage op 0 dB gezet (geen
+// apart achtergrondniveau meegerekend — in werkelijkheid blijft er altijd wat restgeluid over, maar dat
+// valt buiten wat dit turbine-model berekent).
+const M8_JAAR_NACHTEN = 365;
+function m8NachtenVanPct(pct) {
+  let nWorst = Math.round((pct.worst / 100) * M8_JAAR_NACHTEN);
+  let nMiddel = Math.round((pct.middel / 100) * M8_JAAR_NACHTEN);
+  let nBest = M8_JAAR_NACHTEN - nWorst - nMiddel;
+  if (nBest < 0) { nBest = 0; }
+  return { nBest, nMiddel, nWorst };
+}
+function m8VerdeelStilstand(nachten, stilNachten) {
+  let resterend = Math.max(0, Math.min(M8_JAAR_NACHTEN, Math.round(stilNachten) || 0));
+  const uitWorst = Math.min(resterend, nachten.nWorst); resterend -= uitWorst;
+  const uitMiddel = Math.min(resterend, nachten.nMiddel); resterend -= uitMiddel;
+  const uitBest = Math.min(resterend, nachten.nBest); resterend -= uitBest;
+  return {
+    nBest: nachten.nBest - uitBest,
+    nMiddel: nachten.nMiddel - uitMiddel,
+    nWorst: nachten.nWorst - uitWorst,
+    nStil: uitWorst + uitMiddel + uitBest,
+  };
+}
+// Herberekent het energetisch jaargemiddelde met een vierde "stil"-emmer (0 dB) naast best/middel/worst,
+// op basis van het aantal nachten per emmer (niet meer de originele percentages) — zelfde logaritmische
+// middelingsformule als m8JaarnormRows() hierboven, nu met vier termen in plaats van drie.
+function m8JaargemiddeldeMetStilstand(levels, pct, stilNachten) {
+  // Verwijdert stilstandnachten uit de afgeronde nachtaantallen (nodig omdat "aantal nachten" per
+  // definitie een geheel getal is), maar herberekent het jaargemiddelde met de ORIGINELE exacte
+  // percentages geschaald met de overgebleven fractie per emmer — niet met de afgeronde
+  // nachtaantallen zelf. Zo valt bij stilNachten = 0 (fractie = 1 in elke emmer) dit exact terug op
+  // dezelfde weging als m8JaarnormRows()/weightedAvgAt() hierboven (geen afrondingsverschil met de
+  // "huidig"-kolom hierboven).
+  const nachten = m8NachtenVanPct(pct);
+  const verdeeld = m8VerdeelStilstand(nachten, stilNachten);
+  const fracBest = nachten.nBest > 0 ? verdeeld.nBest / nachten.nBest : 0;
+  const fracMiddel = nachten.nMiddel > 0 ? verdeeld.nMiddel / nachten.nMiddel : 0;
+  const fracWorst = nachten.nWorst > 0 ? verdeeld.nWorst / nachten.nWorst : 0;
+  const wBest = (pct.best / 100) * fracBest;
+  const wMiddel = (pct.middel / 100) * fracMiddel;
+  const wWorst = (pct.worst / 100) * fracWorst;
+  const wStil = (pct.best / 100) * (1 - fracBest) + (pct.middel / 100) * (1 - fracMiddel) + (pct.worst / 100) * (1 - fracWorst);
+  const sum = wBest * Math.pow(10, levels.best / 10)
+    + wMiddel * Math.pow(10, levels.middel / 10)
+    + wWorst * Math.pow(10, levels.worst / 10)
+    + wStil * Math.pow(10, 0 / 10);
+  return { ...verdeeld, jaargemiddelde: 10 * Math.log10(sum) };
 }
 
 // ==================== MODULE 8a: gevolgen van A-weging op laagfrequent/infrasoon ====================
@@ -2241,47 +2321,126 @@ function renderModule8() {
   renderModule13();
 }
 
-// Weergave van m8JaarnormRows() — zie functiecommentaar hierboven voor de rekenmethode.
+// Weergave van m8JaarnormRows() (3 categorieën apart) + de stilstandnachten-simulatie eronder.
+// Zie functiecommentaar bij m8JaarnormRows()/m8JaargemiddeldeMetStilstand() hierboven voor de rekenmethode.
 function renderModule8Jaarnorm() {
-  const pctEl = document.getElementById('m8-jaarnorm-pct');
-  const tableBody = document.getElementById('m8-jaarnorm-table-body');
-  if (!tableBody) return;
+  const nachtenEl = document.getElementById('m8-jaarnorm-nachtenverdeling');
+  const container = document.getElementById('m8-jaarnorm-container');
+  const stilInput = document.getElementById('m8-stilstand-input');
+  const stilContainer = document.getElementById('m8-stilstand-container');
+  if (!container) return;
   const n = state.turbines3a.length;
   const norm = getActiveNorm();
   if (n === 0) {
-    if (pctEl) pctEl.innerHTML = '';
-    tableBody.innerHTML = `<tr><td colspan="8" class="empty-row">Plaats minstens één turbine op de kaart in Module 3.</td></tr>`;
+    if (nachtenEl) nachtenEl.innerHTML = '';
+    container.innerHTML = `<p class="empty-row">Plaats minstens één turbine op de kaart in Module 3.</p>`;
+    if (stilContainer) stilContainer.innerHTML = '';
     return;
   }
   if (norm.lnight == null) {
-    if (pctEl) pctEl.innerHTML = '';
-    tableBody.innerHTML = `<tr><td colspan="8" class="empty-row">De geselecteerde norm (${escapeHtml(norm.label)}) heeft geen Lnight-waarde — jaargemiddelde toetsing is hiermee niet mogelijk.</td></tr>`;
+    if (nachtenEl) nachtenEl.innerHTML = '';
+    container.innerHTML = `<p class="empty-row">De geselecteerde norm (${escapeHtml(norm.label)}) heeft geen Lnight-waarde — jaargemiddelde toetsing is hiermee niet mogelijk.</p>`;
+    if (stilContainer) stilContainer.innerHTML = '';
     return;
   }
-  const result = m8JaarnormRows();
-  if (!result) {
-    tableBody.innerHTML = `<tr><td colspan="8" class="empty-row">Geen gegevens.</td></tr>`;
+  const catResults = {};
+  JAARNORM_CATEGORIES.forEach((cat) => { catResults[cat.key] = m8JaarnormRows(cat.key); });
+  const base = catResults.hoorbaar;
+  if (!base) {
+    container.innerHTML = `<p class="empty-row">Geen gegevens.</p>`;
+    if (stilContainer) stilContainer.innerHTML = '';
     return;
   }
-  const { pct, anchor } = result;
-  if (pctEl) {
-    pctEl.innerHTML = `Voor deze turbinepositie (${anchor.isDefault ? 'standaardlocatie' : `${pct.distKm.toFixed(0)} km landinwaarts`}, Module 6): <strong>best ${pct.best.toFixed(1)}%</strong>, <strong>middel ${pct.middel.toFixed(1)}%</strong>, <strong>worst ${pct.worst.toFixed(1)}%</strong> van alle nachten per jaar.`;
+  const { pct, anchor } = base;
+  const nachten = m8NachtenVanPct(pct);
+
+  // ---- Nachtenverdeling: hoe de 365 nachten per jaar over de drie scenario's verdeeld zijn ----
+  if (nachtenEl) {
+    nachtenEl.innerHTML = `
+      <p class="hint">Voor deze turbinepositie (${anchor.isDefault ? 'standaardlocatie' : `${pct.distKm.toFixed(0)} km landinwaarts`}, Module 6): van de ${M8_JAAR_NACHTEN} nachten per jaar zijn er naar schatting <strong>${nachten.nBest} best case</strong> (${pct.best.toFixed(1)}%), <strong>${nachten.nMiddel} middel</strong> (${pct.middel.toFixed(1)}%) en <strong>${nachten.nWorst} worst case</strong> (${pct.worst.toFixed(1)}%).</p>
+      <div class="m8-nachten-bar" role="img" aria-label="Nachtenverdeling per jaar: ${pct.best.toFixed(1)}% best case, ${pct.middel.toFixed(1)}% middel, ${pct.worst.toFixed(1)}% worst case">
+        <span class="m8-nachten-seg m8-nachten-best" style="width:${pct.best}%" title="Best case: ${nachten.nBest} nachten"></span>
+        <span class="m8-nachten-seg m8-nachten-middel" style="width:${pct.middel}%" title="Middel: ${nachten.nMiddel} nachten"></span>
+        <span class="m8-nachten-seg m8-nachten-worst" style="width:${pct.worst}%" title="Worst case: ${nachten.nWorst} nachten"></span>
+      </div>
+      <div class="m8-nachten-legend">
+        <span><i class="m8-nachten-dot m8-nachten-best"></i>Best case</span>
+        <span><i class="m8-nachten-dot m8-nachten-middel"></i>Middel</span>
+        <span><i class="m8-nachten-dot m8-nachten-worst"></i>Worst case</span>
+      </div>`;
   }
-  tableBody.innerHTML = result.rows.map((r) => {
-    if (r.ring == null) {
-      return `<tr><td>${M8_SCENARIO_LABEL[r.scenario]}-ring</td><td>${r.directionLabel}</td><td colspan="6" class="empty-row">Geen overschrijding op de vaste ringen (hoorbaar geluid).</td></tr>`;
-    }
-    return `<tr class="${r.exceeds ? 'm8-jaarnorm-exceeds' : 'm8-jaarnorm-ok'}">
-      <td>${M8_SCENARIO_LABEL[r.scenario]}-ring</td>
-      <td>${r.directionLabel}</td>
-      <td>${m8RingLabel(r.ring)}</td>
-      <td>${r.levels.best.toFixed(1)} dB(A)</td>
-      <td>${r.levels.middel.toFixed(1)} dB(A)</td>
-      <td>${r.levels.worst.toFixed(1)} dB(A)</td>
-      <td><strong>${r.jaargemiddelde.toFixed(1)} dB(A)</strong></td>
-      <td>${r.exceeds ? 'Overschrijding' : 'Binnen de norm'}</td>
-    </tr>`;
+
+  // ---- Drie categorietabellen (hoorbaar / laagfrequent / infrasoon), bewust niet samengevoegd ----
+  container.innerHTML = JAARNORM_CATEGORIES.map((cat) => {
+    const result = catResults[cat.key];
+    const rowsHtml = result.rows.map((r) => {
+      if (r.ring == null) {
+        return `<tr><td>${M8_SCENARIO_LABEL[r.scenario]}-ring</td><td>${r.directionLabel}</td><td colspan="4" class="empty-row">Geen overschrijding op de vaste ringen.</td></tr>`;
+      }
+      return `<tr class="${r.exceeds ? 'm8-jaarnorm-exceeds' : 'm8-jaarnorm-ok'}">
+        <td>${M8_SCENARIO_LABEL[r.scenario]}-ring</td>
+        <td>${r.directionLabel}</td>
+        <td>${m8RingLabel(r.ring)}</td>
+        <td>${r.levels.best.toFixed(1)} / ${r.levels.middel.toFixed(1)} / ${r.levels.worst.toFixed(1)} ${cat.unit}</td>
+        <td><strong>${r.jaargemiddelde.toFixed(1)} ${cat.unit}</strong></td>
+        <td>${r.exceeds ? 'Overschrijding' : 'Binnen de norm'}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="data-table-card m8-jaarnorm-cat-card">
+      <h3>${cat.label} (${cat.unit})${cat.indicatief ? ' <span class="m8a-subhead">— indicatief referentiepunt, geen wettelijke norm</span>' : ''}</h3>
+      <div class="cum-result-wrap">
+        <table class="data-table m8-jaarnorm-table">
+          <thead>
+            <tr><th>Ring (bepaald door)</th><th>Richting</th><th>Afstand</th><th>L best / middel / worst</th><th>Jaargemiddelde</th><th>Toetsing jaargemiddelde</th></tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    </div>`;
   }).join('');
+
+  // ---- Stilstandnachten: invoer + effect op het jaargemiddelde, per categorie op de worst-case-ring ----
+  // Beperkt tot de worst-case-ring (× 3 richtingen × 3 categorieën = 9 vergelijkingsrijen) — dit is de
+  // ring die eerder in dit model als de beleidsmatig relevante (conservatieve) ring is toegelicht;
+  // alle drie scenario's per richting laten zien zou het jaargemiddelde nodeloos negen keer herhalen.
+  if (stilInput && document.activeElement !== stilInput) {
+    stilInput.value = String(state.m8StilstandNachten);
+  }
+  if (stilContainer) {
+    const stilX = state.m8StilstandNachten;
+    const verdeling = m8VerdeelStilstand(nachten, stilX);
+    const verdelingHtml = stilX > 0
+      ? `<p class="hint">Bij <strong>${stilX} stilstandnacht${stilX === 1 ? '' : 'en'}</strong> per jaar (eerst worst case, dan middel, dan best case stilgezet): ${nachten.nWorst} → <strong>${verdeling.nWorst}</strong> worst case, ${nachten.nMiddel} → <strong>${verdeling.nMiddel}</strong> middel, ${nachten.nBest} → <strong>${verdeling.nBest}</strong> best case, plus <strong>${verdeling.nStil}</strong> stilstandnachten (0 dB turbinebijdrage).</p>`
+      : `<p class="hint">Vul hierboven een aantal stilstandnachten per jaar in om het effect op het jaargemiddelde te zien.</p>`;
+    const tablesHtml = JAARNORM_CATEGORIES.map((cat) => {
+      const result = catResults[cat.key];
+      const worstRows = result.rows.filter((r) => r.scenario === 'worst');
+      const rowsHtml = worstRows.map((r) => {
+        if (r.ring == null || r.levels == null) {
+          return `<tr><td>${r.directionLabel}</td><td colspan="3" class="empty-row">Geen overschrijding op de vaste ringen.</td></tr>`;
+        }
+        const na = m8JaargemiddeldeMetStilstand(r.levels, pct, stilX);
+        const verschil = r.jaargemiddelde - na.jaargemiddelde;
+        const verbeterd = verschil > 0.05;
+        return `<tr>
+          <td>${r.directionLabel}</td>
+          <td>${r.jaargemiddelde.toFixed(1)} ${cat.unit}</td>
+          <td><strong>${na.jaargemiddelde.toFixed(1)} ${cat.unit}</strong></td>
+          <td class="${verbeterd ? 'm8-stil-verbetering' : ''}">${verbeterd ? '−' + verschil.toFixed(1) : '0,0'} ${cat.unit}</td>
+        </tr>`;
+      }).join('');
+      return `<div class="data-table-card m8-jaarnorm-cat-card">
+        <h3>${cat.label} (${cat.unit}) — worst-case-ring${cat.indicatief ? ' <span class="m8a-subhead">— indicatief referentiepunt</span>' : ''}</h3>
+        <div class="cum-result-wrap">
+          <table class="data-table m8-jaarnorm-table">
+            <thead><tr><th>Richting</th><th>Jaargemiddelde (huidig)</th><th>Jaargemiddelde (met stilstand)</th><th>Verschil</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+      </div>`;
+    }).join('');
+    stilContainer.innerHTML = verdelingHtml + tablesHtml;
+  }
 }
 
 // ==================== MODULE 9: geschatte zorgkosten ====================
@@ -3659,31 +3818,73 @@ function m13BuildReportHtml(mapImages) {
     })()}
 
     <h3>8.4 Rekenvoorbeeld: haalt de nachtnorm het als jaargemiddelde tóch, ondanks deze piekwaarden?</h3>
-    <p>Het jaargemiddelde in §8.3 was een kwalitatief punt; hier volgt het concrete rekenvoorbeeld. De Lnight-norm bij Module 5 (${norm.lnight != null ? norm.lnight + ' dB(A)' : '—'}) is zelf wettelijk óók een jaargemiddelde, geen grenswaarde per nacht. De vraag is dus: als een woning op de worst-case-overschrijdingsring van §5 ligt, wordt de norm dán als jaargemiddelde alsnog gehaald, doordat de meeste nachten milder zijn? Onderstaande tabel rekent dit uit per scenario én per richting — downwind (kritisch), zijwind en upwind (het minst belastend) hebben elk hun eigen overschrijdingsring en dus een eigen jaargemiddelde — door voor elke scenario/richting-combinatie het energetisch jaargemiddelde Lnight te bepalen — gewogen met de daadwerkelijke scenarioverdeling van §8.1 — en dat gemiddelde opnieuw aan de norm te toetsen: <code>L_jaar = 10·log₁₀(Σ p_i·10^(L_i/10))</code>.</p>
+    <p>Het jaargemiddelde in §8.3 was een kwalitatief punt; hier volgt het concrete rekenvoorbeeld, nu voor alle drie geluidscategorieën apart (hoorbaar, laagfrequent, infrasoon — bewust niet samengevoegd, want dat zijn verschillende eenheden). De Lnight-norm bij Module 5 (${norm.lnight != null ? norm.lnight + ' dB(A)' : '—'}) is zelf wettelijk óók een jaargemiddelde, geen grenswaarde per nacht; voor laagfrequent/infrasoon dient deze norm uitsluitend als indicatief referentiepunt, niet als wettelijk toetsingskader. De vraag is dus: als een woning op de worst-case-overschrijdingsring van §5 ligt, wordt de norm dán als jaargemiddelde alsnog gehaald, doordat de meeste nachten milder zijn? Onderstaande tabellen rekenen dit uit per scenario én per richting — downwind (kritisch), zijwind en upwind (het minst belastend) hebben elk hun eigen overschrijdingsring en dus een eigen jaargemiddelde — door voor elke scenario/richting-combinatie het energetisch jaargemiddelde te bepalen — gewogen met de daadwerkelijke scenarioverdeling van §8.1 — en dat gemiddelde opnieuw aan de norm te toetsen: <code>L_jaar = 10·log₁₀(Σ p_i·10^(L_i/10))</code>.</p>
     ${(() => {
-      const jn = m8JaarnormRows();
+      const catResults = {};
+      JAARNORM_CATEGORIES.forEach((cat) => { catResults[cat.key] = m8JaarnormRows(cat.key); });
+      const jn = catResults.hoorbaar;
       if (!jn) {
         return '<p class="rp-note"><em>Geen turbine geplaatst, of de gekozen norm heeft geen Lnight-waarde — dit rekenvoorbeeld kan niet worden getoond.</em></p>';
       }
-      const rowsHtml = jn.rows.map((row) => {
-        if (row.ring == null) {
-          return `<tr><td>${M8_SCENARIO_LABEL[row.scenario]}-ring</td><td>${row.directionLabel}</td><td colspan="5"><em>Geen overschrijding op de vaste ringen (hoorbaar geluid).</em></td></tr>`;
-        }
-        return `<tr>
-          <td>${M8_SCENARIO_LABEL[row.scenario]}-ring</td>
-          <td>${row.directionLabel}</td>
-          <td>${m8RingLabel(row.ring)}</td>
-          <td>${row.levels.best.toFixed(1)} / ${row.levels.middel.toFixed(1)} / ${row.levels.worst.toFixed(1)} dB(A)</td>
-          <td><strong>${row.jaargemiddelde.toFixed(1)} dB(A)</strong></td>
-          <td>${row.exceeds ? '<strong>Overschrijding</strong>' : 'Binnen de norm'}</td>
-        </tr>`;
+      const catTablesHtml = JAARNORM_CATEGORIES.map((cat) => {
+        const result = catResults[cat.key];
+        const rowsHtml = result.rows.map((row) => {
+          if (row.ring == null) {
+            return `<tr><td>${M8_SCENARIO_LABEL[row.scenario]}-ring</td><td>${row.directionLabel}</td><td colspan="4"><em>Geen overschrijding op de vaste ringen.</em></td></tr>`;
+          }
+          return `<tr>
+            <td>${M8_SCENARIO_LABEL[row.scenario]}-ring</td>
+            <td>${row.directionLabel}</td>
+            <td>${m8RingLabel(row.ring)}</td>
+            <td>${row.levels.best.toFixed(1)} / ${row.levels.middel.toFixed(1)} / ${row.levels.worst.toFixed(1)} ${cat.unit}</td>
+            <td><strong>${row.jaargemiddelde.toFixed(1)} ${cat.unit}</strong></td>
+            <td>${row.exceeds ? '<strong>Overschrijding</strong>' : 'Binnen de norm'}</td>
+          </tr>`;
+        }).join('');
+        return `<p class="rp-note"><strong>${cat.label} (${cat.unit})</strong>${cat.indicatief ? ' — indicatief referentiepunt, geen wettelijke norm in deze eenheid' : ''}</p>
+        <table class="rp-table rp-table-compact">
+          <thead><tr><th>Ring (bepaald door)</th><th>Richting</th><th>Afstand</th><th>L best / middel / worst</th><th>Jaargemiddelde</th><th>Toetsing</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>`;
       }).join('');
-      return `<p>Scenarioverdeling op deze locatie (§8.1, Module 6): best ${jn.pct.best.toFixed(1)}%, middel ${jn.pct.middel.toFixed(1)}%, worst ${jn.pct.worst.toFixed(1)}% van alle nachten per jaar.</p>
-      <table class="rp-table rp-table-compact">
-        <thead><tr><th>Ring (bepaald door)</th><th>Richting</th><th>Afstand</th><th>Lnight best / middel / worst</th><th>Jaargemiddelde</th><th>Toetsing</th></tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-      <p class="rp-note"><strong>Methodologische kanttekening:</strong> ook dit rekenvoorbeeld is een modelmatige schatting, geen meting. De scenario-percentages zijn afgeleid uit de afstand tot de kust en de shear-capaciteit (§8.1, Module 6/7) — geen gemeten jaarstatistiek van weerscondities per nacht op deze exacte locatie. De berekening neemt bovendien aan dat een hele nacht steeds volledig in één scenario valt (geen overgangen binnen één nacht). Anders dan in eerdere versies van dit model wordt de jaargemiddelde toetsing hier expliciet voor drie richtingen apart doorgerekend (downwind/zijwind/upwind), in plaats van uitsluitend voor de kritische downwind-richting — zodat zichtbaar is dat een woning die niet downwind van de turbine ligt bij hetzelfde scenario een lager jaargemiddelde ondervindt en de norm eerder haalt.</p>`;
+      const stilX = state.m8StilstandNachten || 0;
+      const nachten = m8NachtenVanPct(jn.pct);
+      let stilHtml = '';
+      if (stilX > 0) {
+        const verdeling = m8VerdeelStilstand(nachten, stilX);
+        const stilTablesHtml = JAARNORM_CATEGORIES.map((cat) => {
+          const result = catResults[cat.key];
+          const worstRows = result.rows.filter((r) => r.scenario === 'worst');
+          const rowsHtml = worstRows.map((r) => {
+            if (r.ring == null || r.levels == null) {
+              return `<tr><td>${r.directionLabel}</td><td colspan="3"><em>Geen overschrijding op de vaste ringen.</em></td></tr>`;
+            }
+            const na = m8JaargemiddeldeMetStilstand(r.levels, jn.pct, stilX);
+            const verschil = r.jaargemiddelde - na.jaargemiddelde;
+            return `<tr>
+              <td>${r.directionLabel}</td>
+              <td>${r.jaargemiddelde.toFixed(1)} ${cat.unit}</td>
+              <td><strong>${na.jaargemiddelde.toFixed(1)} ${cat.unit}</strong></td>
+              <td>${verschil > 0.05 ? '−' + verschil.toFixed(1) : '0,0'} ${cat.unit}</td>
+            </tr>`;
+          }).join('');
+          return `<p class="rp-note"><strong>${cat.label} (${cat.unit}) — worst-case-ring</strong></p>
+          <table class="rp-table rp-table-compact">
+            <thead><tr><th>Richting</th><th>Jaargemiddelde (huidig)</th><th>Jaargemiddelde (met stilstand)</th><th>Verschil</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>`;
+        }).join('');
+        stilHtml = `<h4>8.4b Effect van ${stilX} stilstandnacht${stilX === 1 ? '' : 'en'} per jaar op het jaargemiddelde</h4>
+        <p>Bij een stilstandvoorziening van ${stilX} nacht${stilX === 1 ? '' : 'en'} per jaar (bij voorrang de zwaarste nachten stilgezet: eerst worst case, dan middel, dan best case; op een stilstandnacht is de turbinebijdrage 0 dB): ${nachten.nWorst} → ${verdeling.nWorst} worst case, ${nachten.nMiddel} → ${verdeling.nMiddel} middel, ${nachten.nBest} → ${verdeling.nBest} best case, plus ${verdeling.nStil} stilstandnachten. Onderstaand het effect op het jaargemiddelde per categorie, voor de worst-case-ring (de meest conservatieve/beleidsmatig relevante ring per richting):</p>
+        ${stilTablesHtml}`;
+      } else {
+        stilHtml = `<h4>8.4b Effect van stilstandnachten op het jaargemiddelde</h4>
+        <p class="rp-note"><em>In de interactieve versie van dit model is momenteel geen stilstandvoorziening ingesteld (0 nachten/jaar). Via het invoerveld bij deze module in de webapp kan een aantal stilstandnachten per jaar worden opgegeven, waarna hier het effect op het jaargemiddelde per categorie wordt getoond.</em></p>`;
+      }
+      return `<p>Scenarioverdeling op deze locatie (§8.1, Module 6): best ${jn.pct.best.toFixed(1)}%, middel ${jn.pct.middel.toFixed(1)}%, worst ${jn.pct.worst.toFixed(1)}% van alle nachten per jaar (${nachten.nBest}/${nachten.nMiddel}/${nachten.nWorst} van de ${M8_JAAR_NACHTEN} nachten).</p>
+      ${catTablesHtml}
+      <p class="rp-note"><strong>Methodologische kanttekening:</strong> ook dit rekenvoorbeeld is een modelmatige schatting, geen meting. De scenario-percentages zijn afgeleid uit de afstand tot de kust en de shear-capaciteit (§8.1, Module 6/7) — geen gemeten jaarstatistiek van weerscondities per nacht op deze exacte locatie. De berekening neemt bovendien aan dat een hele nacht steeds volledig in één scenario valt (geen overgangen binnen één nacht). De jaargemiddelde toetsing wordt hier expliciet voor drie richtingen apart doorgerekend (downwind/zijwind/upwind), in plaats van uitsluitend voor de kritische downwind-richting — zodat zichtbaar is dat een woning die niet downwind van de turbine ligt bij hetzelfde scenario een lager jaargemiddelde ondervindt en de norm eerder haalt. Hoorbaar, laagfrequent en infrasoon geluid worden hier bewust niet tot één getal samengevoegd (zie ook de kanttekening bij §8.3 over optellen over categorieën).</p>
+      ${stilHtml}`;
     })()}
   </section>`;
 

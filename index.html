@@ -555,20 +555,28 @@
 
     <div class="module-subhead">
       <h3>Jaargemiddelde toetsing: hoe de nachtnorm ondanks piekwaarden toch gehaald kan worden</h3>
-      <p class="hint">De Lnight-norm hierboven (Module 5) is wettelijk een <strong>jaargemiddelde</strong> over alle nachten van het jaar, geen grenswaarde per afzonderlijke nacht. Deze paragraaf rekent, voor elke overschrijdingsring van hoorbaar geluid hierboven én voor elke richting apart (downwind, zijwind, upwind — elk met een eigen ring en dus eigen jaargemiddelde), het energetisch (logaritmisch) jaargemiddelde Lnight uit — gewogen met de werkelijke scenario-percentages per jaar uit Module 6, die voor deze turbinelocatie gelden — en toetst dat jaargemiddelde opnieuw aan de norm: <code>L_jaar = 10·log₁₀(Σ p_i·10^(L_i/10))</code>.</p>
+      <p class="hint">De Lnight-norm hierboven (Module 5) is wettelijk een <strong>jaargemiddelde</strong> over alle nachten van het jaar, geen grenswaarde per afzonderlijke nacht. Deze paragraaf rekent, voor elke overschrijdingsring hierboven én voor elke richting apart (downwind, zijwind, upwind — elk met een eigen ring en dus eigen jaargemiddelde), het energetisch (logaritmisch) jaargemiddelde uit — gewogen met de werkelijke scenario-percentages per jaar uit Module 6, die voor deze turbinelocatie gelden: <code>L_jaar = 10·log₁₀(Σ p_i·10^(L_i/10))</code>. Hoorbaar, laagfrequent en infrasoon geluid worden hieronder <strong>apart</strong> doorgerekend — het zijn verschillende eenheden (dB(A)/dB(Lin)/dB(G)) die niet tot één gecombineerd gemiddelde samengevoegd kunnen worden zonder categoriefouten.</p>
     </div>
 
     <div class="callout" id="m8-jaarnorm-callout">
-      <div id="m8-jaarnorm-pct" class="hint"></div>
-      <div class="cum-result-wrap">
-        <table class="data-table m8-jaarnorm-table">
-          <thead>
-            <tr><th>Ring (bepaald door)</th><th>Richting</th><th>Afstand</th><th>Lnight best</th><th>Lnight middel</th><th>Lnight worst</th><th>Jaargemiddelde</th><th>Toetsing jaargemiddelde</th></tr>
-          </thead>
-          <tbody id="m8-jaarnorm-table-body"><tr><td colspan="8" class="empty-row">Plaats minstens één turbine op de kaart in Module 3.</td></tr></tbody>
-        </table>
+      <div id="m8-jaarnorm-nachtenverdeling"></div>
+      <div id="m8-jaarnorm-container"></div>
+      <p class="hint">Methodologische kanttekening: dit is zelf ook een modelmatige schatting. De scenario-percentages hierboven zijn afgeleid uit de afstand tot de kust en de shear-capaciteit (Module 6/7) — geen gemeten jaarstatistiek van weerscondities per nacht op deze exacte locatie. De berekening neemt aan dat een hele nacht steeds volledig in één scenario valt (geen overgangen binnen één nacht). Elke rij wordt expliciet voor één van de drie richtingen (downwind, zijwind of upwind) apart doorgerekend, met een eigen ring en een eigen jaargemiddelde per richting. Voor laagfrequent en infrasoon geluid geldt geen wettelijke norm in hun eigen eenheid — de dB(A)-Lnight-norm dient daar uitsluitend als indicatief referentiepunt, net als bij Module 8a.</p>
+    </div>
+
+    <div class="module-subhead">
+      <h3>Wat als de turbine een aantal nachten stilstaat?</h3>
+      <p class="hint">Simuleer een stilstandvoorziening: het opgegeven aantal nachten per jaar wordt uit de zwaarste condities gehaald — eerst worst case, dan middel, dan best case — en vervangen door stilstandnachten met een turbinebijdrage van 0 dB. Dit toont het effect op het jaargemiddelde per categorie, direct onder de uitkomsten hierboven.</p>
+    </div>
+    <div class="cum-controls">
+      <div class="cum-field">
+        <label for="m8-stilstand-input">Aantal stilstandnachten per jaar (van de 365)</label>
+        <input type="number" id="m8-stilstand-input" value="0" step="1" min="0" max="365">
       </div>
-      <p class="hint">Methodologische kanttekening: dit is zelf ook een modelmatige schatting. De scenario-percentages hierboven zijn afgeleid uit de afstand tot de kust en de shear-capaciteit (Module 6/7) — geen gemeten jaarstatistiek van weerscondities per nacht op deze exacte locatie. De berekening neemt aan dat een hele nacht steeds volledig in één scenario valt (geen overgangen binnen één nacht). Anders dan voorheen wordt hier niet uitsluitend downwind gerekend: elke rij hierboven wordt expliciet voor één van de drie richtingen (downwind, zijwind of upwind) apart doorgerekend, met een eigen ring en een eigen jaargemiddelde per richting.</p>
+    </div>
+    <div class="callout" id="m8-stilstand-callout">
+      <div id="m8-stilstand-container"></div>
+      <p class="hint">De "stil"-nachten krijgen hier een turbinebijdrage van 0 dB — geen apart achtergrondniveau meegerekend. In werkelijkheid blijft er altijd wat restgeluid over (verkeer, wind in bomen, etc.); dit model rekent uitsluitend de turbinebijdrage, dus dit is een ondergrens-scenario, geen absolute stilte.</p>
     </div>
 
     <div class="callout m6-limitations">

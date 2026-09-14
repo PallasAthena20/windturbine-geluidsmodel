@@ -592,6 +592,23 @@ footer { text-align: center; padding: var(--space-10) var(--space-6); color: var
 .m8-jaarnorm-table tr.m8-jaarnorm-exceeds td:last-child { color: var(--color-error); font-weight: 700; }
 .m8-jaarnorm-table tr.m8-jaarnorm-ok td:last-child { color: var(--color-success); font-weight: 700; }
 
+/* Jaargemiddelde-sectie Module 8: nachtenverdeling-balk + categoriekaarten + stilstandnachten */
+#m8-jaarnorm-container .m8-jaarnorm-cat-card + .m8-jaarnorm-cat-card,
+#m8-stilstand-container .m8-jaarnorm-cat-card + .m8-jaarnorm-cat-card { margin-top: var(--space-4); }
+.m8-nachten-bar { display: flex; width: 100%; height: 14px; border-radius: var(--radius-md); overflow: hidden; margin: var(--space-2) 0; background: var(--color-surface-offset-2); }
+.m8-nachten-seg { display: block; height: 100%; min-width: 2px; }
+.m8-nachten-seg.m8-nachten-best { background: var(--color-success); }
+.m8-nachten-seg.m8-nachten-middel { background: var(--color-warning); }
+.m8-nachten-seg.m8-nachten-worst { background: var(--color-error); }
+.m8-nachten-legend { display: flex; gap: var(--space-4); font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-3); flex-wrap: wrap; }
+.m8-nachten-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
+.m8-nachten-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+.m8-nachten-dot.m8-nachten-best { background: var(--color-success); }
+.m8-nachten-dot.m8-nachten-middel { background: var(--color-warning); }
+.m8-nachten-dot.m8-nachten-worst { background: var(--color-error); }
+.m8-jaarnorm-table td.m8-stil-verbetering { color: var(--color-success); font-weight: 700; }
+#m8-stilstand-callout { margin-top: var(--space-3); }
+
 /* Module 11: waardedaling woningen */
 .m11-method-tabs { margin-bottom: var(--space-3); }
 .m11-method-tabs .cat-tab { min-width: 200px; }
