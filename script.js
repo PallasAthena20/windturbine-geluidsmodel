@@ -3889,8 +3889,12 @@ async function m13CaptureSingleView() {
   container.classList.add('m13-capturing');
   try {
     map3a.invalidateSize();
-    await m13WaitMapIdle(900);
-    await new Promise((r) => setTimeout(r, 120));
+    // Ruimere marge dan voorheen (900ms/120ms): op een tragere verbinding (bv. Render's
+    // gratis omgeving) is de MapLibre-GL-tegellaag na een zoom-/pan-wijziging soms nog niet
+    // klaar met tekenen wanneer html2canvas de canvas-buffer uitleest, waardoor de
+    // achtergrondkaart in het vastgelegde beeld leeg/wit blijft.
+    await m13WaitMapIdle(1200);
+    await new Promise((r) => setTimeout(r, 220));
     const canvas = await html2canvas(mapEl, {
       useCORS: true,
       backgroundColor: null,
@@ -3912,16 +3916,27 @@ async function m13CaptureMapViews() {
   const originalZoom = map3a.getZoom();
   let closeup = null;
   let regional = null;
+  // De windrichtingpijl (74px) is fors groter dan de turbine-badge (26x34px) en staat op
+  // exact dezelfde positie: op de kleine rapportafbeelding overlapt de pijl de badge volledig,
+  // waardoor de turbine zelf niet meer herkenbaar is. Voor de vastlegging van beide
+  // kaartbeelden verwijderen we de pijllaag tijdelijk van de kaart; na afloop komt hij terug.
+  const arrowWasOnMap = turbineArrowLayer3a && map3a.hasLayer(turbineArrowLayer3a);
+  if (arrowWasOnMap) map3a.removeLayer(turbineArrowLayer3a);
   try {
     closeup = await m13CaptureSingleView();
-    const regioZoom = Math.max(map3a.getMinZoom ? map3a.getMinZoom() : 6, originalZoom - 4);
+    // Was originalZoom - 4 (16x zo veel oppervlak): op een normale plaatsingszoom (~11) kwam de
+    // "regionale" kaart daardoor op een landsdekkend zicht uit, met de turbine als vrijwel
+    // onzichtbare speldenprik. -2 (4x zoveel oppervlak) toont wel de bredere omgeving
+    // (buurdorpen/steden) zonder de turbinepositie tot een stipje te verkleinen.
+    const regioZoom = Math.max(map3a.getMinZoom ? map3a.getMinZoom() : 6, originalZoom - 2);
     if (regioZoom < originalZoom) {
       map3a.setView(originalCenter, regioZoom, { animate: false });
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 350));
       regional = await m13CaptureSingleView();
     }
   } finally {
     map3a.setView(originalCenter, originalZoom, { animate: false });
+    if (arrowWasOnMap) map3a.addLayer(turbineArrowLayer3a);
     await new Promise((r) => setTimeout(r, 60));
   }
   return { closeup, regional };
