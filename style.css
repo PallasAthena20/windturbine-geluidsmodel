@@ -75,6 +75,10 @@ a, button, [role='button'], [role='link'], input, textarea, select { transition:
   --color-gold: #b9852a;
   --color-gold-highlight: #ecdfbf;
 
+  --color-chart-1: #006494;
+  --color-chart-2: #7a39bb;
+  --color-chart-3: #da7101;
+
   --shadow-sm: 0 1px 3px rgba(20, 30, 28, 0.08);
   --shadow-md: 0 6px 20px rgba(20, 30, 28, 0.10);
   --shadow-lg: 0 16px 40px rgba(20, 30, 28, 0.16);
@@ -107,6 +111,10 @@ a, button, [role='button'], [role='link'], input, textarea, select { transition:
   --color-success-highlight: #23392a;
   --color-gold: #e0b862;
   --color-gold-highlight: #453a22;
+
+  --color-chart-1: #5591c7;
+  --color-chart-2: #a86fdf;
+  --color-chart-3: #fdab43;
 
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
   --shadow-md: 0 6px 20px rgba(0,0,0,0.35);
@@ -608,6 +616,20 @@ footer { text-align: center; padding: var(--space-10) var(--space-6); color: var
 .m8-nachten-dot.m8-nachten-worst { background: var(--color-error); }
 .m8-jaarnorm-table td.m8-stil-verbetering { color: var(--color-success); font-weight: 700; }
 #m8-stilstand-callout { margin-top: var(--space-3); }
+.m8-chart-wrap { margin-bottom: var(--space-4); }
+.m8-chart-svg { display: block; width: 100%; height: auto; }
+.m8-chart-grid { stroke: var(--color-divider); stroke-width: 1; }
+.m8-chart-axis { stroke: var(--color-border); stroke-width: 1; }
+.m8-chart-axis-label { fill: var(--color-text-muted); font-size: 10px; font-family: var(--font-mono, monospace); }
+.m8-chart-norm-line { stroke: var(--color-error); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.m8-chart-norm-label { fill: var(--color-error); font-size: 10px; font-family: var(--font-mono, monospace); }
+.m8-chart-current-line { stroke: var(--color-text-faint); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.m8-chart-current-dot { stroke: var(--color-surface); stroke-width: 1.5; }
+.m8-chart-legend { display: flex; gap: var(--space-4); font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-2); flex-wrap: wrap; }
+.m8-chart-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
+.m8-chart-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+.m8-chart-dot-norm { background: none; border: 0; width: 14px; height: 0; border-top: 2px dashed var(--color-error); border-radius: 0; }
+.m8-chart-caption { margin-top: var(--space-2); }
 
 /* Module 11: waardedaling woningen */
 .m11-method-tabs { margin-bottom: var(--space-3); }

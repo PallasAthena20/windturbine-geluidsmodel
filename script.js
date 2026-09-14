@@ -2047,6 +2047,77 @@ function m8JaargemiddeldeMetStilstand(levels, pct, stilNachten) {
   return { ...verdeeld, jaargemiddelde: 10 * Math.log10(sum) };
 }
 
+// Bemonstert m8JaargemiddeldeMetStilstand() over het hele bereik van 0 t/m 365 stilstandnachten, voor
+// één richting (één "levels"-object). Gebruikt voor de grafiek hieronder. Neemt elke 5 nachten een punt
+// én voegt expliciet de twee "knikpunten" toe waarop de verdeling van bucket wisselt (worst case op,
+// dan middel op) — de curve is namelijk stuksgewijs vloeiend maar heeft daar een knik, dus zonder die
+// twee extra punten zou een grove steekproef die knik afvlakken.
+function m8StilstandCurvePoints(levels, pct, nachten) {
+  const stops = new Set([0, M8_JAAR_NACHTEN, nachten.nWorst, nachten.nWorst + nachten.nMiddel]);
+  for (let i = 0; i <= M8_JAAR_NACHTEN; i += 5) stops.add(i);
+  return Array.from(stops).filter((n) => n >= 0 && n <= M8_JAAR_NACHTEN).sort((a, b) => a - b)
+    .map((n) => ({ n, y: m8JaargemiddeldeMetStilstand(levels, pct, n).jaargemiddelde }));
+}
+
+// Bouwt een lichtgewicht inline-SVG-lijngrafiek (geen externe grafiekbibliotheek nodig, consistent met
+// de andere handgetekende SVG's in deze app) die per richting (downwind/zijwind/upwind) het jaargemiddelde
+// toont als functie van het aantal stilstandnachten, 0 t/m 365 — met de norm(indicatief)-lijn en een
+// markering van de huidige invoerwaarde.
+function m8StilstandChartSvg(series, normValue, normIndicatief, unit, currentX) {
+  const W = 640, H = 260;
+  const mL = 46, mR = 14, mT = 14, mB = 28;
+  const plotW = W - mL - mR, plotH = H - mT - mB;
+  const allY = series.flatMap((s) => s.points.map((p) => p.y)).concat(normValue != null ? [normValue] : []);
+  let yMin = Math.min(...allY), yMax = Math.max(...allY);
+  if (yMax - yMin < 1) { yMax += 0.5; yMin -= 0.5; }
+  const pad = (yMax - yMin) * 0.1;
+  yMin -= pad; yMax += pad;
+  const xScale = (n) => mL + (n / M8_JAAR_NACHTEN) * plotW;
+  const yScale = (y) => mT + (1 - (y - yMin) / (yMax - yMin)) * plotH;
+  const gridCount = 4;
+  let gridHtml = '';
+  for (let i = 0; i <= gridCount; i++) {
+    const y = yMin + (yMax - yMin) * (i / gridCount);
+    const yy = yScale(y);
+    gridHtml += `<line x1="${mL}" y1="${yy.toFixed(1)}" x2="${W - mR}" y2="${yy.toFixed(1)}" class="m8-chart-grid" />`;
+    gridHtml += `<text x="${mL - 6}" y="${(yy + 3.5).toFixed(1)}" text-anchor="end" class="m8-chart-axis-label">${y.toFixed(0)}</text>`;
+  }
+  let xTickHtml = '';
+  [0, 91, 182, 273, 365].forEach((t) => {
+    xTickHtml += `<text x="${xScale(t).toFixed(1)}" y="${H - mB + 18}" text-anchor="middle" class="m8-chart-axis-label">${t}</text>`;
+  });
+  let normHtml = '';
+  if (normValue != null && normValue >= yMin && normValue <= yMax) {
+    const ny = yScale(normValue);
+    normHtml = `<line x1="${mL}" y1="${ny.toFixed(1)}" x2="${W - mR}" y2="${ny.toFixed(1)}" class="m8-chart-norm-line" />`
+      + `<text x="${W - mR}" y="${(ny - 5).toFixed(1)}" text-anchor="end" class="m8-chart-norm-label">Norm${normIndicatief ? ' (indicatief)' : ''}: ${normValue.toFixed(0)} ${unit}</text>`;
+  }
+  let seriesHtml = '';
+  series.forEach((s) => {
+    const pts = s.points.map((p) => `${xScale(p.n).toFixed(1)},${yScale(p.y).toFixed(1)}`).join(' ');
+    seriesHtml += `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" />`;
+  });
+  let markerHtml = '';
+  if (currentX != null) {
+    if (currentX > 0) {
+      const mx = xScale(currentX);
+      markerHtml += `<line x1="${mx.toFixed(1)}" y1="${mT}" x2="${mx.toFixed(1)}" y2="${H - mB}" class="m8-chart-current-line" />`;
+    }
+    series.forEach((s) => {
+      let closest = s.points[0];
+      s.points.forEach((p) => { if (Math.abs(p.n - currentX) < Math.abs(closest.n - currentX)) closest = p; });
+      markerHtml += `<circle cx="${xScale(closest.n).toFixed(1)}" cy="${yScale(closest.y).toFixed(1)}" r="4.5" fill="${s.color}" class="m8-chart-current-dot" />`;
+    });
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" class="m8-chart-svg" role="img" aria-label="Jaargemiddelde als functie van het aantal stilstandnachten, 0 tot 365">`
+    + gridHtml
+    + `<line x1="${mL}" y1="${mT}" x2="${mL}" y2="${H - mB}" class="m8-chart-axis" />`
+    + `<line x1="${mL}" y1="${H - mB}" x2="${W - mR}" y2="${H - mB}" class="m8-chart-axis" />`
+    + xTickHtml + normHtml + markerHtml + seriesHtml
+    + `</svg>`;
+}
+const M8_CHART_COLORS = { downwind: 'var(--color-chart-1)', zijwind: 'var(--color-chart-2)', upwind: 'var(--color-chart-3)' };
+
 // ==================== MODULE 8a: gevolgen van A-weging op laagfrequent/infrasoon ====================
 // Zelfde methodiek als Module 8 (ring → BAG-woningen → bewoners), maar nu berekend voor de twee
 // categorieën die normaal NIET A-gewogen worden (laagfrequent: dB(Lin); infrasoon: dB(G)), en voor
@@ -2429,8 +2500,26 @@ function renderModule8Jaarnorm() {
           <td class="${verbeterd ? 'm8-stil-verbetering' : ''}">${verbeterd ? '−' + verschil.toFixed(1) : '0,0'} ${cat.unit}</td>
         </tr>`;
       }).join('');
+      const chartSeries = worstRows
+        .filter((r) => r.ring != null && r.levels != null)
+        .map((r) => ({
+          label: r.directionLabel,
+          color: M8_CHART_COLORS[r.direction],
+          points: m8StilstandCurvePoints(r.levels, pct, nachten),
+        }));
+      const chartHtml = chartSeries.length > 0
+        ? `<div class="m8-chart-wrap">
+            ${m8StilstandChartSvg(chartSeries, norm.lnight, cat.indicatief, cat.unit, stilX)}
+            <div class="m8-chart-legend">
+              ${chartSeries.map((s) => `<span><i class="m8-chart-dot" style="background:${s.color}"></i>${s.label}</span>`).join('')}
+              ${norm.lnight != null ? `<span><i class="m8-chart-dot m8-chart-dot-norm"></i>Norm${cat.indicatief ? ' (indicatief)' : ''}</span>` : ''}
+            </div>
+            <p class="hint m8-chart-caption">Jaargemiddelde (${cat.unit}) op de worst-case-ring, per richting, bij 0 t/m 365 stilstandnachten per jaar. De stip markeert de huidige invoer (${stilX} nacht${stilX === 1 ? '' : 'en'}).</p>
+          </div>`
+        : '';
       return `<div class="data-table-card m8-jaarnorm-cat-card">
         <h3>${cat.label} (${cat.unit}) — worst-case-ring${cat.indicatief ? ' <span class="m8a-subhead">— indicatief referentiepunt</span>' : ''}</h3>
+        ${chartHtml}
         <div class="cum-result-wrap">
           <table class="data-table m8-jaarnorm-table">
             <thead><tr><th>Richting</th><th>Jaargemiddelde (huidig)</th><th>Jaargemiddelde (met stilstand)</th><th>Verschil</th></tr></thead>
