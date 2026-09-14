@@ -3882,6 +3882,35 @@ function m13WaitMapIdle(timeout) {
   });
 }
 
+// Steekproef op het vastgelegde canvas: hoeveel fractie van de pixels is NIET (bijna-)wit.
+// De tegellaag (positron-stijl) kleurt verreweg het grootste deel van het beeld; blijft de
+// achtergrondkaart leeg (WebGL-buffer nog niet klaar op het moment van uitlezen), dan bestaat
+// het beeld alleen uit de dunne ring-omtrekken en het turbine-icoon op een verder wit vlak —
+// een fractie van doorgaans <30% niet-wit, tegenover >90% wanneer de tegels wel zijn getekend.
+function m13NonWhiteFraction(canvas) {
+  try {
+    const ctx = canvas.getContext('2d');
+    const { width, height } = canvas;
+    if (!width || !height) return 0;
+    const data = ctx.getImageData(0, 0, width, height).data;
+    let nonWhite = 0;
+    let total = 0;
+    const step = 4 * 37; // steekproef i.p.v. elke pixel — snel genoeg voor een 2x-scale canvas
+    for (let i = 0; i < data.length; i += step) {
+      total++;
+      // Zowel een (bijna-)wit gevulde als een grotendeels transparante pixel telt als "leeg":
+      // een mislukte capture kan beide vormen aannemen, afhankelijk van wat er onder het
+      // canvas-element doorschijnt op het moment van uitlezen.
+      const alpha = data[i + 3];
+      const isBlankPixel = alpha < 10 || (data[i] > 245 && data[i + 1] > 245 && data[i + 2] > 245);
+      if (!isBlankPixel) nonWhite++;
+    }
+    return total ? nonWhite / total : 0;
+  } catch (e) {
+    return 1; // kon niet samplen (bv. CORS) — niet blokkeren op deze check
+  }
+}
+
 async function m13CaptureSingleView() {
   const mapEl = document.getElementById('turbine-map-3a');
   if (!mapEl || typeof html2canvas !== 'function' || !map3a) return null;
@@ -3895,13 +3924,29 @@ async function m13CaptureSingleView() {
     // achtergrondkaart in het vastgelegde beeld leeg/wit blijft.
     await m13WaitMapIdle(1200);
     await new Promise((r) => setTimeout(r, 220));
-    const canvas = await html2canvas(mapEl, {
-      useCORS: true,
-      backgroundColor: null,
-      scale: 2,
-      logging: false,
-    });
-    return canvas.toDataURL('image/png');
+    // De wachttijd hierboven is een gok, geen garantie: op een trage verbinding of een zwaar
+    // belaste pagina (bv. net na het inladen van duizenden BAG-adressen) kan de tegellaag ook
+    // na 1400ms nog leeg zijn. Daarom controleren we het resultaat zelf en proberen we het
+    // — met een oplopende extra wachttijd en een geforceerde herteken-aanroep — tot 3x opnieuw
+    // voordat we de beste (meest gevulde) poging teruggeven.
+    let bestCanvas = null;
+    let bestFrac = -1;
+    const glMap = tileLayer3a && typeof tileLayer3a.getMaplibreMap === 'function' ? tileLayer3a.getMaplibreMap() : null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const canvas = await html2canvas(mapEl, {
+        useCORS: true,
+        backgroundColor: null,
+        scale: 2,
+        logging: false,
+      });
+      const frac = m13NonWhiteFraction(canvas);
+      if (frac > bestFrac) { bestFrac = frac; bestCanvas = canvas; }
+      if (frac >= 0.5) break; // achtergrondkaart is duidelijk zichtbaar — geen extra poging nodig
+      if (glMap && typeof glMap.triggerRepaint === 'function') glMap.triggerRepaint();
+      await m13WaitMapIdle(900);
+      await new Promise((r) => setTimeout(r, 400 + attempt * 300));
+    }
+    return bestCanvas ? bestCanvas.toDataURL('image/png') : null;
   } catch (e) {
     console.warn('Kaartafbeelding voor rapport kon niet worden vastgelegd:', e);
     return null;
