@@ -3993,10 +3993,11 @@ function m13NonWhiteFraction(canvas) {
   }
 }
 
-async function m13CaptureSingleView() {
+async function m13CaptureSingleView(opts) {
   const mapEl = document.getElementById('turbine-map-3a');
   if (!mapEl || typeof html2canvas !== 'function' || !map3a) return null;
   const container = mapEl.closest('.m3a-map-wrap') || mapEl;
+  const maxAttempts = (opts && opts.maxAttempts) || 5;
   container.classList.add('m13-capturing');
   try {
     map3a.invalidateSize();
@@ -4009,12 +4010,13 @@ async function m13CaptureSingleView() {
     // De wachttijd hierboven is een gok, geen garantie: op een trage verbinding of een zwaar
     // belaste pagina (bv. net na het inladen van duizenden BAG-adressen) kan de tegellaag ook
     // na 1400ms nog leeg zijn. Daarom controleren we het resultaat zelf en proberen we het
-    // — met een oplopende extra wachttijd en een geforceerde herteken-aanroep — tot 3x opnieuw
-    // voordat we de beste (meest gevulde) poging teruggeven.
+    // — met een oplopende extra wachttijd en een geforceerde herteken-aanroep — tot 5x opnieuw
+    // (was 3x: bleek in de praktijk niet genoeg voor de EERSTE capture van de pagina, zie
+    // m13CaptureMapViews) voordat we de beste (meest gevulde) poging teruggeven.
     let bestCanvas = null;
     let bestFrac = -1;
     const glMap = tileLayer3a && typeof tileLayer3a.getMaplibreMap === 'function' ? tileLayer3a.getMaplibreMap() : null;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const canvas = await html2canvas(mapEl, {
         useCORS: true,
         backgroundColor: null,
@@ -4025,8 +4027,9 @@ async function m13CaptureSingleView() {
       if (frac > bestFrac) { bestFrac = frac; bestCanvas = canvas; }
       if (frac >= 0.5) break; // achtergrondkaart is duidelijk zichtbaar — geen extra poging nodig
       if (glMap && typeof glMap.triggerRepaint === 'function') glMap.triggerRepaint();
+      if (glMap && typeof glMap.resize === 'function') { try { glMap.resize(); } catch (e) { /* negeren */ } }
       await m13WaitMapIdle(900);
-      await new Promise((r) => setTimeout(r, 400 + attempt * 300));
+      await new Promise((r) => setTimeout(r, 450 + attempt * 350));
     }
     return bestCanvas ? bestCanvas.toDataURL('image/png') : null;
   } catch (e) {
@@ -4049,6 +4052,15 @@ async function m13CaptureMapViews() {
   // kaartbeelden verwijderen we de pijllaag tijdelijk van de kaart; na afloop komt hij terug.
   const arrowWasOnMap = turbineArrowLayer3a && map3a.hasLayer(turbineArrowLayer3a);
   if (arrowWasOnMap) map3a.removeLayer(turbineArrowLayer3a);
+  const mapElWarmup = document.getElementById('turbine-map-3a');
+  // Opwarmronde: de EERSTE html2canvas-aanroep op een pagina is in de praktijk minder
+  // betrouwbaar dan latere aanroepen (bleek uit rapporten waarin de closeup-kaart — altijd
+  // als eerste vastgelegd — stelselmatig blanco bleef, terwijl de daarna vastgelegde
+  // regionale kaart wel goed ging). Door hier een wegwerp-capture te doen vóór de
+  // eigenlijke closeup-capture, is die laatste effectief ook een "latere" aanroep.
+  if (mapElWarmup && typeof html2canvas === 'function') {
+    try { await html2canvas(mapElWarmup, { useCORS: true, backgroundColor: null, scale: 1, logging: false }); } catch (e) { /* negeren, dit was slechts een opwarmronde */ }
+  }
   try {
     closeup = await m13CaptureSingleView();
     // Was originalZoom - 4 (16x zo veel oppervlak): op een normale plaatsingszoom (~11) kwam de
