@@ -2117,6 +2117,9 @@ function m8StilstandChartSvg(series, normValue, normIndicatief, unit, currentX) 
     + `</svg>`;
 }
 const M8_CHART_COLORS = { downwind: 'var(--color-chart-1)', zijwind: 'var(--color-chart-2)', upwind: 'var(--color-chart-3)' };
+// Zelfde drie kleuren als hard gecodeerde hex (in plaats van CSS var()) voor het losstaande, altijd
+// lichte PDF-rapport (Module 13) — dat document heeft geen dark-mode en geen toegang tot style.css.
+const M8_CHART_COLORS_REPORT = { downwind: '#006494', zijwind: '#7a39bb', upwind: '#da7101' };
 
 // ==================== MODULE 8a: gevolgen van A-weging op laagfrequent/infrasoon ====================
 // Zelfde methodiek als Module 8 (ring → BAG-woningen → bewoners), maar nu berekend voor de twee
@@ -3938,37 +3941,57 @@ function m13BuildReportHtml(mapImages) {
       }).join('');
       const stilX = state.m8StilstandNachten || 0;
       const nachten = m8NachtenVanPct(jn.pct);
+      // Grafiek + tabel per categorie, altijd getoond (ook bij stilX = 0) — zelfde opbouw als de
+      // interactieve versie in de webapp (m8StilstandChartSvg/m8StilstandCurvePoints), maar met vaste
+      // hex-kleuren omdat dit rapport een losstaand, altijd licht HTML-document is (geen CSS var()).
+      const catChartsHtml = JAARNORM_CATEGORIES.map((cat) => {
+        const result = catResults[cat.key];
+        const worstRows = result.rows.filter((r) => r.scenario === 'worst');
+        const chartSeries = worstRows
+          .filter((r) => r.ring != null && r.levels != null)
+          .map((r) => ({
+            label: r.directionLabel,
+            color: M8_CHART_COLORS_REPORT[r.direction],
+            points: m8StilstandCurvePoints(r.levels, jn.pct, nachten),
+          }));
+        if (chartSeries.length === 0) return '';
+        const rowsHtml = worstRows.map((r) => {
+          if (r.ring == null || r.levels == null) {
+            return `<tr><td>${r.directionLabel}</td><td colspan="3"><em>Geen overschrijding op de vaste ringen.</em></td></tr>`;
+          }
+          const na = m8JaargemiddeldeMetStilstand(r.levels, jn.pct, stilX);
+          const verschil = r.jaargemiddelde - na.jaargemiddelde;
+          return `<tr>
+            <td>${r.directionLabel}</td>
+            <td>${r.jaargemiddelde.toFixed(1)} ${cat.unit}</td>
+            <td><strong>${na.jaargemiddelde.toFixed(1)} ${cat.unit}</strong></td>
+            <td>${verschil > 0.05 ? '−' + verschil.toFixed(1) : '0,0'} ${cat.unit}</td>
+          </tr>`;
+        }).join('');
+        return `<p class="rp-note"><strong>${cat.label} (${cat.unit}) — worst-case-ring</strong></p>
+        <div class="rp-avoid-break">
+          ${m8StilstandChartSvg(chartSeries, norm.lnight, cat.indicatief, cat.unit, stilX)}
+          <div class="m8-chart-legend">
+            ${chartSeries.map((s) => `<span><i class="m8-chart-dot" style="background:${s.color}"></i>${s.label}</span>`).join('')}
+            ${norm.lnight != null ? `<span><i class="m8-chart-dot m8-chart-dot-norm"></i>Norm${cat.indicatief ? ' (indicatief)' : ''}</span>` : ''}
+          </div>
+          <p class="rp-note">Jaargemiddelde (${cat.unit}) op de worst-case-ring, per richting, bij 0 t/m 365 stilstandnachten per jaar. De stip markeert de huidige invoer (${stilX} nacht${stilX === 1 ? '' : 'en'}).</p>
+        </div>
+        <table class="rp-table rp-table-compact">
+          <thead><tr><th>Richting</th><th>Jaargemiddelde (huidig)</th><th>Jaargemiddelde (met stilstand)</th><th>Verschil</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>`;
+      }).join('');
       let stilHtml = '';
       if (stilX > 0) {
         const verdeling = m8VerdeelStilstand(nachten, stilX);
-        const stilTablesHtml = JAARNORM_CATEGORIES.map((cat) => {
-          const result = catResults[cat.key];
-          const worstRows = result.rows.filter((r) => r.scenario === 'worst');
-          const rowsHtml = worstRows.map((r) => {
-            if (r.ring == null || r.levels == null) {
-              return `<tr><td>${r.directionLabel}</td><td colspan="3"><em>Geen overschrijding op de vaste ringen.</em></td></tr>`;
-            }
-            const na = m8JaargemiddeldeMetStilstand(r.levels, jn.pct, stilX);
-            const verschil = r.jaargemiddelde - na.jaargemiddelde;
-            return `<tr>
-              <td>${r.directionLabel}</td>
-              <td>${r.jaargemiddelde.toFixed(1)} ${cat.unit}</td>
-              <td><strong>${na.jaargemiddelde.toFixed(1)} ${cat.unit}</strong></td>
-              <td>${verschil > 0.05 ? '−' + verschil.toFixed(1) : '0,0'} ${cat.unit}</td>
-            </tr>`;
-          }).join('');
-          return `<p class="rp-note"><strong>${cat.label} (${cat.unit}) — worst-case-ring</strong></p>
-          <table class="rp-table rp-table-compact">
-            <thead><tr><th>Richting</th><th>Jaargemiddelde (huidig)</th><th>Jaargemiddelde (met stilstand)</th><th>Verschil</th></tr></thead>
-            <tbody>${rowsHtml}</tbody>
-          </table>`;
-        }).join('');
         stilHtml = `<h4>8.4b Effect van ${stilX} stilstandnacht${stilX === 1 ? '' : 'en'} per jaar op het jaargemiddelde</h4>
-        <p>Bij een stilstandvoorziening van ${stilX} nacht${stilX === 1 ? '' : 'en'} per jaar (bij voorrang de zwaarste nachten stilgezet: eerst worst case, dan middel, dan best case; op een stilstandnacht is de turbinebijdrage 0 dB): ${nachten.nWorst} → ${verdeling.nWorst} worst case, ${nachten.nMiddel} → ${verdeling.nMiddel} middel, ${nachten.nBest} → ${verdeling.nBest} best case, plus ${verdeling.nStil} stilstandnachten. Onderstaand het effect op het jaargemiddelde per categorie, voor de worst-case-ring (de meest conservatieve/beleidsmatig relevante ring per richting):</p>
-        ${stilTablesHtml}`;
+        <p>Bij een stilstandvoorziening van ${stilX} nacht${stilX === 1 ? '' : 'en'} per jaar (bij voorrang de zwaarste nachten stilgezet: eerst worst case, dan middel, dan best case; op een stilstandnacht is de turbinebijdrage 0 dB): ${nachten.nWorst} → ${verdeling.nWorst} worst case, ${nachten.nMiddel} → ${verdeling.nMiddel} middel, ${nachten.nBest} → ${verdeling.nBest} best case, plus ${verdeling.nStil} stilstandnachten. De onderstaande grafieken laten dit effect zien over het volledige bereik van 0 t/m 365 stilstandnachten per jaar; de tabellen tonen het concrete verschil bij de huidige invoer, voor de worst-case-ring (de meest conservatieve/beleidsmatig relevante ring per richting):</p>
+        ${catChartsHtml}`;
       } else {
         stilHtml = `<h4>8.4b Effect van stilstandnachten op het jaargemiddelde</h4>
-        <p class="rp-note"><em>In de interactieve versie van dit model is momenteel geen stilstandvoorziening ingesteld (0 nachten/jaar). Via het invoerveld bij deze module in de webapp kan een aantal stilstandnachten per jaar worden opgegeven, waarna hier het effect op het jaargemiddelde per categorie wordt getoond.</em></p>`;
+        <p class="rp-note"><em>In de interactieve versie van dit model is momenteel geen stilstandvoorziening ingesteld (0 nachten/jaar) — de tabellen hieronder tonen daarom nog geen verschil. Via het invoerveld bij deze module in de webapp kan een aantal stilstandnachten per jaar worden opgegeven. De grafieken laten niettemin het volledige effect zien over het hele bereik van 0 t/m 365 stilstandnachten per jaar.</em></p>
+        ${catChartsHtml}`;
       }
       return `<p>Scenarioverdeling op deze locatie (§8.1, Module 6): best ${jn.pct.best.toFixed(1)}%, middel ${jn.pct.middel.toFixed(1)}%, worst ${jn.pct.worst.toFixed(1)}% van alle nachten per jaar (${nachten.nBest}/${nachten.nMiddel}/${nachten.nWorst} van de ${M8_JAAR_NACHTEN} nachten).</p>
       ${catTablesHtml}
@@ -4191,6 +4214,19 @@ function m13BuildReportHtml(mapImages) {
   .rp-map-fig img { width: 100%; height: auto; display: block; border: 1px solid #cfc6ae; border-radius: 4px; }
   .rp-map-fig figcaption { font-size: 8.6pt; color: #5c6a63; margin-top: 4px; text-align: center; }
   a { color: #0e4a4a; }
+  .m8-chart-wrap, .rp-avoid-break > svg.m8-chart-svg { margin: 6px 0 4px; }
+  .m8-chart-svg { width: 100%; height: auto; display: block; }
+  .m8-chart-grid { stroke: #cfc6ae; stroke-width: 1; }
+  .m8-chart-axis { stroke: #92998f; stroke-width: 1; }
+  .m8-chart-axis-label { fill: #5c6a63; font-family: 'Courier New', monospace; font-size: 9px; }
+  .m8-chart-norm-line { stroke: #a1332f; stroke-width: 1.4; stroke-dasharray: 5 4; fill: none; }
+  .m8-chart-norm-label { fill: #a1332f; font-family: 'Helvetica', 'Arial', sans-serif; font-size: 9px; font-weight: 700; }
+  .m8-chart-current-line { stroke: #92998f; stroke-width: 1.2; stroke-dasharray: 3 3; }
+  .m8-chart-current-dot { stroke: #ffffff; stroke-width: 1.2; }
+  .m8-chart-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 2px 0 4px; font-family: 'Helvetica', 'Arial', sans-serif; font-size: 8.6pt; color: #5c6a63; }
+  .m8-chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .m8-chart-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+  .m8-chart-dot-norm { background: none; width: 14px; height: 0; border-top: 2px dashed #a1332f; border-radius: 0; }
   @media print { .rp-toolbar { display: none !important; } .rp-page { max-width: none; padding: 0; } }
 </style>
 </head>
