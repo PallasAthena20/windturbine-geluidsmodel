@@ -463,9 +463,9 @@ function renderModule14a() {
   const pctCallout = document.getElementById('m14a-pct-callout');
   if (pctCallout) {
     const locLabel = pct.anchor.isDefault
-      ? 'geen turbine geplaatst op de kaart in Module 3 \u2014 daarom is De Bilt als standaard inland-referentie gebruikt'
-      : `de turbinelocatie(s) uit Module 3 (${pct.distKm.toFixed(0)} km tot de kust)`;
-    pctCallout.innerHTML = `<strong>Kansgewogen jaargemiddelde \u2014 gebruikte kansen:</strong> best case ${pct.best.toFixed(0)}%, middenscenario ${pct.middel.toFixed(0)}%, worst case ${pct.worst.toFixed(0)}% van de nachten per jaar. Gebaseerd op ${locLabel} en de ingestelde geostrofische wind in Module 7 (U<sub>geo</sub> = ${state.m7Ugeo} m/s). Wijzig je de turbinelocatie (Module 3) of U<sub>geo</sub> (Module 7), dan werkt deze weging hier automatisch mee door.`;
+      ? 'geen turbine geplaatst op de kaart (Module 3), dus is De Bilt als standaard inland-referentie gebruikt'
+      : `de turbinelocatie(s) uit Module 3, ${pct.distKm.toFixed(0)} km tot de kust`;
+    pctCallout.innerHTML = `<strong>Kansgewogen jaargemiddelde \u2014 gebruikte kansen:</strong> best case ${pct.best.toFixed(0)}%, middenscenario ${pct.middel.toFixed(0)}%, worst case ${pct.worst.toFixed(0)}% van de nachten per jaar. Gebaseerd op ${locLabel}, en op de ingestelde geostrofische wind in Module 7 (U<sub>geo</sub> = ${state.m7Ugeo} m/s). Wijzig je de turbinelocatie (Module 3) of U<sub>geo</sub> (Module 7), dan werkt deze weging hier automatisch mee door.`;
   }
 }
 
