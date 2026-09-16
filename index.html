@@ -992,11 +992,11 @@
   <section class="module module-future" id="module-14a">
     <div class="module-head">
       <span class="module-num">Module 14a</span>
-      <h2>Lden per scenario, met eigen norm <span class="badge-future">Uitbreidingsoptie — experimenteel</span></h2>
+      <h2>Lden per scenario, met eigen dag- en nachtnorm <span class="badge-future">Uitbreidingsoptie — experimenteel</span></h2>
     </div>
-    <p class="module-desc">Bouwt voort op Module 14: hetzelfde windroos-gewogen jaargemiddelde (12 sectoren &times; 4 windsnelheidsklassen) en hetzelfde windsnelheidsafhankelijke bronvermogen. Het verschil: Module 14 versmelt windschering/torenzog/AM tot &eacute;&eacute;n kansgewogen jaargemiddelde; deze module rekent in plaats daarvan drie afzonderlijke <strong>scenario's</strong> door &mdash; dezelfde best/middel/worst-case-definities als Module 2, 5 en 8 (een vaste dB-toeslag per scenario, geen kansmodel) &mdash; voor alle standaardafstanden tegelijk. Ook toets je hier tegen een <strong>zelf ingevoerde norm</strong> (in dB(A)), in plaats van te kiezen uit de vaste landelijke/WHO-presets van Module 5.</p>
+    <p class="module-desc">Bouwt voort op Module 14: hetzelfde windroos-gewogen jaargemiddelde (12 sectoren &times; 4 windsnelheidsklassen) en hetzelfde windsnelheidsafhankelijke bronvermogen. Het verschil: Module 14 versmelt windschering/torenzog/AM tot &eacute;&eacute;n kansgewogen jaargemiddelde; deze module rekent in plaats daarvan drie afzonderlijke <strong>scenario's</strong> door &mdash; dezelfde best/middel/worst-case-definities als Module 2, 5 en 8 (een vaste dB-toeslag per scenario, geen kansmodel) &mdash; voor alle standaardafstanden tegelijk. In plaats van &eacute;&eacute;n vaste landelijke/WHO-preset (Module 5) vul je hier twee <strong>eigen normen</strong> in: een <strong>dagnorm</strong> en een <strong>nachtnorm</strong> (beide in dB(A)). Daaruit berekent de module &eacute;&eacute;n equivalente <strong>Lden-jaargemiddelde norm</strong>, met dezelfde dag/avond/nacht-weging als de rest van dit model (avond = dag, 5 dB avondstraf, 10 dB nachtstraf). Vervolgens zie je drie uitsplitsingen: de Lden-toetsing per scenario, de nachtperiode per afstand en scenario, en de dagperiode per afstand — voor de dagperiode alleen best case en middenscenario, op jouw verzoek.</p>
 
-    <div class="callout" id="m14a-intro-callout">Kies een richting van de woning t.o.v. de turbine, een toetsmaat (Lden of Lnight) en vul je eigen normwaarde in. De tabel toont per afstand en per scenario het jaargemiddelde niveau, met een directe toetsing aan jouw ingevoerde norm.</div>
+    <div class="callout" id="m14a-intro-callout">Kies een richting van de woning t.o.v. de turbine en vul je eigen dagnorm en nachtnorm in (dB(A)). De module berekent daaruit een equivalente Lden-norm en toont per afstand en scenario hoe je uitkomt — zowel op jaarbasis (Lden) als afzonderlijk voor de nacht- en de dagperiode.</div>
 
     <div class="cum-controls">
       <div class="cum-field">
@@ -1013,34 +1013,55 @@
         </select>
       </div>
       <div class="cum-field">
-        <label for="m14a-metric-select">Toetsmaat</label>
-        <select id="m14a-metric-select">
-          <option value="lden">Lden (jaargemiddeld)</option>
-          <option value="lnight">Lnight (jaargemiddeld, nachtperiode)</option>
-        </select>
+        <label for="m14a-day-norm-input">Eigen dagnorm (dB(A))</label>
+        <input type="number" id="m14a-day-norm-input" value="47" step="0.5" min="20" max="70">
       </div>
       <div class="cum-field">
-        <label for="m14a-norm-input">Eigen norm (dB(A))</label>
-        <input type="number" id="m14a-norm-input" value="41" step="0.5" min="20" max="70">
+        <label for="m14a-night-norm-input">Eigen nachtnorm (dB(A))</label>
+        <input type="number" id="m14a-night-norm-input" value="41" step="0.5" min="20" max="70">
       </div>
     </div>
 
+    <p class="callout" id="m14a-derived-norm-callout"></p>
+
     <div class="data-table-card">
-      <h3>Jaargemiddeld niveau per afstand en scenario (bronvermogen o.b.v. Module 1)</h3>
+      <h3>1. Lden-jaargemiddelde per afstand en scenario, getoetst aan de equivalente Lden-norm</h3>
       <div class="cum-result-wrap">
-        <table class="data-table norm-table" id="m14a-table">
+        <table class="data-table norm-table" id="m14a-lden-table">
           <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th></tr></thead>
-          <tbody id="m14a-table-body"></tbody>
+          <tbody id="m14a-lden-table-body"></tbody>
         </table>
       </div>
     </div>
+    <p class="callout m8-totals-highlight" id="m14a-lden-result-callout"></p>
 
-    <p class="callout m8-totals-highlight" id="m14a-result-callout"></p>
+    <div class="data-table-card">
+      <h3>2. Nachtperiode (L<sub>nacht</sub>, jaargemiddeld) per afstand en scenario, getoetst aan jouw nachtnorm</h3>
+      <div class="cum-result-wrap">
+        <table class="data-table norm-table" id="m14a-night-table">
+          <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th></tr></thead>
+          <tbody id="m14a-night-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <p class="callout m8-totals-highlight" id="m14a-night-result-callout"></p>
+
+    <div class="data-table-card">
+      <h3>3. Dagperiode (L<sub>dag</sub>, jaargemiddeld) per afstand — alleen best case en middenscenario, getoetst aan jouw dagnorm</h3>
+      <div class="cum-result-wrap">
+        <table class="data-table norm-table" id="m14a-day-table">
+          <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th></tr></thead>
+          <tbody id="m14a-day-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <p class="callout m8-totals-highlight" id="m14a-day-result-callout"></p>
 
     <div class="method-callout">
       <h3>Wat betekenen "best/middel/worst" hier precies?</h3>
-      <p>Dezelfde definities als Module 2/5/8: <strong>best case</strong> = geen windschering-, torenzog- of AM-toeslag (0 dB). <strong>Middenscenario</strong> = matige toeslag (windschering 5 dB &#39;s nachts, torenzog tot 2 dB afstandsafhankelijk, AM 1 dB) &mdash; net als in Module 2 wordt hiervan het maximum genomen, niet de som (overlappende fysica). <strong>Worst case</strong> = dezelfde logica met 12/5/3 dB. Curtailment wordt hier, net als in de basis-Module 14, niet meegenomen (vergunningsspecifieke keuze, geen statistische eigenschap van de turbine). Anders dan Module 14 zelf gebruikt deze module dus <em>geen</em> kansgewogen amplificatie (33% &#39;s nachts / 25% overdag) &mdash; die jaargemiddelde waarde ligt bij een gegeven afstand/richting tussen de hier getoonde best case en worst case, dichter bij best case (zie Module 14 voor die kansgewogen waarde).</p>
-      <p>De ingevoerde norm is een vrij invoerveld, niet gekoppeld aan een specifieke wettelijke of WHO-norm &mdash; controleer zelf welke waarde op jouw situatie van toepassing is (zie Module 5 voor de vaste landelijke/WHO-presets, of de Position paper A-weging windturbinegeluid voor Deense/Duitse referentiewaarden) en vul die hier in.</p>
+      <p>Dezelfde definities als Module 2/5/8: <strong>best case</strong> = geen windschering-, torenzog- of AM-toeslag (0 dB). <strong>Middenscenario</strong> = matige toeslag (windschering 5 dB &#39;s nachts, torenzog tot 2 dB afstandsafhankelijk, AM 1 dB) &mdash; net als in Module 2 wordt hiervan het maximum genomen, niet de som (overlappende fysica). <strong>Worst case</strong> = dezelfde logica met 12/5/3 dB, en wordt hier alleen in de Lden-tabel getoond (voor de dagperiode-tabel is op verzoek alleen best case/middenscenario opgenomen — de worst-case dagbijdrage telt wel gewoon mee in de Lden-berekening hierboven). Curtailment wordt hier, net als in de basis-Module 14, niet meegenomen (vergunningsspecifieke keuze, geen statistische eigenschap van de turbine). Anders dan Module 14 zelf gebruikt deze module dus <em>geen</em> kansgewogen amplificatie (33% &#39;s nachts / 25% overdag) &mdash; die jaargemiddelde waarde ligt bij een gegeven afstand/richting tussen de hier getoonde best case en worst case, dichter bij best case (zie Module 14 voor die kansgewogen waarde).</p>
+      <p><strong>Hoe wordt de Lden-norm afgeleid?</strong> Met dezelfde dag/avond/nacht-weegformule die dit model overal gebruikt: Lden = 10&middot;log&#8321;&#8320;[(12/24)&middot;10^(L<sub>dag</sub>/10) + (4/24)&middot;10^((L<sub>avond</sub>+5)/10) + (8/24)&middot;10^((L<sub>nacht</sub>+10)/10)], met L<sub>avond</sub> = jouw dagnorm (geen aparte avondnorm ingevoerd, conform de conventie van Module 14) en L<sub>nacht</sub> = jouw nachtnorm. Dit is dus geen wettelijk vastgestelde Lden-norm, maar een reken-equivalent van jouw twee ingevoerde grenswaarden.</p>
+      <p>De ingevoerde dag- en nachtnorm zijn vrije invoervelden, niet gekoppeld aan een specifieke wettelijke of WHO-norm &mdash; controleer zelf welke waarden op jouw situatie van toepassing zijn (zie Module 5 voor de vaste landelijke/WHO-presets, of de Position paper A-weging windturbinegeluid voor Deense/Duitse referentiewaarden) en vul die hier in.</p>
     </div>
   </section>
 
