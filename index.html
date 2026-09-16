@@ -994,9 +994,10 @@
       <span class="module-num">Module 14a</span>
       <h2>Lden en L<sub>night</sub> per scenario, met eigen ingevoerde normen <span class="badge-future">Uitbreidingsoptie — experimenteel</span></h2>
     </div>
-    <p class="module-desc">Bouwt voort op Module 14: hetzelfde windroos-gewogen jaargemiddelde (12 sectoren &times; 4 windsnelheidsklassen) en hetzelfde windsnelheidsafhankelijke bronvermogen. Het verschil: Module 14 versmelt windschering/torenzog/AM tot &eacute;&eacute;n kansgewogen jaargemiddelde; deze module rekent in plaats daarvan drie afzonderlijke <strong>scenario's</strong> door &mdash; dezelfde best/middel/worst-case-definities als Module 2, 5 en 8 (een vaste dB-toeslag per scenario, geen kansmodel) &mdash; voor alle standaardafstanden tegelijk. In plaats van &eacute;&eacute;n vaste landelijke/WHO-preset (Module 5) vul je hier je eigen <strong>Lden-norm</strong> en <strong>L<sub>night</sub>-norm</strong> rechtstreeks in (beide in dB(A)) &mdash; dezelfde twee grootheden als in de wettelijke toetsingskaders, zonder tussenstap of afleiding. Vervolgens zie je drie uitsplitsingen: de Lden-toetsing per scenario tegen jouw Lden-norm, de nachtperiode (L<sub>nacht</sub>) per afstand en scenario tegen jouw L<sub>night</sub>-norm, en &mdash; louter informatief, want er bestaat geen zelfstandige dagnorm &mdash; de dagperiode (L<sub>dag</sub>) per afstand voor best case en middenscenario.</p>
+    <p class="module-desc">Bouwt voort op Module 14: hetzelfde windroos-gewogen jaargemiddelde (12 sectoren &times; 4 windsnelheidsklassen) en hetzelfde windsnelheidsafhankelijke bronvermogen. Het verschil: Module 14 versmelt windschering/torenzog/AM tot &eacute;&eacute;n vast kansgewogen jaargemiddelde (33%/25% landelijk); deze module rekent drie afzonderlijke <strong>scenario's</strong> los door &mdash; dezelfde best/middel/worst-case-definities als Module 2, 5 en 8 (een vaste dB-toeslag per scenario, geen kansmodel) &mdash; voor alle standaardafstanden tegelijk, &eacute;n telt ze daarnaast op tot een eigen <strong>kansgewogen jaargemiddelde</strong>-kolom die de locatie- en windafhankelijke percentages van Module 6/7 gebruikt in plaats van een landelijk vast percentage. In plaats van &eacute;&eacute;n vaste landelijke/WHO-preset (Module 5) vul je hier je eigen <strong>Lden-norm</strong> en <strong>L<sub>night</sub>-norm</strong> rechtstreeks in (beide in dB(A)) &mdash; dezelfde twee grootheden als in de wettelijke toetsingskaders, zonder tussenstap of afleiding. Vervolgens zie je drie uitsplitsingen: de Lden-toetsing per scenario (plus kansgewogen jaargemiddelde) tegen jouw Lden-norm, de nachtperiode (L<sub>nacht</sub>) per afstand en scenario (plus kansgewogen jaargemiddelde) tegen jouw L<sub>night</sub>-norm, en &mdash; louter informatief, want er bestaat geen zelfstandige dagnorm &mdash; de dagperiode (L<sub>dag</sub>) per afstand voor best case en middenscenario (zonder kansgewogen kolom).</p>
 
-    <div class="callout" id="m14a-intro-callout">Kies een richting van de woning t.o.v. de turbine en vul je eigen Lden-norm en L<sub>night</sub>-norm in (dB(A)). De module toont per afstand en scenario hoe je uitkomt tegenover die twee normen, plus een informatieve dagperiode-uitsplitsing (best case en middenscenario) zonder eigen norm.</div>
+    <div class="callout" id="m14a-intro-callout">Kies een richting van de woning t.o.v. de turbine en vul je eigen Lden-norm en L<sub>night</sub>-norm in (dB(A)). De module toont per afstand en scenario hoe je uitkomt tegenover die twee normen, plus een kansgewogen jaargemiddelde-kolom en een informatieve dagperiode-uitsplitsing (best case en middenscenario) zonder eigen norm.</div>
+    <p class="callout" id="m14a-pct-callout"></p>
 
     <div class="cum-controls">
       <div class="cum-field">
@@ -1026,7 +1027,7 @@
       <h3>1. Lden-jaargemiddelde per afstand en scenario, getoetst aan jouw Lden-norm</h3>
       <div class="cum-result-wrap">
         <table class="data-table norm-table" id="m14a-lden-table">
-          <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th></tr></thead>
+          <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th><th>Kansgewogen jaargemiddelde</th></tr></thead>
           <tbody id="m14a-lden-table-body"></tbody>
         </table>
       </div>
@@ -1037,7 +1038,7 @@
       <h3>2. Nachtperiode (L<sub>nacht</sub> = L<sub>night</sub>, jaargemiddeld) per afstand en scenario, getoetst aan jouw L<sub>night</sub>-norm</h3>
       <div class="cum-result-wrap">
         <table class="data-table norm-table" id="m14a-night-table">
-          <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th></tr></thead>
+          <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th><th>Kansgewogen jaargemiddelde</th></tr></thead>
           <tbody id="m14a-night-table-body"></tbody>
         </table>
       </div>
