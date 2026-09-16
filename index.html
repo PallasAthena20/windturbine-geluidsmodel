@@ -943,6 +943,52 @@
     <button type="button" class="add-turbine-btn" id="m13-generate-btn" disabled>Rapport genereren (PDF)</button>
   </section>
 
+  <section class="module module-future" id="module-14">
+    <div class="module-head">
+      <span class="module-num">Module 14</span>
+      <h2>Formele Lden-schatting <span class="badge-future">Uitbreidingsoptie — experimenteel</span></h2>
+    </div>
+    <p class="module-desc">Module 5 toetst rechtstreeks op de dB-waarde Nacht voor het <strong>huidige</strong>, door jou gekozen scenario en de <strong>huidige</strong> windrichting (Module 2/3) — een "wat als"-doorrekening van één momentopname, geen Lden. Deze module doet iets anders: ze rekent een <strong>jaargemiddelde</strong> Ldag/Lavond/Lnacht uit door te middelen over een echte windroos (alle windrichtingen én windsnelheden, gewogen naar hoe vaak ze voorkomen) en combineert die met de officiële Lden-formule uit het <a href="https://mp.nl/sites/default/files/2019-08/reken%20en%20meetvoorschrift%20windturbines_0.pdf" target="_blank" rel="noopener">Reken- en meetvoorschrift windturbines</a>. Zie de toelichting onderaan voor exact welke aannames dit nog steeds geen volwaardig, site-specifiek akoestisch onderzoek maken.</p>
+
+    <div class="callout" id="m14-intro-callout">Kies hieronder een afstand en een richting waarin de woning ligt <em>t.o.v. de turbine</em> (dit is dus geen windrichting, maar de vaste ligging van de ontvanger). Het model rekent vervolgens zelf, voor elk van de 12 windroos-sectoren en 4 windsnelheidsklassen, uit of die combinatie voor déze woning downwind, upwind of zijwind betekent.</div>
+
+    <div class="cum-controls">
+      <div class="cum-field">
+        <label for="m14-distance-select">Afstand turbine–woning</label>
+        <select id="m14-distance-select"></select>
+      </div>
+      <div class="cum-field">
+        <label for="m14-bearing-select">Richting van de woning t.o.v. de turbine</label>
+        <select id="m14-bearing-select">
+          <option value="0">Noord (N)</option>
+          <option value="45">Noordoost (NE)</option>
+          <option value="90">Oost (E)</option>
+          <option value="135">Zuidoost (SE)</option>
+          <option value="180" selected>Zuid (S)</option>
+          <option value="225">Zuidwest (SW)</option>
+          <option value="270">West (W)</option>
+          <option value="315">Noordwest (NW)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="data-table-card">
+      <h3>Jaargemiddelde niveaus per periode (hoorbaar geluid, dB(A)) — bronvermogen o.b.v. Module 1</h3>
+      <table class="data-table" id="m14-table">
+        <thead><tr><th>Periode</th><th>Definitie</th><th>Niveau</th><th>Weging in Lden</th></tr></thead>
+        <tbody id="m14-table-body"></tbody>
+      </table>
+    </div>
+
+    <p class="callout m8-totals-highlight" id="m14-result-callout"></p>
+
+    <div class="method-callout">
+      <h3>Wat is hier wél en nog steeds niet "formeel"?</h3>
+      <p><strong>Nieuw t.o.v. Module 2/5:</strong> (1) een windsnelheidsafhankelijk bronvermogen L<sub>WA</sub>(v) in plaats van één vaste waarde — vorm ontleend aan een officieel gepubliceerd Vestas-testrapport (V112-3.0MW-klasse) met L<sub>WA</sub> van 94,5 dB(A) bij 3 m/s oplopend tot een nominaal plateau van 106,5 dB(A) vanaf ±8 m/s (<a href="https://majorprojects.planningportal.nsw.gov.au/prweb/PRRestService/mp/01/getContent?AttachRef=SSD-6696!20190227T080323.628%20GMT" target="_blank" rel="noopener">NSW Planning Portal, SSD-6696</a>), als relatieve vormfactor toegepast op jouw Module 1-waarde; (2) een echte, meetstation-gebaseerde windroos — 12 sectoren van 30°, elk onderverdeeld in 4 windsnelheidsklassen (Beaufort 1–2/3–4/5–6/≥7) — op basis van het <a href="https://cdn.knmi.nl/knmi/asc/normalen2021/windroos/WindRoos_260_H_pct.csv" target="_blank" rel="noopener">KNMI-klimaatnormaal 1991–2020, station De Bilt</a>; (3) energetische (logaritmische) middeling over alle 48 combinaties van richting × snelheid, met de bestaande richtingsafhankelijke propagatiefunctie uit Module 3–5; (4) de officiële Lden-combinatieformule (dag ×12u, avond ×4u +5 dB, nacht ×8u +10 dB) uit het Reken- en meetvoorschrift, met Lnight = Lnacht zonder ophoging.</p>
+      <p><strong>Nog steeds vereenvoudigd:</strong> de KNMI-windroos van De Bilt is een <strong>landelijk gemiddelde</strong>, geen meting op de daadwerkelijke turbinelocatie — kustlocaties en hooggelegen/open terrein wijken hiervan af. De L<sub>WA</sub>(v)-curve is een <strong>generieke vorm</strong> van één turbinetype, geschaald naar jouw Module 1-waarde — niet de fabrieksopgave van de daadwerkelijk beoogde turbine. Windschering/torenzog/AM ('s nachts +12 dB, overdag +3 dB als AM-maximum) worden hier niet als vaste scenario-toeslag toegepast, maar als kans-gewogen tweetoestandsmodel: 33% kans op de nachtelijke stabiele-atmosfeer-toeslag (<a href="https://documents.dps.ny.gov/public/Common/ViewDoc.aspx?DocRefId=%7BC7734D7B-E8F8-4334-9690-6F023A8E95CE%7D&amp;DocTitle=ACWE%20Exh%20MH-R5%20Van%20den%20Berg%20Turbines%20Night%20JSV%202004" target="_blank" rel="noopener">Van den Berg, 2004</a>; RIVM OPS ~33% S1+S2-uren) en 25% kans op de AM-toeslag overdag (<a href="https://docs.wind-watch.org/nguyen2021.pdf" target="_blank" rel="noopener">Nguyen et al., 2021</a>: "minder dan 25% overdag") — een grove aan/uit-benadering van een continu verschijnsel, geen kansverdeling. Avond wordt gelijkgesteld aan dag: er bestaat geen aparte, gepubliceerde avondstatistiek, en anders dan bij de eerder verwijderde Lden-poging is dit nu een bewuste modelkeuze (turbines draaien continu, geen avondcurtailment verondersteld), geen kopie van een scenario-uitkomst. Curtailment (Module 2) wordt in deze module niet meegenomen — dat is een vergunningsspecifieke operationele keuze, geen statistische eigenschap van "de" turbine. Terreindemping, obstakels en een windsnelheidsconversie tussen 10 m en ashoogte ontbreken net als elders in dit model. Kortom: dit is een aanzienlijke stap dichter bij een Reken- en meetvoorschrift-conforme Lden dan de eerder verwijderde tabel, maar <strong>vervangt geen formeel, site-specifiek akoestisch onderzoek</strong>.</p>
+    </div>
+  </section>
+
   <!-- METHODOLOGY -->
   <section class="module" id="methodology">
     <div class="module-head">

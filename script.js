@@ -147,6 +147,149 @@ function computeAbsoluteWorstCaseTotal(d) {
   return combinedFactors(d, 'worst', 'nacht', true).total;
 }
 
+// ---------- Module 14: formele Lden-schatting (uitbreidingsoptie) ----------
+// Windroos: KNMI-klimaatnormaal 1991-2020, station 260 (De Bilt), 12 sectoren van 30 graden.
+// Cumulatieve frequenties per Beaufort-drempel (%) omgezet naar 4 windsnelheidsklassen per sector.
+// Bron: https://cdn.knmi.nl/knmi/asc/normalen2021/windroos/WindRoos_260_H_pct.csv
+const M14_WINDROOS = [
+  { dir: 'N',   bearing: 0,   bft12: 0.69, bft34: 3.35, bft56: 0.35, bft7p: 0.00 },
+  { dir: 'NNO', bearing: 30,  bft12: 0.90, bft34: 5.46, bft56: 0.58, bft7p: 0.00 },
+  { dir: 'ONO', bearing: 60,  bft12: 1.03, bft34: 4.81, bft56: 0.68, bft7p: 0.00 },
+  { dir: 'O',   bearing: 90,  bft12: 0.90, bft34: 4.22, bft56: 0.84, bft7p: 0.01 },
+  { dir: 'OZO', bearing: 120, bft12: 1.02, bft34: 3.37, bft56: 0.50, bft7p: 0.00 },
+  { dir: 'ZZO', bearing: 150, bft12: 1.45, bft34: 7.12, bft56: 0.52, bft7p: 0.00 },
+  { dir: 'Z',   bearing: 180, bft12: 0.90, bft34: 6.90, bft56: 1.47, bft7p: 0.01 },
+  { dir: 'ZZW', bearing: 210, bft12: 0.79, bft34: 10.14, bft56: 3.34, bft7p: 0.09 },
+  { dir: 'WZW', bearing: 240, bft12: 0.69, bft34: 8.96, bft56: 3.31, bft7p: 0.12 },
+  { dir: 'W',   bearing: 270, bft12: 0.82, bft34: 6.61, bft56: 1.27, bft7p: 0.03 },
+  { dir: 'WNW', bearing: 300, bft12: 0.94, bft34: 5.08, bft56: 0.46, bft7p: 0.01 },
+  { dir: 'NNW', bearing: 330, bft12: 0.97, bft34: 4.94, bft56: 0.29, bft7p: 0.00 },
+];
+
+// Representatieve windsnelheid (m/s, gestandaardiseerd op 10 m) per Beaufort-klasse-groep —
+// Bft 1-2 ligt onder de gangbare cut-in-snelheid van een turbine (circa 3-3,5 m/s): geen bronvermogen.
+const M14_SPEED_BINS = [
+  { key: 'bft12', v: 1.7 },
+  { key: 'bft34', v: 5.6 },
+  { key: 'bft56', v: 10.9 },
+  { key: 'bft7p', v: 15.5 },
+];
+
+// Kans op geamplificeerd geluid (stabiele atmosfeer 's nachts / AM-piek overdag) — hergebruikt de
+// cijfers die Module 2 al onderbouwt: ~33% stabiele nachten (Van den Berg 2004; RIVM OPS S1+S2-uren),
+// <25% overdag (Nguyen et al. 2021). Toegepast als eenvoudig twee-toestandsmodel (aan/uit).
+const M14_P_NIGHT_AMPLIFIED = 0.33;
+const M14_NIGHT_AMPLIFICATION_DB = 12; // model se worst-case groupMax (windschering-plafond, Module 2)
+const M14_P_DAY_AMPLIFIED = 0.25;
+const M14_DAY_AMPLIFICATION_DB = 3; // model se worst-case AM-plafond (Module 2)
+
+// Relatieve LWA(v)-vormfactor t.o.v. het nominale (rated) niveau — ontleend aan een officieel
+// gepubliceerd Vestas-testrapport (V112-3.0MW-klasse, gestandaardiseerde 10 m-windsnelheid).
+// Bron: https://majorprojects.planningportal.nsw.gov.au (SSD-6696, Vestas test report).
+const M14_LWA_CURVE = [[3, 94.5], [4, 97.3], [5, 100.9], [6, 104.3], [7, 106.0], [8, 106.5]];
+const M14_LWA_CUTIN = 3.5;
+const M14_LWA_RATED = 106.5;
+function m14LwaOffsetForSpeed(v) {
+  if (v < M14_LWA_CUTIN) return null; // onder cut-in: turbine produceert geen bronvermogen
+  if (v >= 8) return 0;
+  for (let i = 0; i < M14_LWA_CURVE.length - 1; i++) {
+    const [v0, l0] = M14_LWA_CURVE[i], [v1, l1] = M14_LWA_CURVE[i + 1];
+    if (v >= v0 && v <= v1) {
+      const f = (v - v0) / (v1 - v0);
+      return (l0 + f * (l1 - l0)) - M14_LWA_RATED;
+    }
+  }
+  return 0;
+}
+
+// Energetisch (logaritmisch) jaargemiddeld niveau voor één periode (dag/avond/nacht), gemiddeld over
+// alle 12 windroos-sectoren x 4 windsnelheidsklassen, met kans-gewogen amplificatie (zie hierboven).
+// Hergebruikt xFromAngle/ADIV_120/CATEGORY[...].mFunc/computeCategoryLw — dezelfde propagatielogica
+// als Module 3-5, i.p.v. een losse/afwijkende formule.
+function m14PeriodLevel(d, bearingToReceiver, lwaBase, pAmplified, amplificationDb) {
+  const cat = CATEGORY.hoorbaar; // Lden/Lnight zijn per definitie dB(A)-maten
+  const contributions = [];
+  M14_WINDROOS.forEach((sector) => {
+    const downwindBearing = (sector.bearing + 180) % 360;
+    const x = xFromAngle(bearingToReceiver, downwindBearing);
+    M14_SPEED_BINS.forEach((bin) => {
+      const freq = sector[bin.key];
+      if (!freq) return;
+      const offset = m14LwaOffsetForSpeed(bin.v);
+      if (offset == null) return; // onder cut-in: geen bijdrage
+      const lwCat = computeCategoryLw(lwaBase + offset).hoorbaar;
+      const base = lwCat - ADIV_120 - cat.mFunc(x) * Math.log10(d / 120);
+      const sumPow = (1 - pAmplified) * Math.pow(10, base / 10) + pAmplified * Math.pow(10, (base + amplificationDb) / 10);
+      contributions.push({ freq, level: 10 * Math.log10(sumPow) });
+    });
+  });
+  const totalFreq = contributions.reduce((s, c) => s + c.freq, 0);
+  if (totalFreq <= 0) return null;
+  const sumPow = contributions.reduce((s, c) => s + (c.freq / totalFreq) * Math.pow(10, c.level / 10), 0);
+  return 10 * Math.log10(sumPow);
+}
+
+function m14Compute(d, bearingToReceiver, lwaBase) {
+  const Ldag = m14PeriodLevel(d, bearingToReceiver, lwaBase, M14_P_DAY_AMPLIFIED, M14_DAY_AMPLIFICATION_DB);
+  const Lavond = Ldag; // zie toelichting in de UI: bewuste modelkeuze, geen aparte avondstatistiek
+  const Lnacht = m14PeriodLevel(d, bearingToReceiver, lwaBase, M14_P_NIGHT_AMPLIFIED, M14_NIGHT_AMPLIFICATION_DB);
+  if (Ldag == null || Lnacht == null) return null;
+  const lden = 10 * Math.log10(
+    (12 / 24) * Math.pow(10, Ldag / 10) +
+    (4 / 24) * Math.pow(10, (Lavond + 5) / 10) +
+    (8 / 24) * Math.pow(10, (Lnacht + 10) / 10)
+  );
+  return { Ldag, Lavond, Lnacht, Lden: lden, Lnight: Lnacht };
+}
+
+function renderModule14() {
+  const body = document.getElementById('m14-table-body');
+  const resultCallout = document.getElementById('m14-result-callout');
+  if (!body || !resultCallout) return;
+  const result = m14Compute(state.m14Distance, state.m14Bearing, state.lwa);
+  if (!result) {
+    body.innerHTML = '<tr><td colspan="4" class="empty-row">Berekening kon niet worden uitgevoerd.</td></tr>';
+    resultCallout.textContent = '';
+    return;
+  }
+  const rows = [
+    { label: 'Dag', def: '07:00\u201319:00, +0 dB', level: result.Ldag },
+    { label: 'Avond', def: '19:00\u201323:00, +5 dB', level: result.Lavond },
+    { label: 'Nacht', def: '23:00\u201307:00, +10 dB', level: result.Lnacht },
+  ];
+  body.innerHTML = rows.map(r => `<tr><td>${r.label}</td><td>${r.def}</td><td>${r.level.toFixed(1)} dB(A)</td><td>${r.label === 'Dag' ? '\u00d7 12u' : r.label === 'Avond' ? '\u00d7 4u, +5 dB' : '\u00d7 8u, +10 dB'}</td></tr>`).join('');
+  const norm = getActiveNorm();
+  let normText = 'Er is geen Lnight-norm geselecteerd (zie Module 5).';
+  if (norm && norm.lnight != null) {
+    const exceeds = result.Lnight > norm.lnight;
+    normText = `Lnight (= Lnacht, energetisch jaargemiddeld) van <strong>${result.Lnight.toFixed(1)} dB(A)</strong> ${exceeds ? 'overschrijdt' : 'blijft binnen'} de ${escapeHtml(norm.label)} (${norm.lnight} dB) op ${state.m14Distance} m, met de woning op ${m14BearingLabel(state.m14Bearing)} van de turbine.`;
+  }
+  resultCallout.innerHTML = `<strong>Lden (jaargemiddeld) \u2248 ${result.Lden.toFixed(1)} dB(A)</strong> — Ldag ${result.Ldag.toFixed(1)} / Lavond ${result.Lavond.toFixed(1)} / Lnacht ${result.Lnacht.toFixed(1)} dB(A). ${normText}`;
+}
+
+function m14BearingLabel(bearing) {
+  const map = { 0: 'het noorden', 45: 'het noordoosten', 90: 'het oosten', 135: 'het zuidoosten', 180: 'het zuiden', 225: 'het zuidwesten', 270: 'het westen', 315: 'het noordwesten' };
+  return map[bearing] || `${bearing}\u00b0`;
+}
+
+function initModule14() {
+  const distanceSelect = document.getElementById('m14-distance-select');
+  const bearingSelect = document.getElementById('m14-bearing-select');
+  if (!distanceSelect || !bearingSelect) return;
+  distanceSelect.innerHTML = DISTANCES.map(d => `<option value="${d}">${d} m</option>`).join('');
+  distanceSelect.value = String(state.m14Distance);
+  bearingSelect.value = String(state.m14Bearing);
+  distanceSelect.addEventListener('change', () => {
+    state.m14Distance = parseInt(distanceSelect.value, 10);
+    renderModule14();
+  });
+  bearingSelect.addEventListener('change', () => {
+    state.m14Bearing = parseInt(bearingSelect.value, 10);
+    renderModule14();
+  });
+  renderModule14();
+}
+
 // ---------- App state ----------
 const state = {
   lwa: 106.0, windBearing: 0, daynight: 'dag', scenario: 'best', curtailment: false,
@@ -177,6 +320,9 @@ const state = {
   // Module 12: bouw-/investeringskosten per turbine (PBL-eindadvies SDE++ 2026) — zie script.js §M12.
   // Volledig losstaand van de geplaatste turbine(s)/locatie(s) hierboven: vrije invoer per turbinegroep.
   m12Groups: [],
+  // Module 14: formele Lden-schatting (uitbreidingsoptie) — vaste afstand + peilrichting
+  // ontvanger t.o.v. de turbine, losstaand van de op de kaart geplaatste turbines.
+  m14Distance: 900, m14Bearing: 180,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' heeft geen vaste waarden; die komen uit state.normCustomLden/Lnight.
@@ -643,6 +789,7 @@ function render() {
   renderModule6();
   renderModule7();
   renderModule8();
+  renderModule14();
 }
 
 // ---------- Locatie toevoegen: adreszoeker (PDOK Locatieserver) & coordinaten ----------
@@ -4678,6 +4825,7 @@ async function m13OpenReport() {
 
 // ---------- Wire up turbine controls & init ----------
 initMap3a();
+initModule14();
 render();
 renderModule12();
 renderModule13();
