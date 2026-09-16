@@ -22,7 +22,12 @@ let currentTheme = matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 
 
 // ---------- Acoustic reference data ----------
 // Octave-band unweighted source spectrum (Vestas V90, 80 m hub height), base total ≈106 dB(A).
-// 63–8000 Hz: Torrance Wind Farm Extension, Technical Appendix 7.1 (unweighted = LWA_ref − A_CORR).
+// 63–8000 Hz: Torrance Wind Farm Extension, Technical Appendix 7.1, §7.1.3 "Burnhead Farm Wind
+// Farm", Table A7.3.2 (unweighted = LWA_ref − A_CORR). Verified 2026-09-16: the 8 values below
+// (63/125/250/500/1000/2000/4000/8000 Hz, A-weighted) reproduce the PDF's published 90.5/95.7/
+// 98.1/99.5/99.7/98.5/94.9/81.1 dB(A) exactly. NB the same PDF opens with unrelated turbine data
+// (NPS 100-24, Vestas V136) for other cumulative developments in the same EIA — only the V90 table
+// on page 2 is used here.
 // 8/16/31.5 Hz: extrapolated at +3 dB per octave going down from 63 Hz, per RSG (2016)
 // "Massachusetts Study on Wind Turbine Acoustics" (tethys.pnnl.gov), which reports wind-turbine
 // sound levels rising ~3 dB/octave with decreasing frequency down to ≈4 Hz.
