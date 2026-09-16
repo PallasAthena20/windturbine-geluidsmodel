@@ -722,10 +722,11 @@ function renderCumulativeModule(catLw) {
 // Volledig eigen turbine-invoer, dag/nacht-toggle en normselectie,
 // onafhankelijk van Module 3/2/5 hierboven.
 // ============================================================
-let map3a, mapRenderer3a, turbineLayer3a, tileLayer3a, turbineArrowLayer3a, receptorLayer3a;
+let map3a, mapRenderer3a, turbineLayer3a, tileLayer3a, turbineArrowLayer3a, receptorLayer3a, nearestHouseLayer3a;
 const turbineRingGroups3a = new Map(); // id -> L.LayerGroup met L.circle-ringen op vaste afstand
 const turbineMarkers3a = new Map();
 const turbineWindArrows3a = new Map();
+const nearestHouseMarkers3a = new Map(); // id -> { marker: L.Marker, line: L.Polyline } — dichtstbijzijnde BAG-woning per turbine (Module 1 minimale-afstandstoets)
 let nextTurbine3aId = 1;
 
 // Eén neutrale, donkere kleur i.p.v. rood/groen — vorm (pijlpunt vs. open cirkel) blijft het
@@ -752,6 +753,49 @@ function updateWindArrowRotations3a() {
     const el = marker.getElement();
     const inner = el && el.querySelector('.wind-arrow-rotate');
     if (inner) inner.style.transform = `rotate(${downwindBearing}deg)`;
+  });
+}
+
+// Huis-icoon voor de dichtstbijzijnde BAG-woning bij de Module 1 minimale-afstandstoets — rood
+// bij een overtreding, groen wanneer de ingestelde minimumafstand wordt gehaald. Hergebruikt de
+// bestaande --color-error/--color-success tokens zodat de kleur consistent is met de tekstuele
+// waarschuwing in renderMinAfstandCallout3a().
+function nearestHouseIcon3a(danger) {
+  const color = danger ? 'var(--color-error)' : 'var(--color-success)';
+  return L.divIcon({
+    className: 'nearest-house-icon',
+    html: `<svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+      <path d="M11 1.5 L20.5 9.5 L20.5 20.5 L1.5 20.5 L1.5 9.5 Z" fill="${color}" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round"/>
+      <rect x="8.7" y="12.5" width="4.6" height="8" fill="#ffffff"/>
+    </svg>`,
+    iconSize: [22, 22],
+    iconAnchor: [11, 20],
+  });
+}
+
+// Tekent, per turbine, de dichtstbijzijnde BAG-woning uit state.m1MinAfstandResults als huis-icoon
+// plus een stippellijn naar de turbine — zodat op de kaart meteen zichtbaar is welke woning bij de
+// minimale-afstandstoets van Module 1 hoort. Leeg/verwijderd zodra er geen minimumeis of resultaat is.
+function renderNearestHouseMarkers3a() {
+  if (!map3a || !nearestHouseLayer3a) return;
+  nearestHouseLayer3a.clearLayers();
+  nearestHouseMarkers3a.clear();
+  if (!state.m1MinAfstandHuis || !state.m1MinAfstandResults) return;
+  state.turbines3a.forEach((t) => {
+    const res = state.m1MinAfstandResults.get(t.id);
+    if (!res || res.lat == null || res.lon == null) return;
+    const danger = res.distance != null && res.distance < state.m1MinAfstandHuis;
+    const marker = L.marker([res.lat, res.lon], { icon: nearestHouseIcon3a(danger), interactive: true, keyboard: false });
+    marker.bindTooltip(
+      `<div class="ring-tooltip"><strong>Dichtstbijzijnde woning — turbine #${t.id}</strong><br>Afstand: ${Math.round(res.distance)} m ${danger ? '(onder de minimale afstand)' : '(voldoet aan de minimale afstand)'}</div>`,
+      { direction: 'top', offset: [0, -18] }
+    );
+    const line = L.polyline([[t.lat, t.lng], [res.lat, res.lon]], {
+      color: danger ? 'var(--color-error)' : 'var(--color-success)', weight: 2, opacity: 0.8, dashArray: '5 5', interactive: false, renderer: mapRenderer3a,
+    });
+    line.addTo(nearestHouseLayer3a);
+    marker.addTo(nearestHouseLayer3a);
+    nearestHouseMarkers3a.set(t.id, { marker, line });
   });
 }
 
@@ -789,6 +833,7 @@ function initMap3a() {
   turbineArrowLayer3a = L.layerGroup().addTo(map3a);
   turbineLayer3a = L.layerGroup().addTo(map3a);
   receptorLayer3a = L.layerGroup().addTo(map3a);
+  nearestHouseLayer3a = L.layerGroup().addTo(map3a);
   applyMapTileTheme3a();
 
   map3a.on('click', (e) => {
@@ -870,12 +915,44 @@ function addTurbine3a(lat, lng) {
   const turbine = { id, lat, lng };
   state.turbines3a.push(turbine);
 
-  const marker = L.marker([lat, lng], { icon: turbineIcon(false) }).addTo(turbineLayer3a);
+  const marker = L.marker([lat, lng], { icon: turbineIcon(false), draggable: true, autoPan: true }).addTo(turbineLayer3a);
   marker.bindPopup(`<div class="turbine-popup"><strong>Turbine #${id}</strong><br><button type="button" class="popup-remove-btn-3a" data-remove-id-3a="${id}">Verwijder deze turbine</button></div>`);
   marker.on('click', () => { selectTurbine3a(id); });
   marker.on('popupopen', () => {
     const btn = document.querySelector(`.popup-remove-btn-3a[data-remove-id-3a="${id}"]`);
     if (btn) btn.addEventListener('click', () => { removeTurbine3a(id); map3a.closePopup(); });
+  });
+  // Slepen: live, goedkope update tijdens het slepen (positie + pijl + eigen ringen + eventuele
+  // lijn naar de dichtstbijzijnde woning); de volledige render()/BAG-hertoets pas na loslaten,
+  // zodat dit niet bij elke muisbeweging een netwerkverzoek of volledige DOM-herbouw veroorzaakt.
+  marker.on('dragstart', () => { selectTurbine3a(id); });
+  marker.on('drag', (e) => {
+    const ll = e.target.getLatLng();
+    turbine.lat = ll.lat;
+    turbine.lng = ll.lng;
+    const arrowMarker = turbineWindArrows3a.get(id);
+    if (arrowMarker) arrowMarker.setLatLng(ll);
+    const group = turbineRingGroups3a.get(id);
+    if (group) {
+      group.clearLayers();
+      const lwCat = computeCategoryLw(state.lwa)[state.category];
+      ringsForTurbine3a(turbine, lwCat).forEach(pl => group.addLayer(pl));
+    }
+    const houseEntry = nearestHouseMarkers3a.get(id);
+    if (houseEntry) houseEntry.line.setLatLngs([[ll.lat, ll.lng], houseEntry.line.getLatLngs()[1]]);
+  });
+  marker.on('dragend', (e) => {
+    const ll = e.target.getLatLng();
+    if (!withinNetherlands(ll.lat, ll.lng)) {
+      marker.setLatLng([lat, lng]);
+      turbine.lat = lat;
+      turbine.lng = lng;
+      const arrowMarker = turbineWindArrows3a.get(id);
+      if (arrowMarker) arrowMarker.setLatLng([lat, lng]);
+      setLocStatus3a('Een turbine kan niet buiten Nederland worden geplaatst — verplaatsing ongedaan gemaakt.', 'error');
+    }
+    render();
+    m1RunMinAfstandCheck();
   });
   turbineMarkers3a.set(id, marker);
 
@@ -964,7 +1041,11 @@ function buildRingLegend3a() {
   const cat = CATEGORY[state.category];
   ringLegend3a.innerHTML = DISTANCES.map(d => `<span class="ring-legend-item"><span class="ring-swatch" style="border-color:${RING_COLORS[d]}"></span>${d} m</span>`).join('');
   if (legendCaption3a) {
-    legendCaption3a.textContent = `Ringkleur toont de afstand tot de turbine (niet het geluidsniveau) \u2014 de ${cat.label.toLowerCase()} (${cat.unit}) per afstand en richting staat in de tabel hiernaast.`;
+    let txt = `Ringkleur toont de afstand tot de turbine (niet het geluidsniveau) \u2014 de ${cat.label.toLowerCase()} (${cat.unit}) per afstand en richting staat in de tabel hiernaast. Sleep een turbine-icoon op de kaart om de locatie aan te passen.`;
+    if (state.m1MinAfstandHuis) {
+      txt += ' Het huisicoon met stippellijn toont de dichtstbijzijnde woning die wordt getoetst aan de minimale afstand uit Module 1 (rood = te dichtbij, groen = voldoet).';
+    }
+    legendCaption3a.textContent = txt;
   }
 }
 
@@ -1773,9 +1854,9 @@ async function m1FetchNearestHouseForTurbine(turbine, radiusM) {
   let nearest = null;
   addresses.forEach((a) => {
     const d = haversineMeters(turbine.lat, turbine.lng, a.lat, a.lon);
-    if (nearest == null || d < nearest) nearest = d;
+    if (nearest == null || d < nearest.distance) nearest = { distance: d, lat: a.lat, lon: a.lon };
   });
-  return nearest; // null = geen BAG-adres binnen radiusM gevonden
+  return nearest; // null = geen BAG-adres binnen radiusM gevonden; anders {distance, lat, lon}
 }
 
 async function m1RunMinAfstandCheck() {
@@ -1808,6 +1889,7 @@ async function m1RunMinAfstandCheck() {
 
 function renderMinAfstandCallout3a() {
   if (typeof renderModule13 === 'function') renderModule13();
+  renderNearestHouseMarkers3a();
   if (!m3aMinAfstandCallout) return;
   if (!state.m1MinAfstandHuis || state.turbines3a.length === 0) {
     m3aMinAfstandCallout.style.display = 'none';
@@ -1834,7 +1916,7 @@ function renderMinAfstandCallout3a() {
   const violations = [];
   state.turbines3a.forEach((t) => {
     const nearest = state.m1MinAfstandResults.get(t.id);
-    if (nearest != null && nearest < state.m1MinAfstandHuis) violations.push({ id: t.id, nearest });
+    if (nearest != null && nearest.distance != null && nearest.distance < state.m1MinAfstandHuis) violations.push({ id: t.id, nearest: nearest.distance });
   });
   m3aMinAfstandCallout.style.display = '';
   if (violations.length === 0) {
@@ -3676,7 +3758,8 @@ function m13Readiness() {
   const minAfstandViolations = (minAfstand && state.m1MinAfstandResults)
     ? state.turbines3a
         .map((t) => ({ id: t.id, nearest: state.m1MinAfstandResults.get(t.id) }))
-        .filter((v) => v.nearest != null && v.nearest < minAfstand)
+        .filter((v) => v.nearest != null && v.nearest.distance != null && v.nearest.distance < minAfstand)
+        .map((v) => ({ id: v.id, nearest: v.nearest.distance }))
     : [];
   const minAfstandChecked = !!(minAfstand && state.m1MinAfstandResults && !state.m1MinAfstandFetching);
   return { nTurbines, norm, normOk, hasBag, bagStale, hasM12, minAfstand, minAfstandViolations, minAfstandChecked };
