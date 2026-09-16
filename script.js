@@ -353,7 +353,7 @@ function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm,
   }).join('');
 
   if (!hasNorm) {
-    resultCallout.innerHTML = 'Vul een geldige dag- en nachtnorm in (dB(A)) om de toetsing per afstand te tonen.';
+    resultCallout.innerHTML = 'Vul een geldige norm in (dB(A)) om de toetsing per afstand te tonen.';
     return;
   }
 
