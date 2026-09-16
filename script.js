@@ -295,6 +295,109 @@ function initModule14() {
   renderModule14();
 }
 
+// ---------- Module 14a: Lden per scenario (best/middel/worst) + eigen norm ----------
+// Bouwt voort op Module 14: hergebruikt m14PeriodLevel() voor het windroos/snelheids-gewogen
+// jaargemiddelde, maar vervangt de kansgewogen 33%/25%-amplificatie door de vaste scenario-
+// toeslagen die de rest van dit model al gebruikt (SCENARIO_FACTORS/combinedFactors, Module 2).
+// Wiskundig geldig omdat een constante dB-toeslag, toegepast op elke van de 48 windroos-
+// combinaties vóór het energetisch middelen, exact gelijk is aan die toeslag achteraf optellen
+// bij het al gemiddelde niveau (de energetische som schaalt lineair mee met een uniforme
+// dB-verschuiving) — vandaar m14PeriodLevel(d, bearing, lwaBase, 0, 0) (pAmplified=0) als basis.
+const M14A_SCENARIOS = [
+  { key: 'best', label: 'Best case' },
+  { key: 'middel', label: 'Middenscenario' },
+  { key: 'worst', label: 'Worst case' },
+];
+
+function m14aScenarioLevels(d, bearingToReceiver, lwaBase, scenarioKey) {
+  const base = m14PeriodLevel(d, bearingToReceiver, lwaBase, 0, 0);
+  if (base == null) return null;
+  const addonDag = combinedFactors(d, scenarioKey, 'dag', false).total;
+  const addonNacht = combinedFactors(d, scenarioKey, 'nacht', false).total;
+  const Ldag = base + addonDag;
+  const Lavond = Ldag; // zie Module 14: bewuste modelkeuze, geen aparte avondstatistiek
+  const Lnacht = base + addonNacht;
+  const lden = 10 * Math.log10(
+    (12 / 24) * Math.pow(10, Ldag / 10) +
+    (4 / 24) * Math.pow(10, (Lavond + 5) / 10) +
+    (8 / 24) * Math.pow(10, (Lnacht + 10) / 10)
+  );
+  return { Ldag, Lavond, Lnacht, Lden: lden, Lnight: Lnacht };
+}
+
+function renderModule14a() {
+  const body = document.getElementById('m14a-table-body');
+  const resultCallout = document.getElementById('m14a-result-callout');
+  if (!body || !resultCallout) return;
+  const metricKey = state.m14aMetric === 'lnight' ? 'Lnight' : 'Lden';
+  const metricLabel = state.m14aMetric === 'lnight' ? 'Lnight' : 'Lden';
+  const norm = Number(state.m14aNorm);
+  const hasNorm = Number.isFinite(norm);
+
+  const rowsData = DISTANCES.map((d) => ({
+    d,
+    scenarios: M14A_SCENARIOS.map((s) => ({ ...s, result: m14aScenarioLevels(d, state.m14aBearing, state.lwa, s.key) })),
+  }));
+
+  body.innerHTML = rowsData.map(({ d, scenarios }) => {
+    const cells = scenarios.map(({ result }) => {
+      if (!result) return '<td class="empty-row">&mdash;</td>';
+      const value = result[metricKey];
+      if (!hasNorm) return `<td>${value.toFixed(1)} dB(A)</td>`;
+      const diff = value - norm;
+      const exceed = diff > 0;
+      return `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${value.toFixed(1)} dB(A) (${diff >= 0 ? '+' : ''}${diff.toFixed(1)})</td>`;
+    }).join('');
+    return `<tr><td>${d} m</td>${cells}</tr>`;
+  }).join('');
+
+  if (!hasNorm) {
+    resultCallout.innerHTML = 'Vul een geldige normwaarde in (dB(A)) om de toetsing per afstand te tonen.';
+    return;
+  }
+
+  const summary = M14A_SCENARIOS.map((s) => {
+    const okDistances = rowsData
+      .filter((r) => {
+        const res = r.scenarios.find((sc) => sc.key === s.key).result;
+        return res && res[metricKey] <= norm;
+      })
+      .map((r) => r.d);
+    const minOk = okDistances.length ? Math.min(...okDistances) : null;
+    return { label: s.label, minOk };
+  });
+  const summaryText = summary.map((s) => (
+    s.minOk != null
+      ? `${escapeHtml(s.label)}: vanaf ${s.minOk} m binnen norm`
+      : `${escapeHtml(s.label)}: op geen van de getoonde afstanden binnen norm`
+  )).join(' \u2014 ');
+
+  resultCallout.innerHTML = `<strong>Toetsmaat ${metricLabel}, eigen norm ${norm.toFixed(1)} dB(A):</strong> ${summaryText}. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14aBearing)}.`;
+}
+
+function initModule14a() {
+  const bearingSelect = document.getElementById('m14a-bearing-select');
+  const metricSelect = document.getElementById('m14a-metric-select');
+  const normInput = document.getElementById('m14a-norm-input');
+  if (!bearingSelect || !metricSelect || !normInput) return;
+  bearingSelect.value = String(state.m14aBearing);
+  metricSelect.value = state.m14aMetric;
+  normInput.value = String(state.m14aNorm);
+  bearingSelect.addEventListener('change', () => {
+    state.m14aBearing = parseInt(bearingSelect.value, 10);
+    renderModule14a();
+  });
+  metricSelect.addEventListener('change', () => {
+    state.m14aMetric = metricSelect.value;
+    renderModule14a();
+  });
+  normInput.addEventListener('input', () => {
+    state.m14aNorm = normInput.value === '' ? NaN : parseFloat(normInput.value);
+    renderModule14a();
+  });
+  renderModule14a();
+}
+
 // ---------- App state ----------
 const state = {
   lwa: 106.0, windBearing: 0, daynight: 'dag', scenario: 'best', curtailment: false,
@@ -328,6 +431,7 @@ const state = {
   // Module 14: formele Lden-schatting (uitbreidingsoptie) — vaste afstand + peilrichting
   // ontvanger t.o.v. de turbine, losstaand van de op de kaart geplaatste turbines.
   m14Distance: 900, m14Bearing: 180,
+  m14aBearing: 180, m14aMetric: 'lden', m14aNorm: 41,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' heeft geen vaste waarden; die komen uit state.normCustomLden/Lnight.
@@ -795,6 +899,7 @@ function render() {
   renderModule7();
   renderModule8();
   renderModule14();
+  renderModule14a();
 }
 
 // ---------- Locatie toevoegen: adreszoeker (PDOK Locatieserver) & coordinaten ----------
@@ -4831,6 +4936,7 @@ async function m13OpenReport() {
 // ---------- Wire up turbine controls & init ----------
 initMap3a();
 initModule14();
+initModule14a();
 render();
 renderModule12();
 renderModule13();
