@@ -325,15 +325,42 @@ function m14aScenarioLevels(d, bearingToReceiver, lwaBase, scenarioKey) {
   return { Ldag, Lavond, Lnacht, Lden: lden, Lnight: Lnacht };
 }
 
-// Bouwt een toetsingstabel: rijen = afstanden, kolommen = de gevraagde scenario's, elke cel
-// getoetst aan `norm` (of ongetoetst als norm ongeldig is). `metricKey` selecteert Lden/Lnacht/Ldag
-// uit het resultaat van m14aScenarioLevels.
-function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm, metricLabelForSummary) {
+// Kans (%) per scenario dat dit weertype zich voordoet, hergebruikt uit Module 6/7: het percentage
+// stabiele nachten volgt uit de afstand van de (gemiddelde) turbinelocatie tot de kust, en de
+// verdeling daarbinnen tussen middenscenario/worst case volgt uit de shear-capacity-verhouding bij
+// de ingestelde geostrofische wind (state.m7Ugeo). Bij geen turbines op de kaart (Module 3) wordt
+// De Bilt als inland-referentie gebruikt \u2014 zie m6TurbineAnchor(). Som van de drie is altijd 100.
+function m14aScenarioPercentages() {
+  const anchor = m6TurbineAnchor();
+  const pct = m6ScenarioPercentages(anchor.lat, anchor.lng);
+  return { best: pct.best, middel: pct.middel, worst: pct.worst, anchor, distKm: pct.distKm };
+}
+
+// Energetisch gewogen jaargemiddelde over best/middel/worst, gewogen naar hun kans van voorkomen
+// (pct, in %, som = 100). Vereist alle drie scenario's in rowScenarios \u2014 geeft null als een van
+// de drie ontbreekt (bv. de dagperiode-tabel, die bewust geen worst case toont).
+function m14aWeightedValue(rowScenarios, metricKey, pct) {
+  const get = (key) => rowScenarios.find((s) => s.key === key)?.result?.[metricKey];
+  const b = get('best'), m = get('middel'), w = get('worst');
+  if (b == null || m == null || w == null) return null;
+  return 10 * Math.log10(
+    (pct.best / 100) * Math.pow(10, b / 10) +
+    (pct.middel / 100) * Math.pow(10, m / 10) +
+    (pct.worst / 100) * Math.pow(10, w / 10)
+  );
+}
+
+// Bouwt een toetsingstabel: rijen = afstanden, kolommen = de gevraagde scenario's plus (indien
+// alle drie scenario's aanwezig zijn) een kansgewogen jaargemiddelde-kolom, elke cel getoetst aan
+// `norm` (of ongetoetst als norm ongeldig is). `metricKey` selecteert Lden/Lnacht/Ldag uit het
+// resultaat van m14aScenarioLevels. `pct` = m14aScenarioPercentages() resultaat.
+function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm, metricLabelForSummary, pct) {
   const body = document.getElementById(bodyId);
   const resultCallout = document.getElementById(resultCalloutId);
   if (!body || !resultCallout) return;
   const scenarios = M14A_SCENARIOS.filter((s) => scenarioKeys.includes(s.key));
   const hasNorm = Number.isFinite(norm);
+  const showWeighted = pct && ['best', 'middel', 'worst'].every((k) => scenarioKeys.includes(k));
 
   const rowsData = DISTANCES.map((d) => ({
     d,
@@ -349,7 +376,20 @@ function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm,
       const exceed = diff > 0;
       return `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${value.toFixed(1)} dB(A) (${diff >= 0 ? '+' : ''}${diff.toFixed(1)})</td>`;
     }).join('');
-    return `<tr><td>${d} m</td>${cells}</tr>`;
+    let weightedCell = '';
+    if (showWeighted) {
+      const weighted = m14aWeightedValue(rowScenarios, metricKey, pct);
+      if (weighted == null) {
+        weightedCell = '<td class="empty-row">&mdash;</td>';
+      } else if (!hasNorm) {
+        weightedCell = `<td>${weighted.toFixed(1)} dB(A)</td>`;
+      } else {
+        const diff = weighted - norm;
+        const exceed = diff > 0;
+        weightedCell = `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${weighted.toFixed(1)} dB(A) (${diff >= 0 ? '+' : ''}${diff.toFixed(1)})</td>`;
+      }
+    }
+    return `<tr><td>${d} m</td>${cells}${weightedCell}</tr>`;
   }).join('');
 
   if (!hasNorm) {
@@ -367,6 +407,16 @@ function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm,
     const minOk = okDistances.length ? Math.min(...okDistances) : null;
     return { label: s.label, minOk };
   });
+  if (showWeighted) {
+    const okDistances = rowsData
+      .filter((r) => {
+        const weighted = m14aWeightedValue(r.scenarios, metricKey, pct);
+        return weighted != null && weighted <= norm;
+      })
+      .map((r) => r.d);
+    const minOk = okDistances.length ? Math.min(...okDistances) : null;
+    summary.push({ label: `Kansgewogen jaargemiddelde (best ${pct.best.toFixed(0)}% / middel ${pct.middel.toFixed(0)}% / worst ${pct.worst.toFixed(0)}%)`, minOk });
+  }
   const summaryText = summary.map((s) => (
     s.minOk != null
       ? `${escapeHtml(s.label)}: vanaf ${s.minOk} m binnen norm`
@@ -404,10 +454,19 @@ function m14aRenderDayInfoTable(bodyId, resultCalloutId) {
 function renderModule14a() {
   const ldenNorm = Number(state.m14aLdenNorm);
   const nightNorm = Number(state.m14aNightNorm);
+  const pct = m14aScenarioPercentages();
 
-  m14aRenderTable('m14a-lden-table-body', 'm14a-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld)');
-  m14aRenderTable('m14a-night-table-body', 'm14a-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode)');
+  m14aRenderTable('m14a-lden-table-body', 'm14a-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld)', pct);
+  m14aRenderTable('m14a-night-table-body', 'm14a-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode)', pct);
   m14aRenderDayInfoTable('m14a-day-table-body', 'm14a-day-result-callout');
+
+  const pctCallout = document.getElementById('m14a-pct-callout');
+  if (pctCallout) {
+    const locLabel = pct.anchor.isDefault
+      ? 'geen turbine geplaatst op de kaart in Module 3 \u2014 daarom is De Bilt als standaard inland-referentie gebruikt'
+      : `de turbinelocatie(s) uit Module 3 (${pct.distKm.toFixed(0)} km tot de kust)`;
+    pctCallout.innerHTML = `<strong>Kansgewogen jaargemiddelde \u2014 gebruikte kansen:</strong> best case ${pct.best.toFixed(0)}%, middenscenario ${pct.middel.toFixed(0)}%, worst case ${pct.worst.toFixed(0)}% van de nachten per jaar. Gebaseerd op ${locLabel} en de ingestelde geostrofische wind in Module 7 (U<sub>geo</sub> = ${state.m7Ugeo} m/s). Wijzig je de turbinelocatie (Module 3) of U<sub>geo</sub> (Module 7), dan werkt deze weging hier automatisch mee door.`;
+  }
 }
 
 function initModule14a() {
