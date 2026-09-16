@@ -728,6 +728,12 @@ const turbineMarkers3a = new Map();
 const turbineWindArrows3a = new Map();
 const nearestHouseMarkers3a = new Map(); // id -> { marker: L.Marker, line: L.Polyline } — dichtstbijzijnde BAG-woning per turbine (Module 1 minimale-afstandstoets)
 let nextTurbine3aId = 1;
+// Id van de turbine die momenteel actief wordt gesleept (of null). Zolang dit gezet is, mag
+// selectTurbine3a() het icoon van DEZE marker niet vervangen: marker.setIcon() bouwt het
+// icoon-DOM-element (en Leaflet's interne Draggable-instantie erop) opnieuw op, wat een actieve
+// sleepbeweging direct afbreekt (de browser blijft muisbewegingen sturen naar een inmiddels
+// losgekoppeld/vervangen element). Zie dragstart/dragend-handlers in addTurbine3a().
+let draggingTurbineId3a = null;
 
 // Eén neutrale, donkere kleur i.p.v. rood/groen — vorm (pijlpunt vs. open cirkel) blijft het
 // enige onderscheid tussen downwind en upwind, zodat de pijl niet meer visueel botst met
@@ -925,7 +931,7 @@ function addTurbine3a(lat, lng) {
   // Slepen: live, goedkope update tijdens het slepen (positie + pijl + eigen ringen + eventuele
   // lijn naar de dichtstbijzijnde woning); de volledige render()/BAG-hertoets pas na loslaten,
   // zodat dit niet bij elke muisbeweging een netwerkverzoek of volledige DOM-herbouw veroorzaakt.
-  marker.on('dragstart', () => { selectTurbine3a(id); });
+  marker.on('dragstart', () => { draggingTurbineId3a = id; selectTurbine3a(id); });
   marker.on('drag', (e) => {
     const ll = e.target.getLatLng();
     turbine.lat = ll.lat;
@@ -951,6 +957,8 @@ function addTurbine3a(lat, lng) {
       if (arrowMarker) arrowMarker.setLatLng([lat, lng]);
       setLocStatus3a('Een turbine kan niet buiten Nederland worden geplaatst — verplaatsing ongedaan gemaakt.', 'error');
     }
+    draggingTurbineId3a = null;
+    selectTurbine3a(id); // icoon van de zojuist gesleepte marker alsnog correct (opnieuw) zetten
     render();
     m1RunMinAfstandCheck();
   });
@@ -997,7 +1005,10 @@ function clearAllTurbines3a() {
 
 function selectTurbine3a(id) {
   state.selectedTurbineId3a = id;
-  turbineMarkers3a.forEach((marker, mid) => marker.setIcon(turbineIcon(mid === id)));
+  turbineMarkers3a.forEach((marker, mid) => {
+    if (mid === draggingTurbineId3a) return; // niet aanraken: zou een actieve sleepbeweging afbreken
+    marker.setIcon(turbineIcon(mid === id));
+  });
   render();
 }
 
