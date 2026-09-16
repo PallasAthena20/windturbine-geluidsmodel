@@ -153,6 +153,9 @@ const state = {
   category: 'hoorbaar', turbines: [], selectedTurbineId: null,
   cumDistance: 500, cumShowReceptors: false,
   normPreset: 'oud', normCustomLnight: 41,
+  // Module 1: minimale afstand turbine-woning (knop met vaste keuzes) — getoetst in Module 3
+  // via een live BAG-check (dichtstbijzijnde woning per geplaatste turbine, zie script.js §M1min.
+  m1MinAfstandHuis: null, m1MinAfstandResults: null, m1MinAfstandFetching: false, m1MinAfstandError: null,
   // Module 3a: volledig eigen turbine-invoer en dag/nacht — onafhankelijk van Module 2/5 hierboven.
   // state.category is BEWUST gedeeld met Module 3 (zie category-tabs-3a), net als scenario/curtailment/windBearing/lwa.
   turbines3a: [], selectedTurbineId3a: null, daynight3a: 'dag',
@@ -219,6 +222,8 @@ const outLaagfrequent = document.getElementById('out-laagfrequent');
 const outInfrasoon = document.getElementById('out-infrasoon');
 const octaveTableBody = document.querySelector('#octave-table tbody');
 const offsetFormula = document.getElementById('offset-formula');
+const m1MinAfstandSelect = document.getElementById('m1-minafstand-select');
+const m3aMinAfstandCallout = document.getElementById('m3a-minafstand-callout');
 const windLabel = document.getElementById('wind-label');
 const arrowGroup = document.getElementById('arrow-group');
 const daynightToggle = document.getElementById('daynight-toggle');
@@ -882,6 +887,7 @@ function addTurbine3a(lat, lng) {
 
   selectTurbine3a(id);
   render();
+  m1RunMinAfstandCheck();
 }
 
 function removeTurbine3a(id) {
@@ -896,6 +902,7 @@ function removeTurbine3a(id) {
     state.selectedTurbineId3a = state.turbines3a.length ? state.turbines3a[state.turbines3a.length - 1].id : null;
   }
   render();
+  m1RunMinAfstandCheck();
 }
 
 function clearAllTurbines3a() {
@@ -908,6 +915,7 @@ function clearAllTurbines3a() {
   state.turbines3a = [];
   state.selectedTurbineId3a = null;
   render();
+  m1RunMinAfstandCheck();
 }
 
 function selectTurbine3a(id) {
@@ -1750,6 +1758,102 @@ async function m8FetchAddressesForTurbine(turbine, radiusM) {
 
 function m8TurbineSnapshot() {
   return state.turbines3a.map((t) => `${t.id}:${t.lat.toFixed(5)},${t.lng.toFixed(5)}`).join('|');
+}
+
+// ---------- Module 1: minimale afstand turbine-woning — live BAG-toets, gebruikt/getoond in Module 3 ----------
+// Herbruikt dezelfde BAG-ophaalfunctie als Module 8 (m8FetchAddressesForTurbine), maar met de
+// gekozen minimumafstand als straal (kleiner dan de vaste 5000 m van Module 8) en zoekt per
+// turbine alleen de dichtstbijzijnde woning — geen ringen/telling, uitsluitend een ja/nee-toets.
+function m1MinAfstandSnapshot() {
+  return state.turbines3a.map((t) => `${t.id}:${t.lat.toFixed(5)},${t.lng.toFixed(5)}`).join('|') + '@' + (state.m1MinAfstandHuis || 'geen');
+}
+
+async function m1FetchNearestHouseForTurbine(turbine, radiusM) {
+  const { addresses } = await m8FetchAddressesForTurbine(turbine, radiusM);
+  let nearest = null;
+  addresses.forEach((a) => {
+    const d = haversineMeters(turbine.lat, turbine.lng, a.lat, a.lon);
+    if (nearest == null || d < nearest) nearest = d;
+  });
+  return nearest; // null = geen BAG-adres binnen radiusM gevonden
+}
+
+async function m1RunMinAfstandCheck() {
+  if (!state.m1MinAfstandHuis || state.turbines3a.length === 0) {
+    state.m1MinAfstandResults = null;
+    state.m1MinAfstandError = null;
+    state.m1MinAfstandFetching = false;
+    renderMinAfstandCallout3a();
+    return;
+  }
+  const snapshot = m1MinAfstandSnapshot();
+  state.m1MinAfstandFetching = true;
+  state.m1MinAfstandError = null;
+  renderMinAfstandCallout3a();
+  try {
+    const results = new Map();
+    for (const t of state.turbines3a) {
+      const nearest = await m1FetchNearestHouseForTurbine(t, state.m1MinAfstandHuis);
+      results.set(t.id, nearest);
+    }
+    if (m1MinAfstandSnapshot() !== snapshot) return; // instelling/turbines gewijzigd tijdens ophalen — resultaat is verouderd
+    state.m1MinAfstandResults = results;
+  } catch (e) {
+    state.m1MinAfstandError = 'Controle van de minimale afstand (BAG bij PDOK) is mislukt. Probeer het later opnieuw.';
+  } finally {
+    state.m1MinAfstandFetching = false;
+    renderMinAfstandCallout3a();
+  }
+}
+
+function renderMinAfstandCallout3a() {
+  if (typeof renderModule13 === 'function') renderModule13();
+  if (!m3aMinAfstandCallout) return;
+  if (!state.m1MinAfstandHuis || state.turbines3a.length === 0) {
+    m3aMinAfstandCallout.style.display = 'none';
+    m3aMinAfstandCallout.classList.remove('danger', 'ok');
+    return;
+  }
+  if (state.m1MinAfstandFetching) {
+    m3aMinAfstandCallout.style.display = '';
+    m3aMinAfstandCallout.classList.remove('danger', 'ok');
+    m3aMinAfstandCallout.textContent = `Bezig met toetsen van de afstand tot de dichtstbijzijnde woning (BAG bij PDOK) t.o.v. de ingestelde minimale afstand van ${state.m1MinAfstandHuis} m...`;
+    return;
+  }
+  if (state.m1MinAfstandError) {
+    m3aMinAfstandCallout.style.display = '';
+    m3aMinAfstandCallout.classList.add('danger');
+    m3aMinAfstandCallout.classList.remove('ok');
+    m3aMinAfstandCallout.textContent = state.m1MinAfstandError;
+    return;
+  }
+  if (!state.m1MinAfstandResults) {
+    m3aMinAfstandCallout.style.display = 'none';
+    return;
+  }
+  const violations = [];
+  state.turbines3a.forEach((t) => {
+    const nearest = state.m1MinAfstandResults.get(t.id);
+    if (nearest != null && nearest < state.m1MinAfstandHuis) violations.push({ id: t.id, nearest });
+  });
+  m3aMinAfstandCallout.style.display = '';
+  if (violations.length === 0) {
+    m3aMinAfstandCallout.classList.remove('danger');
+    m3aMinAfstandCallout.classList.add('ok');
+    m3aMinAfstandCallout.textContent = `Ingestelde minimale afstand: ${state.m1MinAfstandHuis} m (Module 1). Alle geplaatste turbines staan op minstens deze afstand van de dichtstbijzijnde bekende BAG-woning — geen overtreding.`;
+  } else {
+    m3aMinAfstandCallout.classList.add('danger');
+    m3aMinAfstandCallout.classList.remove('ok');
+    const lines = violations.map((v) => `Turbine #${v.id} staat op circa ${Math.round(v.nearest)} m van de dichtstbijzijnde woning — dat is minder dan de ingestelde minimale afstand van ${state.m1MinAfstandHuis} m.`);
+    m3aMinAfstandCallout.innerHTML = `<strong>⚠ Minimale afstand niet gehaald (ingesteld op ${state.m1MinAfstandHuis} m in Module 1):</strong><br>${lines.map(escapeHtml).join('<br>')}<br>Verplaats de betreffende turbine(s) of verlaag de minimale afstand.`;
+  }
+}
+
+if (m1MinAfstandSelect) {
+  m1MinAfstandSelect.addEventListener('change', () => {
+    state.m1MinAfstandHuis = m1MinAfstandSelect.value ? Number(m1MinAfstandSelect.value) : null;
+    m1RunMinAfstandCheck();
+  });
 }
 
 async function m8RunFetch() {
@@ -3565,7 +3669,17 @@ function m13Readiness() {
   const hasBag = !!state.m8AddressData;
   const bagStale = hasBag && state.m8AddressData.turbineSnapshot !== m8TurbineSnapshot();
   const hasM12 = state.m12Groups.length > 0;
-  return { nTurbines, norm, normOk, hasBag, bagStale, hasM12 };
+  // Module 1: minimale afstand turbine-woning — de live BAG-toets uit Module 3 (state.m1MinAfstandResults)
+  // wordt hier hergebruikt zodat het rapport dezelfde overtredingen toont als het scherm, zonder een
+  // eigen, tweede BAG-ophaling te starten.
+  const minAfstand = state.m1MinAfstandHuis;
+  const minAfstandViolations = (minAfstand && state.m1MinAfstandResults)
+    ? state.turbines3a
+        .map((t) => ({ id: t.id, nearest: state.m1MinAfstandResults.get(t.id) }))
+        .filter((v) => v.nearest != null && v.nearest < minAfstand)
+    : [];
+  const minAfstandChecked = !!(minAfstand && state.m1MinAfstandResults && !state.m1MinAfstandFetching);
+  return { nTurbines, norm, normOk, hasBag, bagStale, hasM12, minAfstand, minAfstandViolations, minAfstandChecked };
 }
 
 function m13StatusMessages() {
@@ -3576,6 +3690,8 @@ function m13StatusMessages() {
   if (r.nTurbines > 0 && r.normOk && !r.hasBag) msgs.push('Nog geen BAG-woningen opgehaald bij Module 8 — het rapport toont zonder die stap geen woningen-, bewoners-, hinder-, zorgkosten- of DALY-cijfers.');
   if (r.hasBag && r.bagStale) msgs.push('De turbine(s) zijn gewijzigd sinds de laatste BAG-ophaling bij Module 8 — haal opnieuw op voor cijfers die bij de huidige plaatsing passen.');
   if (!r.hasM12) msgs.push('Nog geen turbinegroep toegevoegd bij Module 12 — zonder investeringscijfers ontbreekt de vergelijking maatschappelijke kosten vs. investeringskosten in het rapport (de rest van het rapport werkt wel).');
+  if (r.minAfstand && !r.minAfstandChecked) msgs.push(`In Module 1 is een minimale afstand van ${r.minAfstand} m ingesteld, maar de BAG-toets bij Module 3 loopt nog of is nog niet gestart — wacht tot die klaar is voor een betrouwbaar rapport.`);
+  if (r.minAfstand && r.minAfstandChecked && r.minAfstandViolations.length > 0) msgs.push(`Let op: bij de ingestelde minimale afstand van ${r.minAfstand} m (Module 1) staat/staan ${r.minAfstandViolations.length} turbine(s) dichter bij een woning dan toegestaan — dit wordt ook als waarschuwing in het rapport getoond.`);
   return msgs;
 }
 
@@ -3707,6 +3823,16 @@ function m13BuildReportHtml(mapImages) {
   const m12Banner = !hasM12
     ? `<div class="rp-callout rp-warn"><strong>Let op — geen investeringscijfers:</strong> bij Module 12 is nog geen turbinegroep toegevoegd. De vergelijking maatschappelijke kosten vs. investeringskosten in dit rapport kan daardoor niet worden gemaakt.</div>`
     : '';
+
+  // Module 1: minimale afstand turbine-woning — toont in het rapport dezelfde live BAG-toets als
+  // Module 3 op het scherm (state.m1MinAfstandResults), zodat een overtreding ook hier zichtbaar is.
+  const minAfstandBanner = !r.minAfstand
+    ? ''
+    : (!r.minAfstandChecked
+        ? `<div class="rp-callout rp-warn"><strong>Let op — nog niet getoetst:</strong> in Module 1 is een minimale afstand van ${r.minAfstand} m ingesteld, maar de BAG-toets in Module 3 is nog niet (volledig) afgerond. Ga terug naar Module 3 en wacht tot de toetsing klaar is voordat je dit rapport gebruikt.</div>`
+        : (r.minAfstandViolations.length > 0
+            ? `<div class="rp-callout rp-warn"><strong>Let op — minimale afstand niet gehaald (ingesteld op ${r.minAfstand} m, Module 1):</strong> ${r.minAfstandViolations.map((v) => `turbine #${v.id} staat op circa ${Math.round(v.nearest)} m van de dichtstbijzijnde bekende BAG-woning`).join('; ')}. Bij een vergunningsaanvraag met deze minimumeis zou deze plaatsing niet zijn toegestaan.</div>`
+            : `<div class="rp-callout rp-ok"><strong>Minimale afstand gehaald:</strong> bij de ingestelde minimale afstand van ${r.minAfstand} m (Module 1) staat geen van de geplaatste turbines dichter bij een bekende BAG-woning dan toegestaan.</div>`));
 
   const turbineList = n > 0
     ? turbines.map((t, i) => `#${i + 1}: ${t.lat.toFixed(5)}, ${t.lng.toFixed(5)}`).join(' · ')
@@ -4204,6 +4330,7 @@ function m13BuildReportHtml(mapImages) {
   .rp-list li { margin-bottom: 6px; }
   .rp-callout { border-left: 4px solid #a3651b; background: #ecdcc4; border-radius: 4px; padding: 10px 14px; margin: 10px 0 16px; font-size: 9.6pt; }
   .rp-callout.rp-warn { border-left-color: #a1332f; background: #ecd4cf; }
+  .rp-callout.rp-ok { border-left-color: #3d7a4a; background: #d6e5d5; }
   .rp-sources { margin: 8px 0 0 18px; font-size: 9pt; }
   .rp-sources li { margin-bottom: 4px; }
   code { font-family: 'Courier New', monospace; background: #ece8de; padding: 1px 4px; border-radius: 3px; font-size: 0.92em; }
@@ -4239,6 +4366,7 @@ function m13BuildReportHtml(mapImages) {
     <div class="rp-sub">Gegenereerd op ${genDate} om ${genTime} · Bronvermogen ${state.lwa.toFixed(1)} dB(A) · ${n} turbine(s): ${escapeHtml(turbineList)}</div>
   </div>
   ${warningBanner}
+  ${minAfstandBanner}
   ${summarySection}
   ${nightSection}
   ${basisSection}

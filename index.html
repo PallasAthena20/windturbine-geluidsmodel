@@ -90,6 +90,26 @@
         </details>
       </div>
     </div>
+
+    <div class="cum-controls" style="margin-top:var(--space-5);">
+      <div class="cum-field">
+        <label for="m1-minafstand-select">Minimale afstand turbine&ndash;woning</label>
+        <select id="m1-minafstand-select">
+          <option value="">Geen minimumeis</option>
+          <option value="400">400 m</option>
+          <option value="500">500 m</option>
+          <option value="600">600 m</option>
+          <option value="700">700 m</option>
+          <option value="750">750 m</option>
+          <option value="800">800 m</option>
+          <option value="900">900 m</option>
+          <option value="1000">1000 m</option>
+          <option value="1200">1200 m</option>
+          <option value="1300">1300 m</option>
+        </select>
+      </div>
+    </div>
+    <span class="hint">Kies hier de minimaal vereiste afstand tussen een turbine en een woning. Module 3 (kaart) toetst elke geplaatste turbine automatisch aan deze afstand via de werkelijke, dichtstbijzijnde BAG-woning en waarschuwt wanneer die afstand niet gehaald wordt.</span>
   </section>
 
   <!-- MODULE 2 -->
@@ -243,6 +263,7 @@
           </div>
           <p class="loc-status" id="loc-status-3a" role="status" aria-live="polite"></p>
         </div>
+        <p class="callout" id="m3a-minafstand-callout" style="display:none;"></p>
         <div class="map-toolbar">
           <span class="turbine-count" id="turbine-count-3a">0 / 8 turbines geplaatst</span>
           <span class="wind-indicator" id="m3a-wind-indicator"></span>

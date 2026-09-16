@@ -418,6 +418,8 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 #infrasound-callout { display: none; margin-top: var(--space-4); margin-bottom: 0; }
 #infrasound-callout.visible { display: block; }
 #infrasound-callout.danger { background: var(--color-error-highlight); border-left-color: var(--color-error); }
+#m3a-minafstand-callout.danger { background: var(--color-error-highlight); border-left-color: var(--color-error); }
+#m3a-minafstand-callout.ok { background: var(--color-success-highlight); border-left-color: var(--color-success); }
 
 .readout-mini { display: flex; flex-direction: column; gap: var(--space-2); background: var(--color-primary-highlight); border-radius: var(--radius-lg); padding: var(--space-5); }
 .readout-mini .rm-title { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--color-primary); }
