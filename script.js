@@ -211,8 +211,9 @@ function m14LwaOffsetForSpeed(v) {
 // alle 12 windroos-sectoren x 4 windsnelheidsklassen, met kans-gewogen amplificatie (zie hierboven).
 // Hergebruikt xFromAngle/ADIV_120/CATEGORY[...].mFunc/computeCategoryLw — dezelfde propagatielogica
 // als Module 3-5, i.p.v. een losse/afwijkende formule.
-function m14PeriodLevel(d, bearingToReceiver, lwaBase, pAmplified, amplificationDb) {
-  const cat = CATEGORY.hoorbaar; // Lden/Lnight zijn per definitie dB(A)-maten
+function m14PeriodLevel(d, bearingToReceiver, lwaBase, pAmplified, amplificationDb, categoryKey) {
+  const catKey = categoryKey || 'hoorbaar'; // default: Lden/Lnight zijn per definitie dB(A)-maten (hoorbaar)
+  const cat = CATEGORY[catKey];
   const contributions = [];
   M14_WINDROOS.forEach((sector) => {
     const downwindBearing = (sector.bearing + 180) % 360;
@@ -222,7 +223,7 @@ function m14PeriodLevel(d, bearingToReceiver, lwaBase, pAmplified, amplification
       if (!freq) return;
       const offset = m14LwaOffsetForSpeed(bin.v);
       if (offset == null) return; // onder cut-in: geen bijdrage
-      const lwCat = computeCategoryLw(lwaBase + offset).hoorbaar;
+      const lwCat = computeCategoryLw(lwaBase + offset)[catKey];
       const base = lwCat - ADIV_120 - cat.mFunc(x) * Math.log10(d / 120);
       const sumPow = (1 - pAmplified) * Math.pow(10, base / 10) + pAmplified * Math.pow(10, (base + amplificationDb) / 10);
       contributions.push({ freq, level: 10 * Math.log10(sumPow) });
@@ -309,8 +310,8 @@ const M14A_SCENARIOS = [
   { key: 'worst', label: 'Worst case' },
 ];
 
-function m14aScenarioLevels(d, bearingToReceiver, lwaBase, scenarioKey) {
-  const base = m14PeriodLevel(d, bearingToReceiver, lwaBase, 0, 0);
+function m14aScenarioLevels(d, bearingToReceiver, lwaBase, scenarioKey, categoryKey) {
+  const base = m14PeriodLevel(d, bearingToReceiver, lwaBase, 0, 0, categoryKey);
   if (base == null) return null;
   const addonDag = combinedFactors(d, scenarioKey, 'dag', false).total;
   const addonNacht = combinedFactors(d, scenarioKey, 'nacht', false).total;
@@ -354,27 +355,29 @@ function m14aWeightedValue(rowScenarios, metricKey, pct) {
 // alle drie scenario's aanwezig zijn) een kansgewogen jaargemiddelde-kolom, elke cel getoetst aan
 // `norm` (of ongetoetst als norm ongeldig is). `metricKey` selecteert Lden/Lnacht/Ldag uit het
 // resultaat van m14aScenarioLevels. `pct` = m14aScenarioPercentages() resultaat.
-function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm, metricLabelForSummary, pct) {
+function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm, metricLabelForSummary, pct, categoryKey, indicative) {
   const body = document.getElementById(bodyId);
   const resultCallout = document.getElementById(resultCalloutId);
   if (!body || !resultCallout) return;
+  const catKey = categoryKey || 'hoorbaar';
+  const unit = CATEGORY[catKey].unit;
   const scenarios = M14A_SCENARIOS.filter((s) => scenarioKeys.includes(s.key));
   const hasNorm = Number.isFinite(norm);
   const showWeighted = pct && ['best', 'middel', 'worst'].every((k) => scenarioKeys.includes(k));
 
   const rowsData = DISTANCES.map((d) => ({
     d,
-    scenarios: scenarios.map((s) => ({ ...s, result: m14aScenarioLevels(d, state.m14aBearing, state.lwa, s.key) })),
+    scenarios: scenarios.map((s) => ({ ...s, result: m14aScenarioLevels(d, state.m14aBearing, state.lwa, s.key, catKey) })),
   }));
 
   body.innerHTML = rowsData.map(({ d, scenarios: rowScenarios }) => {
     const cells = rowScenarios.map(({ result }) => {
       if (!result) return '<td class="empty-row">&mdash;</td>';
       const value = result[metricKey];
-      if (!hasNorm) return `<td>${value.toFixed(1)} dB(A)</td>`;
+      if (!hasNorm) return `<td>${value.toFixed(1)} ${unit}</td>`;
       const diff = value - norm;
       const exceed = diff > 0;
-      return `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${value.toFixed(1)} dB(A) (${diff >= 0 ? '+' : ''}${diff.toFixed(1)})</td>`;
+      return `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${value.toFixed(1)} ${unit} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)})</td>`;
     }).join('');
     let weightedCell = '';
     if (showWeighted) {
@@ -382,11 +385,11 @@ function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm,
       if (weighted == null) {
         weightedCell = '<td class="empty-row">&mdash;</td>';
       } else if (!hasNorm) {
-        weightedCell = `<td>${weighted.toFixed(1)} dB(A)</td>`;
+        weightedCell = `<td>${weighted.toFixed(1)} ${unit}</td>`;
       } else {
         const diff = weighted - norm;
         const exceed = diff > 0;
-        weightedCell = `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${weighted.toFixed(1)} dB(A) (${diff >= 0 ? '+' : ''}${diff.toFixed(1)})</td>`;
+        weightedCell = `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${weighted.toFixed(1)} ${unit} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)})</td>`;
       }
     }
     return `<tr><td>${d} m</td>${cells}${weightedCell}</tr>`;
@@ -423,27 +426,32 @@ function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm,
       : `${escapeHtml(s.label)}: op geen van de getoonde afstanden binnen norm`
   )).join(' \u2014 ');
 
-  resultCallout.innerHTML = `<strong>${metricLabelForSummary}, norm ${norm.toFixed(1)} dB(A):</strong> ${summaryText}. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14aBearing)}.`;
+  const normLabel = indicative
+    ? `indicatief getoetst aan jouw ingevoerde norm van ${norm.toFixed(1)} dB(A) (er bestaat geen wettelijke jaargemiddelde-norm in ${unit})`
+    : `norm ${norm.toFixed(1)} dB(A)`;
+  resultCallout.innerHTML = `<strong>${metricLabelForSummary}, ${normLabel}:</strong> ${summaryText}. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14aBearing)}.`;
 }
 
 // Louter informatieve dagperiode-uitsplitsing (best case + middenscenario): er bestaat geen
 // zelfstandige, wettelijke dagnorm in dit model \u2014 de dagperiode telt alleen mee binnen de
 // Lden-jaargemiddelde toetsing (tabel 1). Toont daarom kale Ldag-waarden zonder norm-toetsing.
-function m14aRenderDayInfoTable(bodyId, resultCalloutId) {
+function m14aRenderDayInfoTable(bodyId, resultCalloutId, categoryKey) {
   const body = document.getElementById(bodyId);
   const resultCallout = document.getElementById(resultCalloutId);
   if (!body || !resultCallout) return;
+  const catKey = categoryKey || 'hoorbaar';
+  const unit = CATEGORY[catKey].unit;
   const scenarios = M14A_SCENARIOS.filter((s) => ['best', 'middel'].includes(s.key));
 
   const rowsData = DISTANCES.map((d) => ({
     d,
-    scenarios: scenarios.map((s) => ({ ...s, result: m14aScenarioLevels(d, state.m14aBearing, state.lwa, s.key) })),
+    scenarios: scenarios.map((s) => ({ ...s, result: m14aScenarioLevels(d, state.m14aBearing, state.lwa, s.key, catKey) })),
   }));
 
   body.innerHTML = rowsData.map(({ d, scenarios: rowScenarios }) => {
     const cells = rowScenarios.map(({ result }) => {
       if (!result) return '<td class="empty-row">&mdash;</td>';
-      return `<td>${result.Ldag.toFixed(1)} dB(A)</td>`;
+      return `<td>${result.Ldag.toFixed(1)} ${unit}</td>`;
     }).join('');
     return `<tr><td>${d} m</td>${cells}</tr>`;
   }).join('');
@@ -456,9 +464,20 @@ function renderModule14a() {
   const nightNorm = Number(state.m14aNightNorm);
   const pct = m14aScenarioPercentages();
 
-  m14aRenderTable('m14a-lden-table-body', 'm14a-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld)', pct);
-  m14aRenderTable('m14a-night-table-body', 'm14a-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode)', pct);
-  m14aRenderDayInfoTable('m14a-day-table-body', 'm14a-day-result-callout');
+  m14aRenderTable('m14a-lden-table-body', 'm14a-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld)', pct, 'hoorbaar', false);
+  m14aRenderTable('m14a-night-table-body', 'm14a-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode)', pct, 'hoorbaar', false);
+  m14aRenderDayInfoTable('m14a-day-table-body', 'm14a-day-result-callout', 'hoorbaar');
+
+  // Laagfrequent geluid (dB(Lin), ongewogen) \u2014 zelfde 3-tabelstructuur, norm alleen indicatief
+  // (er bestaat geen wettelijke Lden/Lnight-norm in dB(Lin); zie Module 8/8a-conventie).
+  m14aRenderTable('m14a-lf-lden-table-body', 'm14a-lf-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld, laagfrequent)', pct, 'laagfrequent', true);
+  m14aRenderTable('m14a-lf-night-table-body', 'm14a-lf-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode, laagfrequent)', pct, 'laagfrequent', true);
+  m14aRenderDayInfoTable('m14a-lf-day-table-body', 'm14a-lf-day-result-callout', 'laagfrequent');
+
+  // Infrasoon geluid (dB(G)) \u2014 zelfde 3-tabelstructuur, norm alleen indicatief.
+  m14aRenderTable('m14a-inf-lden-table-body', 'm14a-inf-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld, infrasoon)', pct, 'infrasoon', true);
+  m14aRenderTable('m14a-inf-night-table-body', 'm14a-inf-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode, infrasoon)', pct, 'infrasoon', true);
+  m14aRenderDayInfoTable('m14a-inf-day-table-body', 'm14a-inf-day-result-callout', 'infrasoon');
 
   const pctCallout = document.getElementById('m14a-pct-callout');
   if (pctCallout) {
