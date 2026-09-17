@@ -67,7 +67,11 @@ function computeCategoryLw(lwaInput) {
   // de A-weging ook toepast op laagfrequent en infrasoon geluid.
   const laagfrequentA = logSum(CATEGORY_BANDS.laagfrequent.map(f => lwa[BAND_INDEX[f]]));
   const infrasoonA = logSum(CATEGORY_BANDS.infrasoon.map(f => lwa[BAND_INDEX[f]]));
-  return { hoorbaar, laagfrequent, infrasoon, laagfrequentA, infrasoonA, lwUnweighted, lwa, delta };
+  return { hoorbaar, laagfrequent, infrasoon, laagfrequentA, infrasoonA, lwUnweighted, lwa, delta,
+    // Defensieve fallback (zie CATEGORY['laagfrequent-vercammen'] hierboven) zodat generieke
+    // computeCategoryLw(...)[categoryKey]-lookups een zinnig scalair getal terugkrijgen; de
+    // eigenlijke per-tertsband Vercammen-berekening gebeurt via computeTertsbandLw() hieronder.
+    'laagfrequent-vercammen': laagfrequent };
 }
 
 // ---------- Directional propagation model ----------
@@ -96,6 +100,16 @@ const CATEGORY = {
     range: '<20 Hz', domainMin: 40, domainMax: 95, mFunc: mInfrasoon, threshold: 90,
     note: 'Nauwelijks asymmetrie, verwaarloosbare atmosferische demping — kan zich >10 km verspreiden.',
   },
+};
+
+// Defensieve fallback-entry: 'laagfrequent-vercammen' is GEEN vierde, onafhankelijke fysieke
+// geluidscategorie (zie de tertsband-toetsing hieronder voor de eigenlijke berekening) — dit is
+// uitsluitend een vangnet zodat generieke code die CATEGORY[state.category] opzoekt (bv. Module 5's
+// ringlegenda-tekst) niet crasht wanneer deze tab actief is. Domain/mFunc zijn gelijk aan 'laagfrequent'.
+CATEGORY['laagfrequent-vercammen'] = {
+  key: 'laagfrequent-vercammen', label: 'Laagfrequent geluid – Vercammen', shortLabel: 'Vercammen', unit: 'dB(Lin)',
+  range: '20–200 Hz · per tertsband', domainMin: 25, domainMax: 85, mFunc: mLaagfrequent,
+  note: 'Zelfde laagfrequente geluid als de \u201cLaagfrequent\u201d-tab, maar hier per tertsband getoetst aan de Vercammen-curve i.p.v. als één dB(Lin)-getal aan de Lnight-norm.',
 };
 
 function xFromAngle(bearingDeg, downwindBearingDeg) {
@@ -139,6 +153,14 @@ function addonAt(d, state) {
 }
 
 function lpAt(d, x, categoryKey, lwCat, state) {
+  // Laagfrequent-Vercammen is een per-tertsband toetsing, niet één scalair geluidsniveau — generieke
+  // aanroepers (kaart-tooltip, Module 5) krijgen hier het niveau van de band met de grootste
+  // overschrijdingsmarge t.o.v. zijn eigen Vercammen-grenswaarde; de echte 9-bands tabel in Module 3
+  // (renderVercammenTable3a) is het eigenlijke resultaat van deze tab.
+  if (categoryKey === 'laagfrequent-vercammen') {
+    const worst = vercammenWorstBand(d, x, state, state.lwa);
+    return worst ? worst.level : NaN;
+  }
   const cat = CATEGORY[categoryKey];
   const lpRef120 = lwCat - ADIV_120;
   const base = lpRef120 - cat.mFunc(x) * Math.log10(d / 120);
@@ -150,6 +172,73 @@ function lpAt(d, x, categoryKey, lwCat, state) {
 function computeAbsoluteWorstCaseTotal(d) {
   // 's nachts, scenario 'worst', curtailment actief — zie combinedFactors() voor de max-i.p.v.-som-logica.
   return combinedFactors(d, 'worst', 'nacht', true).total;
+}
+
+// ---------- Laagfrequent geluid – Vercammen (per-tertsband toetsing) ----------
+// De "Laagfrequent"-tab hierboven test één geaggregeerd dB(Lin)-getal (som van de octaafbanden
+// 31,5/63/125 Hz) tegen de (indicatieve) dB(A)-Lnight-norm. De Vercammen-curve — gebruikt door de
+// Raad van State om laagfrequent windturbinegeluid te beoordelen (zie o.a. ECLI:NL:RVS:2021:1681,
+// https://www.commissiemer.nl/english/jurisprudence/ECLI:NL:RVS:2021:1681) — is echter GEEN
+// dB(Lin)-totaalgrens, maar een reeks aparte grenswaarden PER TERTSBAND van 20 t/m 125 Hz
+// (NSG-onderzoeksrapport, https://pas.commissiemer.nl/files/nl/3615/012687-3615-6-onderzoek-naar-
+// laagfrequent-geluid-ten-gevolge-van-windturbines.pdf; zie ook https://nsg.nl/nl/nsg-
+// richtlijn_laagfrequent_geluid.html). Dit blok bouwt daarom een aparte, per-tertsband versie van
+// dezelfde onderliggende fysieke geluidsenergie en toetst die aan de Vercammen-grenswaarden — als
+// EXTRA, aanvullende toetsing naast (niet in plaats van) de bestaande "Laagfrequent"-tab.
+const TERTSBAND_FREQS = [20, 25, 31.5, 40, 50, 63, 80, 100, 125];
+// Elke tertsband "leent" zijn energie van de octaafband waarin hij fysiek valt. Let op: 20 Hz valt
+// binnen de octaafband rond 16 Hz — die het model verder overal als "infrasoon" classificeert. Dat is
+// een bekende methodologische grens van de tertsband-indeling, geen fout: 20 Hz is de vaste ondergrens
+// van zowel de Vercammen-curve als de conventie "laagfrequent geluid = 20–200 Hz".
+const TERTSBAND_OCTAVE_MAP = { 20: 16, 25: 31.5, 31.5: 31.5, 40: 31.5, 50: 63, 63: 63, 80: 63, 100: 125, 125: 125 };
+// Elke octaafband bevat precies 3 tertsbanden; bij een (aannames van een) vlak spectrum binnen de
+// octaafband draagt elke tertsband 1/3 van de energie, oftewel 10·log10(3) ≈ 4,77 dB minder dan de
+// octaafband zelf. Dit is een schatting, geen meting — zie de methodologische kanttekening in de UI.
+const TERTS_SPLIT_DB = 10 * Math.log10(3);
+// Vercammen-grenswaarden per tertsband (dB, onweighted/Lin), uit het NSG-onderzoeksrapport (Vercammen/
+// NSG-tabel, zie bronverwijzing hierboven), zoals gebruikt in de Nederlandse jurisprudentie.
+const VERCAMMEN_CURVE = { 20: 71, 25: 65, 31.5: 60, 40: 55, 50: 50, 63: 46, 80: 42, 100: 39, 125: 36 };
+
+// Splitst het huidige bronvermogen (lwaInput) in een geschat dB(Lin)-bronniveau per tertsband.
+function computeTertsbandLw(lwaInput) {
+  const cat = computeCategoryLw(lwaInput);
+  const bands = {};
+  TERTSBAND_FREQS.forEach((freq) => {
+    const octave = TERTSBAND_OCTAVE_MAP[freq];
+    bands[freq] = cat.lwUnweighted[BAND_INDEX[octave]] - TERTS_SPLIT_DB;
+  });
+  return bands;
+}
+
+// Propagatie van één tertsband-bronniveau naar een ontvangpunt — identieke fysica (geometrische
+// divergentie + richtingsfunctie van de "laagfrequent"-categorie + scenario/curtailment-toeslag) als
+// lpAt(), maar toegepast op een los tertsband-niveau i.p.v. het geaggregeerde categorieniveau.
+function tertsbandLevelAt(d, x, lwBand, testState) {
+  const lpRef120 = lwBand - ADIV_120;
+  const base = lpRef120 - mLaagfrequent(x) * Math.log10(d / 120);
+  return base + addonAt(d, testState).total;
+}
+
+// Niveau, grenswaarde, marge en overschrijding voor alle 9 tertsbanden op één punt (afstand d, richting x).
+function vercammenBandsAt(d, x, testState, lwaInput) {
+  const bands = computeTertsbandLw(lwaInput);
+  return TERTSBAND_FREQS.map((freq) => {
+    const level = tertsbandLevelAt(d, x, bands[freq], testState);
+    const threshold = VERCAMMEN_CURVE[freq];
+    return { freq, level, threshold, margin: level - threshold, exceeds: level > threshold };
+  });
+}
+
+// Overschrijdt minstens één van de 9 tertsbanden zijn eigen Vercammen-grenswaarde op dit punt?
+function tertsbandExceedsAt(d, x, testState, lwaInput) {
+  return vercammenBandsAt(d, x, testState, lwaInput).some((b) => b.exceeds);
+}
+
+// De tertsband met de grootste (positieve) overschrijdingsmarge — gebruikt als representatief
+// "koptekst"-getal voor generieke, één-scalair-per-punt weergaves (kaart-tooltip, Module 5).
+function vercammenWorstBand(d, x, testState, lwaInput) {
+  const bands = vercammenBandsAt(d, x, testState, lwaInput);
+  return bands.reduce((worst, b) => (worst == null || b.margin > worst.margin ? b : worst), null);
 }
 
 // ---------- Module 14: formele Lden-schatting (uitbreidingsoptie) ----------
@@ -655,6 +744,9 @@ const legendCaption3a = document.getElementById('legend-caption-3a');
 const miniScenario3a = document.getElementById('mini-scenario-3a');
 const miniSub3a = document.getElementById('mini-sub-3a');
 const normTableBody3a = document.getElementById('norm-table-body-3a');
+const genericNormCard3a = document.getElementById('generic-norm-card-3a');
+const vercammenTableCard3a = document.getElementById('vercammen-table-card-3a');
+const vercammenTableBody3a = document.getElementById('vercammen-table-body-3a');
 
 // ---------- Static: octave table ----------
 (function fillOctaveTable() {
@@ -925,6 +1017,9 @@ function renderNormModule() {
   if (normAweightNote) {
     if (state.category === 'hoorbaar') {
       normAweightNote.style.display = 'none';
+    } else if (state.category === 'laagfrequent-vercammen') {
+      normAweightNote.style.display = '';
+      normAweightNote.innerHTML = `Deze tabel toetst het geaggregeerde dB(Lin)-niveau aan de hierboven gekozen dB(A)-afgeleide Lnight-waarde — een <strong>arbitrair indicatief referentiepunt</strong>, niet de Vercammen-curve. Voor de eigenlijke per-tertsband toetsing aan de Vercammen-grenswaarden, zie het aparte "Laagfrequent geluid – Vercammen"-blok in Module 3.`;
     } else {
       normAweightNote.style.display = '';
       normAweightNote.innerHTML = `De wettelijke norm is gedefinieerd in <strong>dB(A)</strong> (het hoorbare, A-gewogen geluid). Voor ${cat.shortLabel.toLowerCase()} geluid vervalt de A-weging en wordt hier getoetst in <strong>${cat.unit}</strong> — er bestaat geen formeel vastgestelde, direct vergelijkbare grenswaarde in deze eenheid; de hierboven gekozen dB(A)-norm dient uitsluitend als indicatief referentiepunt.`;
@@ -1387,20 +1482,33 @@ function ringsForTurbine3a(turbine, lwCat) {
   const cat = CATEGORY[state.category];
   // De dB-waarde bij hover volgt de dag/nacht-instelling van Module 3a zelf; scenario/curtailment/wind blijven gedeeld met Module 3.
   const synthState = { scenario: state.scenario, daynight: state.daynight3a, curtailment: state.curtailment, windBearing: state.windBearing };
+  const isVercammen = state.category === 'laagfrequent-vercammen';
   const circles = [];
   [...DISTANCES].reverse().forEach(d => {
-    const down = lpAt(d, 1, state.category, lwCat, synthState);
-    const cross = lpAt(d, 0, state.category, lwCat, synthState);
-    const up = lpAt(d, -1, state.category, lwCat, synthState);
     const circle = L.circle([turbine.lat, turbine.lng], {
       radius: d,
       color: RING_COLORS[d],
       weight: 2.5, opacity: 0.85, fill: false, interactive: true, renderer: mapRenderer3a,
     });
-    circle.bindTooltip(
-      `<div class="ring-tooltip"><strong>${d} m</strong><br>Downwind: ${down.toFixed(1)} ${cat.unit}<br>Zijwind: ${cross.toFixed(1)} ${cat.unit}<br>Upwind: ${up.toFixed(1)} ${cat.unit}</div>`,
-      { sticky: true, direction: 'top', className: 'ring-tooltip-wrap' }
-    );
+    if (isVercammen) {
+      // Voor Vercammen tonen we de tertsband met de grootste overschrijdingsmarge per richting, i.p.v. één scalair getal.
+      const fmtBand = (b) => b ? `${b.freq} Hz: ${b.level.toFixed(1)} dB(Lin) ${b.exceeds ? '(&#9650; boven grens ' + b.threshold + ')' : '(onder grens ' + b.threshold + ')'}` : '\u2014';
+      const down = vercammenWorstBand(d, 1, synthState, state.lwa);
+      const cross = vercammenWorstBand(d, 0, synthState, state.lwa);
+      const up = vercammenWorstBand(d, -1, synthState, state.lwa);
+      circle.bindTooltip(
+        `<div class="ring-tooltip"><strong>${d} m</strong> \u2014 meest kritieke tertsband<br>Downwind \u2014 ${fmtBand(down)}<br>Zijwind \u2014 ${fmtBand(cross)}<br>Upwind \u2014 ${fmtBand(up)}</div>`,
+        { sticky: true, direction: 'top', className: 'ring-tooltip-wrap' }
+      );
+    } else {
+      const down = lpAt(d, 1, state.category, lwCat, synthState);
+      const cross = lpAt(d, 0, state.category, lwCat, synthState);
+      const up = lpAt(d, -1, state.category, lwCat, synthState);
+      circle.bindTooltip(
+        `<div class="ring-tooltip"><strong>${d} m</strong><br>Downwind: ${down.toFixed(1)} ${cat.unit}<br>Zijwind: ${cross.toFixed(1)} ${cat.unit}<br>Upwind: ${up.toFixed(1)} ${cat.unit}</div>`,
+        { sticky: true, direction: 'top', className: 'ring-tooltip-wrap' }
+      );
+    }
     circles.push(circle);
   });
   return circles;
@@ -1422,7 +1530,9 @@ function buildRingLegend3a() {
   const cat = CATEGORY[state.category];
   ringLegend3a.innerHTML = DISTANCES.map(d => `<span class="ring-legend-item"><span class="ring-swatch" style="border-color:${RING_COLORS[d]}"></span>${d} m</span>`).join('');
   if (legendCaption3a) {
-    let txt = `Ringkleur toont de afstand tot de turbine (niet het geluidsniveau) \u2014 de ${cat.label.toLowerCase()} (${cat.unit}) per afstand en richting staat in de tabel hiernaast. Sleep een turbine-icoon op de kaart om de locatie aan te passen.`;
+    let txt = state.category === 'laagfrequent-vercammen'
+      ? `Ringkleur toont de afstand tot de turbine (niet het geluidsniveau) \u2014 hover over een ring voor de tertsband met de grootste overschrijdingsmarge t.o.v. de Vercammen-curve; de volledige toetsing per tertsband staat in de tabel hiernaast. Sleep een turbine-icoon op de kaart om de locatie aan te passen.`
+      : `Ringkleur toont de afstand tot de turbine (niet het geluidsniveau) \u2014 de ${cat.label.toLowerCase()} (${cat.unit}) per afstand en richting staat in de tabel hiernaast. Sleep een turbine-icoon op de kaart om de locatie aan te passen.`;
     if (state.m1MinAfstandHuis) {
       txt += ' Het huisicoon met stippellijn toont de dichtstbijzijnde woning die wordt getoetst aan de minimale afstand uit Module 1 (rood = te dichtbij, groen = voldoet).';
     }
@@ -1430,8 +1540,48 @@ function buildRingLegend3a() {
   }
 }
 
+function renderVercammenTable3a() {
+  if (!vercammenTableBody3a) return;
+  const selected = state.turbines3a.find(t => t.id === state.selectedTurbineId3a);
+  if (!selected) {
+    vercammenTableBody3a.innerHTML = `<tr><td colspan="7" class="empty-row">Plaats een turbine op de kaart hierboven om te toetsen.</td></tr>`;
+    return;
+  }
+  // Vaste toetsing: nacht, downwind (x=1) — dezelfde as/scenario-conventie als de bestaande Module 3-tabel.
+  const testState = { scenario: state.scenario, daynight: state.daynight3a, curtailment: state.curtailment, windBearing: state.windBearing };
+  vercammenTableBody3a.innerHTML = TERTSBAND_FREQS.map((freq) => {
+    const threshold = VERCAMMEN_CURVE[freq];
+    const cells = DISTANCES.map((d) => {
+      const bands = vercammenBandsAt(d, 1, testState, state.lwa);
+      const band = bands.find(b => b.freq === freq);
+      const cls = band.exceeds ? 'norm-exceed' : 'norm-ok';
+      const prefix = band.exceeds ? '&#9650; ' : '';
+      return `<td class="${cls}">${prefix}${band.level.toFixed(1)} dB(Lin)</td>`;
+    }).join('');
+    return `<tr><td>${freq} Hz<br><span class="hint" style="font-weight:400;">grens ${threshold} dB(Lin)</span></td>${cells}</tr>`;
+  }).join('');
+}
+
 function renderNormTable3a() {
   if (!normTableBody3a) return;
+
+  if (state.category === 'laagfrequent-vercammen') {
+    if (genericNormCard3a) genericNormCard3a.style.display = 'none';
+    if (vercammenTableCard3a) vercammenTableCard3a.style.display = '';
+    if (m3aContextCallout) {
+      const n = state.turbines3a.length;
+      if (n === 0) {
+        m3aContextCallout.textContent = 'Plaats minstens \u00e9\u00e9n turbine hierboven om te toetsen.';
+      } else {
+        m3aContextCallout.innerHTML = `${n} turbine${n === 1 ? '' : 's'} geplaatst \u2014 deze tabel toetst per tertsband aan de Vercammen-curve, niet aan de dB(A)-Lnight-norm hierboven.`;
+      }
+    }
+    renderVercammenTable3a();
+    return;
+  }
+  if (genericNormCard3a) genericNormCard3a.style.display = '';
+  if (vercammenTableCard3a) vercammenTableCard3a.style.display = 'none';
+
   const n = state.turbines3a.length;
   const norm = getActiveNorm3a();
   const cat = CATEGORY[state.category];
@@ -2417,6 +2567,44 @@ function m8CountExceedingUnique(scenarioKey, categoryKey, daynightKey, lwCatOver
   return seen.size;
 }
 
+// Mirrort m8ExceedanceRadiusX/m8AddressExceeds/m8CountExceedingUnique hierboven, maar getoetst aan de
+// Vercammen-tertsbandcurve i.p.v. de (Module 5-)Lnight-norm — en dus onafhankelijk van welke Lnight-norm
+// er is gekozen (de Vercammen-curve gebruikt geen Lnight-waarde). Bewust APART gehouden van
+// m8ExceedanceRadiusX/m8AddressExceeds/m8CountExceedingUnique en NIET toegevoegd aan M8_CATEGORY_META:
+// Vercammen is een andere TOETS van dezelfde laagfrequente fysieke geluidsenergie, geen vierde
+// onafhankelijke geluidscategorie — zie ook m8ComputeRowsWithVercammen() hieronder.
+function m8VercammenExceedanceRadiusX(scenarioKey, x, daynightKey) {
+  const testState = { scenario: scenarioKey, daynight: daynightKey || 'nacht', curtailment: state.curtailment, windBearing: state.windBearing };
+  let radius = null;
+  DISTANCES.forEach((d) => {
+    if (tertsbandExceedsAt(d, x, testState, state.lwa)) radius = d;
+  });
+  return radius;
+}
+
+function m8VercammenAddressExceeds(turbine, addr, scenarioKey, daynightKey) {
+  const dist = Math.max(haversineMeters(turbine.lat, turbine.lng, addr.lat, addr.lon), 1);
+  const downwindBearing = (state.windBearing + 180) % 360;
+  const bearing = bearingBetween(turbine.lat, turbine.lng, addr.lat, addr.lon);
+  const x = xFromAngle(bearing, downwindBearing);
+  const testState = { scenario: scenarioKey, daynight: daynightKey || 'nacht', curtailment: state.curtailment, windBearing: state.windBearing };
+  return tertsbandExceedsAt(dist, x, testState, state.lwa);
+}
+
+function m8VercammenCountExceedingUnique(scenarioKey, daynightKey) {
+  if (!state.m8AddressData) return 0;
+  const seen = new Set();
+  state.turbines3a.forEach((t) => {
+    const addrs = state.m8AddressData.byTurbine.get(t.id) || [];
+    addrs.forEach((a) => {
+      const id = a.id || `${a.lat.toFixed(6)},${a.lon.toFixed(6)}`;
+      if (seen.has(id)) return;
+      if (m8VercammenAddressExceeds(t, a, scenarioKey, daynightKey)) seen.add(id);
+    });
+  });
+  return seen.size;
+}
+
 const M8_CATEGORY_META = [
   { key: 'hoorbaar', label: 'Hoorbaar (dB(A))' },
   { key: 'laagfrequent', label: 'Laagfrequent (dB(Lin))' },
@@ -2450,6 +2638,37 @@ function m8ComputeRows() {
     });
     return { scenario, categories };
   });
+}
+
+// Bouwt m8ComputeRows() (3 categorieën, ongewijzigd) en voegt er per scenario een VIERDE, apart
+// gelabeld blok aan toe voor de Vercammen-tertsbandtoetsing (m8VercammenExceedanceRadiusX/
+// m8VercammenCountExceedingUnique hierboven). Gebruikt door Module 8/9/10's kaart-/tabelweergave, die
+// generiek over r.categories itereert en dus geen verdere aanpassing nodig heeft om dit vierde blok te
+// tonen. Module 8's ontdubbelde totaal (m8ComputeTotals()) en Module 13's rapporttabellen blijven
+// bewust op m8ComputeRows() (3 categorieën) gebaseerd — dit voorkomt dat Vercammen meetelt in het
+// "3 categorieën, niet optellen"-totaal, en voorkomt een kapotte rowspan="3" in het PDF-rapport.
+function m8ComputeVercammenRows() {
+  const hasData = !!state.m8AddressData;
+  const hinderFor = (people) =>
+    M8_HINDER_SCENARIOS.map((h) => ({
+      pct: h.pct,
+      label: h.label,
+      people: people != null ? people * (h.pct / 100) : null,
+    }));
+  return ['best', 'middel', 'worst'].map((scenario) => {
+    const ring = m8VercammenExceedanceRadiusX(scenario, 1, 'nacht');
+    const ringUp = m8VercammenExceedanceRadiusX(scenario, -1, 'nacht');
+    const ringCross = m8VercammenExceedanceRadiusX(scenario, 0, 'nacht');
+    const houses = hasData ? m8VercammenCountExceedingUnique(scenario, 'nacht') : null;
+    const people = houses != null ? houses * state.m8HouseholdSize : null;
+    return { key: 'laagfrequent-vercammen', label: 'Laagfrequent – Vercammen (per tertsband)', ring, ringUp, ringCross, houses, people, hinder: hinderFor(people) };
+  });
+}
+
+function m8ComputeRowsWithVercammen() {
+  const base = m8ComputeRows();
+  const vercammen = m8ComputeVercammenRows();
+  return base.map((r, i) => ({ scenario: r.scenario, categories: [...r.categories, vercammen[i]] }));
 }
 
 // Ontdubbelde totaal per scenario: de drie categorieën (hoorbaar/laagfrequent/infrasoon) delen
@@ -2865,7 +3084,10 @@ function renderModule8() {
     }
   }
 
-  const rows = m8ComputeRows();
+  // m8ComputeRowsWithVercammen() = de bestaande 3 categorieën + een 4e, apart gelabeld blok voor de
+  // Vercammen-tertsbandtoetsing (zie functiecommentaar). Het ontdubbelde totaal hieronder blijft op de
+  // 3 categorieën gebaseerd (m8ComputeTotals()), dus Vercammen telt daar bewust niet in mee.
+  const rows = m8ComputeRowsWithVercammen();
   const totals = m8ComputeTotals();
   window.__m8LastTotals = totals; // t.b.v. QA-scripts
 
@@ -3128,7 +3350,7 @@ function renderModule9() {
 
   const n = state.turbines3a.length;
   const hasData = !!state.m8AddressData;
-  const rows = m8ComputeRows();
+  const rows = m8ComputeRowsWithVercammen();
   const costPerPerson = state.m9CostPerPersonYear;
   const horizon = state.m9Horizon;
 
@@ -3250,7 +3472,7 @@ function renderModule10() {
 
   const n = state.turbines3a.length;
   const hasData = !!state.m8AddressData;
-  const rows = m8ComputeRows();
+  const rows = m8ComputeRowsWithVercammen();
   const dwTotal = M10_DW_SLAAP + M10_DW_HINDER;
 
   const withDaly = rows.map((r) => ({
@@ -4455,6 +4677,42 @@ function m13BuildReportHtml(mapImages) {
     ${dalyTableFor(2)}
   </section>`;
 
+  // ---- Sectie 7a: Laagfrequent geluid – Vercammen (per-tertsband toetsing, AANVULLEND) ----
+  // Gebruikt m8ComputeVercammenRows() rechtstreeks — bewust NIET verwerkt in catMatrix/rows8 hierboven,
+  // dus niet meegeteld in de hinder-/zorgkosten-/DALY-tabellen van §5–§7 (die blijven 3 categorieën,
+  // met een correcte rowspan="3"). Dit is een andere toetsing van dezelfde onderliggende laagfrequente
+  // geluidsenergie (zie ook Module 3's "Laagfrequent geluid – Vercammen"-tab), geen vierde categorie.
+  const vercammenRows = m8ComputeVercammenRows();
+  const vercammenWithCostDaly = vercammenRows.map((c) => ({
+    ...c,
+    hinder: c.hinder.map((h) => {
+      const costYear = h.people != null ? h.people * costPerPerson : null;
+      const costHorizon = costYear != null ? costYear * horizon : null;
+      const dalyYear = h.people != null ? h.people * dwTotal : null;
+      const dalyHorizon = dalyYear != null ? dalyYear * horizon : null;
+      return { ...h, costYear, costHorizon, dalyYear, dalyHorizon };
+    }),
+  }));
+  const vercammenScenarios = ['best', 'middel', 'worst'];
+  const vercammenRowsHtml = vercammenWithCostDaly.map((c, i) => c.hinder.map((h, hIdx) => `<tr>
+    ${hIdx === 0 ? `<td rowspan="3">${M8_SCENARIO_LABEL[vercammenScenarios[i]]}</td><td rowspan="3">${m8RingLabelMulti(c.ring, c.ringUp, c.ringCross)}</td><td rowspan="3">${m13Int(c.houses)} / ${m13Int(c.people)}</td>` : ''}
+    <td>${h.pct}% (${escapeHtml(h.label)})</td>
+    <td>${m9Fmt(h.people)}</td>
+    <td>${m9FmtEuro(h.costHorizon)}</td>
+    <td>${m10FmtDaly(h.dalyHorizon)}</td>
+  </tr>`).join('')).join('');
+  const vercammenSection = `
+  <section class="rp-section">
+    <h2>7a. Laagfrequent geluid – Vercammen (per tertsband, aanvullende toetsing)</h2>
+    <p class="rp-note">Dit is <strong>geen vierde geluidscategorie</strong> en telt <strong>niet mee</strong> in de hinder-, zorgkosten- of DALY-tabellen van §5–§7 hierboven (die blijven strikt hoorbaar/laagfrequent/infrasoon, 3 categorieën). Het is een andere, per-tertsband toetsing van dezelfde onderliggende laagfrequente geluidsenergie (20–200 Hz) aan de <strong>Vercammen-curve</strong> — de curve die de Raad van State gebruikt om laagfrequent windturbinegeluid te beoordelen (<a href="https://www.commissiemer.nl/english/jurisprudence/ECLI:NL:RVS:2021:1681" target="_blank" rel="noopener">ECLI:NL:RVS:2021:1681</a>), i.p.v. het geaggregeerde dB(Lin)-getal uit §5's "Laagfrequent"-rij. Zie Module 3's dedicated Vercammen-tab voor de volledige toetsing per tertsband op 6 afstanden.</p>
+    <p>Wat je hier ziet: deze tabel laat per lage toon zien hoe hard die is op verschillende afstanden van de turbine, en vergelijkt dat met de Vercammen-lijn — de lijn die de Raad van State gebruikt om te beoordelen of laagfrequent geluid van windturbines aanvaardbaar is. Komt een toon boven de lijn uit, dan is de kans groter dat mensen er hinder van ondervinden. Let op: (1) deze tonen zijn niet gemeten bij een echte turbine, maar geschat vanuit bredere geluidsbanden; (2) het extra geluid 's nachts (windschering) is ook een wetenschappelijk onderbouwde aanname, geen meting; (3) de Vercammen-lijn zegt iets over hinder, niet rechtstreeks over zorgkosten — daarvoor is een aparte rekenstap nodig. Bronnen: <a href="https://pas.commissiemer.nl/files/nl/3615/012687-3615-6-onderzoek-naar-laagfrequent-geluid-ten-gevolge-van-windturbines.pdf" target="_blank" rel="noopener">NSG-onderzoeksrapport (Vercammen-tabel)</a>, <a href="https://nsg.nl/nl/nsg-richtlijn_laagfrequent_geluid.html" target="_blank" rel="noopener">NSG-richtlijn laagfrequent geluid</a>.</p>
+    ${hasBag ? `
+    <table class="rp-table rp-table-compact">
+      <thead><tr><th>Scenario</th><th>Overschrijdingsring (≥ 1 tertsband boven Vercammen)</th><th>Woningen / bewoners</th><th>Hinderpercentage</th><th>Bewoners met hinder</th><th>Zorgkosten (${horizon}j)</th><th>DALY (${horizon}j)</th></tr></thead>
+      <tbody>${vercammenRowsHtml}</tbody>
+    </table>` : '<p class="rp-note"><em>Geen BAG-gegevens opgehaald bij Module 8 — woningen/bewoners kunnen hier niet worden getoond.</em></p>'}
+  </section>`;
+
   // ---- Sectie: kritische analyse frequentie + jaargemiddelden ----
   const bestDays = m6 ? m6.days.best : null, middelDays = m6 ? m6.days.middel : null, worstDays = m6 ? m6.days.worst : null;
   const analysisSection = `
@@ -4838,6 +5096,7 @@ function m13BuildReportHtml(mapImages) {
   ${hinderSection}
   ${costSection}
   ${dalySection}
+  ${vercammenSection}
   ${analysisSection}
   ${valueSection}
   ${compareSection}

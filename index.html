@@ -211,6 +211,7 @@
       <button type="button" class="cat-tab cat-hoorbaar" data-category="hoorbaar" aria-pressed="true">Hoorbaar geluid<span class="cat-tab-sub">≈200 Hz–20 kHz · dB(A)</span></button>
       <button type="button" class="cat-tab cat-laagfrequent" data-category="laagfrequent" aria-pressed="false">Laagfrequent geluid<span class="cat-tab-sub">20–200 Hz · dB(Lin)</span></button>
       <button type="button" class="cat-tab cat-infrasoon" data-category="infrasoon" aria-pressed="false">Infrasoon geluid<span class="cat-tab-sub">&lt;20 Hz · dB(G)</span></button>
+      <button type="button" class="cat-tab cat-vercammen" data-category="laagfrequent-vercammen" aria-pressed="false">Laagfrequent geluid – Vercammen<span class="cat-tab-sub">20–200 Hz · per tertsband · getoetst aan Vercammen-curve</span></button>
     </div>
 
     <div class="cum-controls">
@@ -286,7 +287,7 @@
           <span class="rm-sub" id="mini-sub-3a">Dag · Wind uit N · 0 turbines</span>
         </div>
 
-        <div class="data-table-card">
+        <div class="data-table-card" id="generic-norm-card-3a">
           <h3 id="norm-table-title-3a">Toetsing geselecteerde turbine (hoorbaar geluid, dB(A))</h3>
           <div class="cum-result-wrap">
             <table class="data-table norm-table">
@@ -298,6 +299,19 @@
           </div>
           <p class="callout" id="norm-aweight-note-3a" style="display:none;"></p>
           <p class="callout">De Lden-benadering is voor nu verwijderd uit deze tabel — toetsing gebeurt hier rechtstreeks op de dB-waarde Nacht t.o.v. de Lnight-norm.</p>
+        </div>
+
+        <div class="data-table-card" id="vercammen-table-card-3a" style="display:none;">
+          <h3>Toetsing geselecteerde turbine per tertsband — Vercammen-curve (nacht, downwind)</h3>
+          <div class="cum-result-wrap">
+            <table class="data-table norm-table vercammen-table">
+              <thead>
+                <tr><th>Tertsband</th><th>500 m</th><th>900 m</th><th>1300 m</th><th>1500 m</th><th>2000 m</th><th>5000 m</th></tr>
+              </thead>
+              <tbody id="vercammen-table-body-3a"><tr><td colspan="7" class="empty-row">Plaats een turbine op de kaart om te toetsen.</td></tr></tbody>
+            </table>
+          </div>
+          <p class="callout" id="vercammen-caveat-3a">Wat je hier ziet: deze tabel laat per lage toon zien hoe hard die is op verschillende afstanden van de turbine, en vergelijkt dat met de Vercammen-lijn — de lijn die de <a href="https://www.commissiemer.nl/english/jurisprudence/ECLI:NL:RVS:2021:1681" target="_blank" rel="noopener">Raad van State</a> gebruikt om te beoordelen of laagfrequent geluid van windturbines aanvaardbaar is. Komt een toon boven de lijn uit, dan is de kans groter dat mensen er hinder van ondervinden. Let op: (1) deze tonen zijn niet gemeten bij een echte turbine, maar geschat vanuit bredere geluidsbanden; (2) het extra geluid 's nachts (windschering) is ook een wetenschappelijk onderbouwde aanname, geen meting; (3) de Vercammen-lijn zegt iets over hinder, niet rechtstreeks over zorgkosten — daarvoor is een aparte rekenstap nodig. Bronnen: <a href="https://pas.commissiemer.nl/files/nl/3615/012687-3615-6-onderzoek-naar-laagfrequent-geluid-ten-gevolge-van-windturbines.pdf" target="_blank" rel="noopener">NSG-onderzoeksrapport (Vercammen-tabel)</a>, <a href="https://nsg.nl/nl/nsg-richtlijn_laagfrequent_geluid.html" target="_blank" rel="noopener">NSG-richtlijn laagfrequent geluid</a>. De tertsband van 20 Hz leent zijn geschatte niveau van de octaafband rond 16 Hz — dezelfde band die dit model elders als "infrasoon" classificeert; dat is een methodologische grens van de indeling, geen fout.</p>
         </div>
       </div>
     </div>
@@ -534,6 +548,7 @@
     <div class="module-subhead">
       <h3>Detail per geluidscategorie — dit zijn de kerncijfers</h3>
       <p class="hint">Elke categorie (hoorbaar/laagfrequent/infrasoon) heeft haar eigen overschrijdingsring, eigen woningtelling en eigen bewonersaantal; de hinderpercentages worden per categorie toegepast op háár eigen bewonersaantal — dit is de correcte berekening en de basis voor Module 9 (zorgkosten) en Module 10 (DALY's) hierna. <strong>Niet optellen over categorieën</strong> (concentrische ringen rond dezelfde turbine(s) — zie hierboven voor het ontdubbelde woningen/bewonerstotaal zonder hinderberekening).</p>
+      <p class="hint">Onderaan de kaarten en de tabel staat een <strong>vierde, apart gelabeld blok "Laagfrequent geluid – Vercammen"</strong>. Dit is geen vierde onafhankelijke geluidscategorie, maar een andere, per-tertsband toetsing van dezelfde laagfrequente geluidsenergie (zie Module 3's Vercammen-tab). Dit blok telt daarom <strong>niet mee</strong> in de "3 categorieën × 3 hinderpercentages"-matrix hieronder en niet in het ontdubbelde totaal van Module 8.</p>
     </div>
 
     <div class="m8-grid" id="m8-grid"></div>
@@ -658,6 +673,7 @@
     <div class="callout m9-totals-highlight" id="m9-totals-callout">
       <h3>Kosten per scenario en geluidscategorie (dit zijn de kerncijfers)</h3>
       <p class="hint">Gebaseerd op de bewoners per geluidscategorie (hoorbaar/laagfrequent/infrasoon) uit Module 8's detailtabel — elke categorie heeft haar eigen ring en dus haar eigen bewonersaantal, waarop de zorgkosten apart worden berekend. <strong>Niet optellen over categorieën</strong>: de drie ringen liggen concentrisch rond dezelfde turbine(s), dus een woning binnen de kleinste ring zit ook in de twee grotere. Er wordt hier geen kostenberekening meer gedaan op het ontdubbelde bewonerstotaal van Module 8, omdat de 9/30/46%-hinderpercentages uit onderzoek naar hoorbaar geluid komen en niet geldig zijn voor een categorie-gemengde populatie.</p>
+      <p class="hint">Ook hier staat onderaan een apart gelabeld blok <strong>"Laagfrequent geluid – Vercammen"</strong> met de zorgkosten voor diezelfde per-tertsband toetsing uit Module 8. Dit is een aanvullende weergave van dezelfde onderliggende laagfrequente geluidsenergie, geen vierde categorie — niet optellen bij de andere drie.</p>
       <div id="m9-totals-text" class="m9-totals-text"></div>
     </div>
 
@@ -700,6 +716,7 @@
     <div class="callout m10-totals-highlight" id="m10-totals-callout">
       <h3>DALY's per scenario en geluidscategorie (dit zijn de kerncijfers)</h3>
       <p class="hint">Gebaseerd op de bewoners per geluidscategorie (hoorbaar/laagfrequent/infrasoon) uit Module 8's detailtabel — elke categorie heeft haar eigen ring en dus haar eigen bewonersaantal, waarop de DALY's apart worden berekend. <strong>Niet optellen over categorieën</strong>: de drie ringen liggen concentrisch rond dezelfde turbine(s). Er wordt hier geen DALY-berekening meer gedaan op het ontdubbelde bewonerstotaal van Module 8, omdat de 9/30/46%-hinderpercentages uit onderzoek naar hoorbaar geluid komen en niet geldig zijn voor een categorie-gemengde populatie.</p>
+      <p class="hint">Ook hier staat onderaan een apart gelabeld blok <strong>"Laagfrequent geluid – Vercammen"</strong> met de DALY's voor diezelfde per-tertsband toetsing uit Module 8. Dit is een aanvullende weergave van dezelfde onderliggende laagfrequente geluidsenergie, geen vierde categorie — niet optellen bij de andere drie.</p>
       <div id="m10-totals-text" class="m10-totals-text"></div>
     </div>
 
