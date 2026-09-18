@@ -61,13 +61,7 @@ function computeCategoryLw(lwaInput) {
   const hoorbaar = logSum(CATEGORY_BANDS.hoorbaar.map(f => lwa[BAND_INDEX[f]]));
   const laagfrequent = logSum(CATEGORY_BANDS.laagfrequent.map(f => lwUnweighted[BAND_INDEX[f]]));
   const infrasoon = logSum(CATEGORY_BANDS.infrasoon.map(f => lwUnweighted[BAND_INDEX[f]] + G_CORR[f]));
-  // A-gewogen varianten van dezelfde twee categorieën (t.b.v. Module 8a) — zelfde octaafbanden,
-  // maar nu gesommeerd via `lwa` (dus mét A_CORR) in plaats van via `lwUnweighted`/G_CORR.
-  // Laat zien wat er numeriek gebeurt als je (zoals de wettelijke dB(A)-norm impliciet doet)
-  // de A-weging ook toepast op laagfrequent en infrasoon geluid.
-  const laagfrequentA = logSum(CATEGORY_BANDS.laagfrequent.map(f => lwa[BAND_INDEX[f]]));
-  const infrasoonA = logSum(CATEGORY_BANDS.infrasoon.map(f => lwa[BAND_INDEX[f]]));
-  return { hoorbaar, laagfrequent, infrasoon, laagfrequentA, infrasoonA, lwUnweighted, lwa, delta,
+  return { hoorbaar, laagfrequent, infrasoon, lwUnweighted, lwa, delta,
     // Defensieve fallback (zie CATEGORY['laagfrequent-vercammen'] hierboven) zodat generieke
     // computeCategoryLw(...)[categoryKey]-lookups een zinnig scalair getal terugkrijgen; de
     // eigenlijke per-tertsband Vercammen-berekening gebeurt via computeTertsbandLw() hieronder.
@@ -303,6 +297,13 @@ function nsgWorstBand(d, x, testState, lwaInput) {
   return bands.reduce((worst, b) => (worst == null || b.margin > worst.margin ? b : worst), null);
 }
 
+// Overschrijdt minstens één van de (tot 8) tertsbanden zijn eigen NSG-gehoordrempel op dit punt?
+// Analoog aan tertsbandExceedsAt() hierboven (Vercammen), maar dan getoetst aan de NSG-curve —
+// gebruikt door Module 8/9/10/13's NSG-ring/woningtelling hieronder.
+function nsgExceedsAt(d, x, testState, lwaInput) {
+  return nsgBandsAt(d, x, testState, lwaInput).some((b) => b.exceeds);
+}
+
 // Eén leesbare NSG-hoorbaarheidslabel + marge, voor gebruik in zowel de kaart-tooltip als de tabellen —
 // zodat beide plekken exact dezelfde formulering gebruiken. LET OP: NSG is een WAARNEEMBAARHEIDSNORM
 // (90%-gehoordrempel van oudere personen, 50-60 jaar) — de vraag die hij beantwoordt is "kun je het nog
@@ -466,6 +467,7 @@ function initModule14() {
   bearingSelect.addEventListener('change', () => {
     state.m14Bearing = parseInt(bearingSelect.value, 10);
     renderModule14();
+    renderModule14a();
   });
   renderModule14();
 }
@@ -484,6 +486,8 @@ const M14A_SCENARIOS = [
   { key: 'worst', label: 'Worst case' },
 ];
 
+// Richting en norm komen NIET meer uit eigen Module 14a-invoervelden, maar rechtstreeks uit
+// Module 14 (state.m14Bearing) en Module 5 (getActiveNorm()) \u2014 zie renderModule14a().
 function m14aScenarioLevels(d, bearingToReceiver, lwaBase, scenarioKey, categoryKey) {
   const base = m14PeriodLevel(d, bearingToReceiver, lwaBase, 0, 0, categoryKey);
   if (base == null) return null;
@@ -541,7 +545,7 @@ function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm,
 
   const rowsData = DISTANCES.map((d) => ({
     d,
-    scenarios: scenarios.map((s) => ({ ...s, result: m14aScenarioLevels(d, state.m14aBearing, state.lwa, s.key, catKey) })),
+    scenarios: scenarios.map((s) => ({ ...s, result: m14aScenarioLevels(d, state.m14Bearing, state.lwa, s.key, catKey) })),
   }));
 
   body.innerHTML = rowsData.map(({ d, scenarios: rowScenarios }) => {
@@ -570,7 +574,7 @@ function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm,
   }).join('');
 
   if (!hasNorm) {
-    resultCallout.innerHTML = 'Vul een geldige norm in (dB(A)) om de toetsing per afstand te tonen.';
+    resultCallout.innerHTML = 'Bij de huidige normkeuze in Module 5 is er geen geldige norm van dit type (dB(A)) \u2014 hierboven staan daarom alleen de berekende waarden, zonder toetsing. Wijzig de normkeuze in Module 5 om hier wel een toetsing te zien.';
     return;
   }
 
@@ -601,9 +605,9 @@ function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm,
   )).join(' \u2014 ');
 
   const normLabel = indicative
-    ? `indicatief getoetst aan jouw ingevoerde norm van ${norm.toFixed(1)} dB(A) (er bestaat geen wettelijke jaargemiddelde-norm in ${unit})`
-    : `norm ${norm.toFixed(1)} dB(A)`;
-  resultCallout.innerHTML = `<strong>${metricLabelForSummary}, ${normLabel}:</strong> ${summaryText}. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14aBearing)}.`;
+    ? `indicatief getoetst aan de in Module 5 gekozen norm van ${norm.toFixed(1)} dB(A) (er bestaat geen wettelijke jaargemiddelde-norm in ${unit})`
+    : `norm ${norm.toFixed(1)} dB(A) (Module 5: ${escapeHtml(getActiveNorm().label)})`;
+  resultCallout.innerHTML = `<strong>${metricLabelForSummary}, ${normLabel}:</strong> ${summaryText}. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14Bearing)} (Module 14).`;
 }
 
 // Louter informatieve dagperiode-uitsplitsing (best case + middenscenario): er bestaat geen
@@ -619,7 +623,7 @@ function m14aRenderDayInfoTable(bodyId, resultCalloutId, categoryKey) {
 
   const rowsData = DISTANCES.map((d) => ({
     d,
-    scenarios: scenarios.map((s) => ({ ...s, result: m14aScenarioLevels(d, state.m14aBearing, state.lwa, s.key, catKey) })),
+    scenarios: scenarios.map((s) => ({ ...s, result: m14aScenarioLevels(d, state.m14Bearing, state.lwa, s.key, catKey) })),
   }));
 
   body.innerHTML = rowsData.map(({ d, scenarios: rowScenarios }) => {
@@ -630,13 +634,26 @@ function m14aRenderDayInfoTable(bodyId, resultCalloutId, categoryKey) {
     return `<tr><td>${d} m</td>${cells}</tr>`;
   }).join('');
 
-  resultCallout.innerHTML = `<strong>L<sub>dag</sub> (jaargemiddeld, dagperiode):</strong> louter informatief \u2014 er geldt geen zelfstandige dagnorm; de dagperiode telt uitsluitend mee binnen de Lden-jaargemiddelde toetsing hierboven. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14aBearing)}.`;
+  resultCallout.innerHTML = `<strong>L<sub>dag</sub> (jaargemiddeld, dagperiode):</strong> louter informatief \u2014 er geldt geen zelfstandige dagnorm; de dagperiode telt uitsluitend mee binnen de Lden-jaargemiddelde toetsing hierboven. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14Bearing)} (Module 14).`;
 }
 
 function renderModule14a() {
-  const ldenNorm = Number(state.m14aLdenNorm);
-  const nightNorm = Number(state.m14aNightNorm);
+  // Geen eigen invoervelden meer: richting komt uit Module 14 (state.m14Bearing), norm uit
+  // Module 5 (getActiveNorm()) \u2014 zie de gebruikersinstructie "14a moet gebaseerd zijn op de
+  // eerste modules, geen module op zichzelf". Voor de 'eigen/lokale norm'-preset bestaat er geen
+  // Lden-waarde (alleen Lnight, zie NORM_PRESETS/getActiveNorm): in dat geval blijft de
+  // Lden-toetsing hieronder leeg (hasNorm=false) en tonen de tabellen alleen de rekenwaarden.
+  const norm = getActiveNorm();
+  const ldenNorm = Number(norm.lden);
+  const nightNorm = Number(norm.lnight);
   const pct = m14aScenarioPercentages();
+
+  const contextCallout = document.getElementById('m14a-context-callout');
+  if (contextCallout) {
+    const ldenNormText = Number.isFinite(ldenNorm) ? `${ldenNorm.toFixed(1)} dB(A)` : 'geen Lden-norm bij deze normkeuze';
+    const nightNormText = Number.isFinite(nightNorm) ? `${nightNorm.toFixed(1)} dB(A)` : 'geen Lnight-norm bij deze normkeuze';
+    contextCallout.innerHTML = `<strong>Gebruikte instellingen (overgenomen uit eerdere modules, niet los instelbaar):</strong> richting van de woning t.o.v. de turbine = <strong>${m14BearingLabel(state.m14Bearing)}</strong> (wijzig in Module 14) &mdash; normkeuze = <strong>${escapeHtml(norm.label)}</strong> (wijzig in Module 5): Lden ${ldenNormText}, L<sub>night</sub> ${nightNormText}.`;
+  }
 
   m14aRenderTable('m14a-lden-table-body', 'm14a-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld)', pct, 'hoorbaar', false);
   m14aRenderTable('m14a-night-table-body', 'm14a-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode)', pct, 'hoorbaar', false);
@@ -663,25 +680,8 @@ function renderModule14a() {
 }
 
 function initModule14a() {
-  const bearingSelect = document.getElementById('m14a-bearing-select');
-  const ldenNormInput = document.getElementById('m14a-lden-norm-input');
-  const nightNormInput = document.getElementById('m14a-night-norm-input');
-  if (!bearingSelect || !ldenNormInput || !nightNormInput) return;
-  bearingSelect.value = String(state.m14aBearing);
-  ldenNormInput.value = String(state.m14aLdenNorm);
-  nightNormInput.value = String(state.m14aNightNorm);
-  bearingSelect.addEventListener('change', () => {
-    state.m14aBearing = parseInt(bearingSelect.value, 10);
-    renderModule14a();
-  });
-  ldenNormInput.addEventListener('input', () => {
-    state.m14aLdenNorm = ldenNormInput.value === '' ? NaN : parseFloat(ldenNormInput.value);
-    renderModule14a();
-  });
-  nightNormInput.addEventListener('input', () => {
-    state.m14aNightNorm = nightNormInput.value === '' ? NaN : parseFloat(nightNormInput.value);
-    renderModule14a();
-  });
+  // Geen eigen inputs meer om te initialiseren \u2014 renderModule14a() leest de richting en norm
+  // rechtstreeks uit state.m14Bearing (Module 14) en getActiveNorm() (Module 5) bij elke render.
   renderModule14a();
 }
 
@@ -718,10 +718,10 @@ const state = {
   // Module 14: formele Lden-schatting (uitbreidingsoptie) — vaste afstand + peilrichting
   // ontvanger t.o.v. de turbine, losstaand van de op de kaart geplaatste turbines.
   m14Distance: 900, m14Bearing: 180,
-  m14aBearing: 180, m14aLdenNorm: 47, m14aNightNorm: 41,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
-// 'eigen' heeft geen vaste waarden; die komen uit state.normCustomLden/Lnight.
+// 'eigen' heeft alleen een vaste Lnight-waarde (state.normCustomLnight); er bestaat in dit model
+// geen los invoerbare eigen Lden-norm, dus getActiveNorm() geeft voor 'eigen' geen lden-veld terug.
 const NORM_PRESETS = {
   oud: { lden: 47, lnight: 41, label: 'Oude landelijke norm (Activiteitenbesluit/-regeling)' },
   who: { lden: 45, lnight: null, label: 'WHO-advieswaarde' },
@@ -2763,7 +2763,7 @@ function m8CountExceedingUnique(scenarioKey, categoryKey, daynightKey, lwCatOver
 // er is gekozen (de Vercammen-curve gebruikt geen Lnight-waarde). Bewust APART gehouden van
 // m8ExceedanceRadiusX/m8AddressExceeds/m8CountExceedingUnique en NIET toegevoegd aan M8_CATEGORY_META:
 // Vercammen is een andere TOETS van dezelfde laagfrequente fysieke geluidsenergie, geen vierde
-// onafhankelijke geluidscategorie — zie ook m8ComputeRowsWithVercammen() hieronder.
+// onafhankelijke geluidscategorie — zie ook m8ComputeRowsWithAddons() hieronder.
 function m8VercammenExceedanceRadiusX(scenarioKey, x, daynightKey) {
   const testState = { scenario: scenarioKey, daynight: daynightKey || 'nacht', curtailment: state.curtailment, windBearing: state.windBearing };
   let radius = null;
@@ -2791,6 +2791,43 @@ function m8VercammenCountExceedingUnique(scenarioKey, daynightKey) {
       const id = a.id || `${a.lat.toFixed(6)},${a.lon.toFixed(6)}`;
       if (seen.has(id)) return;
       if (m8VercammenAddressExceeds(t, a, scenarioKey, daynightKey)) seen.add(id);
+    });
+  });
+  return seen.size;
+}
+
+// Mirrort m8VercammenExceedanceRadiusX/m8VercammenAddressExceeds/m8VercammenCountExceedingUnique
+// hierboven één-op-één, maar getoetst aan de NSG-gehoordrempelcurve (nsgExceedsAt) i.p.v. de
+// Vercammen-hindercurve. LET OP het verschil in vraagstelling: dit blok bepaalt of geluid nog
+// WAARNEEMBAAR is (NSG), het Vercammen-blok hierboven bepaalt of het al HINDERLIJK is — twee
+// onafhankelijke toetsen van dezelfde tertsbandniveaus (zie nsgVerdictLabel/vercammenVerdictLabel).
+function m8NsgExceedanceRadiusX(scenarioKey, x, daynightKey) {
+  const testState = { scenario: scenarioKey, daynight: daynightKey || 'nacht', curtailment: state.curtailment, windBearing: state.windBearing };
+  let radius = null;
+  DISTANCES.forEach((d) => {
+    if (nsgExceedsAt(d, x, testState, state.lwa)) radius = d;
+  });
+  return radius;
+}
+
+function m8NsgAddressExceeds(turbine, addr, scenarioKey, daynightKey) {
+  const dist = Math.max(haversineMeters(turbine.lat, turbine.lng, addr.lat, addr.lon), 1);
+  const downwindBearing = (state.windBearing + 180) % 360;
+  const bearing = bearingBetween(turbine.lat, turbine.lng, addr.lat, addr.lon);
+  const x = xFromAngle(bearing, downwindBearing);
+  const testState = { scenario: scenarioKey, daynight: daynightKey || 'nacht', curtailment: state.curtailment, windBearing: state.windBearing };
+  return nsgExceedsAt(dist, x, testState, state.lwa);
+}
+
+function m8NsgCountExceedingUnique(scenarioKey, daynightKey) {
+  if (!state.m8AddressData) return 0;
+  const seen = new Set();
+  state.turbines3a.forEach((t) => {
+    const addrs = state.m8AddressData.byTurbine.get(t.id) || [];
+    addrs.forEach((a) => {
+      const id = a.id || `${a.lat.toFixed(6)},${a.lon.toFixed(6)}`;
+      if (seen.has(id)) return;
+      if (m8NsgAddressExceeds(t, a, scenarioKey, daynightKey)) seen.add(id);
     });
   });
   return seen.size;
@@ -2856,10 +2893,37 @@ function m8ComputeVercammenRows() {
   });
 }
 
-function m8ComputeRowsWithVercammen() {
+// Analoog aan m8ComputeVercammenRows() hierboven, maar voor de NSG-gehoordrempelcurve. Zelfde
+// scenario/ring/woningen-opbouw, andere onderliggende toets (m8NsgExceedanceRadiusX/
+// m8NsgCountExceedingUnique). Zie ook Module 3/3a/5's laagfrequent-tab, waar NSG en Vercammen al
+// naast elkaar per afstand worden getoond (commit 5b5b3db) — dit blok brengt diezelfde combinatie
+// naar Module 8/9/10/13.
+function m8ComputeNsgRows() {
+  const hasData = !!state.m8AddressData;
+  const hinderFor = (people) =>
+    M8_HINDER_SCENARIOS.map((h) => ({
+      pct: h.pct,
+      label: h.label,
+      people: people != null ? people * (h.pct / 100) : null,
+    }));
+  return ['best', 'middel', 'worst'].map((scenario) => {
+    const ring = m8NsgExceedanceRadiusX(scenario, 1, 'nacht');
+    const ringUp = m8NsgExceedanceRadiusX(scenario, -1, 'nacht');
+    const ringCross = m8NsgExceedanceRadiusX(scenario, 0, 'nacht');
+    const houses = hasData ? m8NsgCountExceedingUnique(scenario, 'nacht') : null;
+    const people = houses != null ? houses * state.m8HouseholdSize : null;
+    return { key: 'laagfrequent-nsg', label: 'Laagfrequent – NSG (per tertsband, waarneembaarheid)', ring, ringUp, ringCross, houses, people, hinder: hinderFor(people) };
+  });
+}
+
+// Voegt zowel het NSG- als het Vercammen-blok toe aan de 3 basiscategorieën van m8ComputeRows() —
+// in die volgorde (waarneembaarheid vóór hinder, zelfde volgorde als Module 3/3a/5's laagfrequent-
+// tab). Vervangt de eerdere m8ComputeRowsWithVercammen() (die alleen Vercammen toevoegde).
+function m8ComputeRowsWithAddons() {
   const base = m8ComputeRows();
+  const nsg = m8ComputeNsgRows();
   const vercammen = m8ComputeVercammenRows();
-  return base.map((r, i) => ({ scenario: r.scenario, categories: [...r.categories, vercammen[i]] }));
+  return base.map((r, i) => ({ scenario: r.scenario, categories: [...r.categories, nsg[i], vercammen[i]] }));
 }
 
 // Ontdubbelde totaal per scenario: de drie categorieën (hoorbaar/laagfrequent/infrasoon) delen
@@ -2932,7 +2996,7 @@ const M8_DIRECTIONS = [
 // verschillende frequentiebanden, energetisch bij elkaar optellen of middelen tussen categorieën
 // heeft geen natuurkundige betekenis (zie ook de "geen optelling over categorieën"-kanttekening
 // bij Module 8 hierboven). Voor laagfrequent/infrasoon geldt geen wettelijke Lnight-norm in hun
-// eigen eenheid — de dB(A)-norm dient daar, net als bij Module 8a, uitsluitend als indicatief
+// eigen eenheid — de dB(A)-norm dient daar, net als bij Module 8, uitsluitend als indicatief
 // referentiepunt, niet als wettelijk toetsingskader.
 const JAARNORM_CATEGORIES = [
   { key: 'hoorbaar', label: 'Hoorbaar geluid', unit: 'dB(A)', indicatief: false },
@@ -3097,133 +3161,6 @@ const M8_CHART_COLORS = { downwind: 'var(--color-chart-1)', zijwind: 'var(--colo
 // Zelfde drie kleuren als hard gecodeerde hex (in plaats van CSS var()) voor het losstaande, altijd
 // lichte PDF-rapport (Module 13) — dat document heeft geen dark-mode en geen toegang tot style.css.
 const M8_CHART_COLORS_REPORT = { downwind: '#006494', zijwind: '#7a39bb', upwind: '#da7101' };
-
-// ==================== MODULE 8a: gevolgen van A-weging op laagfrequent/infrasoon ====================
-// Zelfde methodiek als Module 8 (ring → BAG-woningen → bewoners), maar nu berekend voor de twee
-// categorieën die normaal NIET A-gewogen worden (laagfrequent: dB(Lin); infrasoon: dB(G)), en voor
-// zowel dag als nacht. Laat zien wat er gebeurt als je (zoals de dB(A)-Lnight-norm in de praktijk
-// impliciet doet) de A-weging ook over laagfrequent en infrasoon geluid legt: A-weging onderdrukt
-// lage frequenties fors (zie Module 1/octaafbandtabel), dus "gewogen" geeft een veel lager niveau,
-// een veel kleinere overschrijdingsring en dus veel minder getelde woningen/bewoners dan "ongewogen".
-const M8A_CATEGORIES = [
-  { key: 'laagfrequent', label: 'Laagfrequent geluid', unweightedUnit: 'dB(Lin)', lwKey: 'laagfrequent', lwKeyA: 'laagfrequentA' },
-  { key: 'infrasoon', label: 'Infrasoon geluid', unweightedUnit: 'dB(G)', lwKey: 'infrasoon', lwKeyA: 'infrasoonA' },
-];
-const M8A_PERIODS = [
-  { key: 'dag', label: 'Dag' },
-  { key: 'nacht', label: 'Nacht' },
-];
-
-// Bouwt, per scenario (best/middel/worst — "in alle scenario's"), een directe rij-voor-rij
-// vergelijking tussen Module 8 (ongewogen/G-gewogen — de vakliteratuur-juiste toetsing) en
-// Module 8a (A-gewogen — de praktijk-toetsing die de dB(A)-Lnight-norm impliceert), per categorie
-// (laagfrequent/infrasoon) en per periode (dag/nacht): 2 × 2 = 4 vergelijkingsrijen per scenario.
-// Let op: er bestaat geen aparte, wettelijk vastgestelde dag-norm in dit model (zie Module 8/
-// methodologie — toetsing gebeurt uitsluitend op Lnight); de dag-rijen hieronder toetsen daarom
-// één-op-één aan datzelfde Lnight-getal, uitsluitend om het effect van de nachtelijke windschering/
-// inversietoeslag (Module 2) te isoleren — net zoals Module 8 de dB(A)-Lnight-norm ook al als
-// indicatief referentiepunt voor infrasoon (dB(G)) gebruikt.
-function m8aComputeRows() {
-  const catLw = computeCategoryLw(state.lwa);
-  const hasData = !!state.m8AddressData;
-  return ['best', 'middel', 'worst'].map((scenario) => {
-    const rows = [];
-    M8A_CATEGORIES.forEach((cat) => {
-      M8A_PERIODS.forEach((period) => {
-        const lwOngewogen = catLw[cat.lwKey];
-        const lwGewogen = catLw[cat.lwKeyA];
-        // Ring per richting (downwind/zijwind/upwind) — uitsluitend ter context: laat zien dat ook hier
-        // downwind het verst draagt. De woningen/bewonerstelling hieronder gebruikt NIET deze ring,
-        // maar toetst elk BAG-adres exact op zijn eigen werkelijke afstand+richting (zie m8AddressExceeds),
-        // net als Module 8 hierboven.
-        const ringM8 = m8ExceedanceRadiusX(scenario, cat.key, 1, period.key, lwOngewogen);
-        const ringM8Cross = m8ExceedanceRadiusX(scenario, cat.key, 0, period.key, lwOngewogen);
-        const ringM8Up = m8ExceedanceRadiusX(scenario, cat.key, -1, period.key, lwOngewogen);
-        const ringM8a = m8ExceedanceRadiusX(scenario, cat.key, 1, period.key, lwGewogen);
-        const ringM8aCross = m8ExceedanceRadiusX(scenario, cat.key, 0, period.key, lwGewogen);
-        const ringM8aUp = m8ExceedanceRadiusX(scenario, cat.key, -1, period.key, lwGewogen);
-        const housesM8 = hasData ? m8CountExceedingUnique(scenario, cat.key, period.key, lwOngewogen) : null;
-        const housesM8a = hasData ? m8CountExceedingUnique(scenario, cat.key, period.key, lwGewogen) : null;
-        const peopleM8 = housesM8 != null ? housesM8 * state.m8HouseholdSize : null;
-        const peopleM8a = housesM8a != null ? housesM8a * state.m8HouseholdSize : null;
-        const deltaDb = (lwOngewogen != null && lwGewogen != null) ? (lwGewogen - lwOngewogen) : null;
-        let afnamePct = null;
-        if (housesM8 != null && housesM8a != null) {
-          afnamePct = housesM8 === 0 ? 0 : ((housesM8 - housesM8a) / housesM8) * 100;
-        }
-        rows.push({
-          catKey: cat.key, catLabel: cat.label, periodLabel: period.label,
-          unweightedUnit: cat.unweightedUnit,
-          lwM8: lwOngewogen, lwM8a: lwGewogen, deltaDb,
-          ringM8, ringM8Cross, ringM8Up, ringM8a, ringM8aCross, ringM8aUp,
-          housesM8, housesM8a, peopleM8, peopleM8a,
-          afnamePct,
-        });
-      });
-    });
-    return { scenario, rows };
-  });
-}
-
-function renderModule8a() {
-  const container = document.getElementById('m8a-tables');
-  const contextCallout = document.getElementById('m8a-context-callout');
-  if (!container) return;
-  const n = state.turbines3a.length;
-  const norm = getActiveNorm();
-  const normHasLnight = norm.lnight != null;
-  if (contextCallout) {
-    if (n === 0) {
-      contextCallout.textContent = 'Plaats minstens één turbine op de kaart in Module 3 om deze module te gebruiken.';
-    } else if (!normHasLnight) {
-      contextCallout.textContent = `De geselecteerde norm (${norm.label}) heeft geen Lnight-waarde — deze vergelijking kan hiermee niet worden bepaald. Kies een andere norm bij Module 5.`;
-    } else if (!state.m8AddressData) {
-      contextCallout.textContent = 'Nog geen BAG-gegevens — klik hierboven bij Module 8 op "Woningen ophalen (BAG)".';
-    } else {
-      contextCallout.innerHTML = `Zelfde ${m8CountUnique(M8_FETCH_RADIUS).toLocaleString('nl-NL')} BAG-adressen als Module 8 hierboven, nu doorgerekend met de A-gewogen variant van laagfrequent en infrasoon geluid, voor zowel dag als nacht.`;
-    }
-  }
-  const rows = m8aComputeRows();
-  const dash = '—';
-  const arrow = (a, b) => `${a}<span class="m8a-arrow">→</span>${b}`;
-  container.innerHTML = rows.map((r) => `
-    <div class="data-table-card m8a-scenario-card">
-      <h3>${M8_SCENARIO_LABEL[r.scenario]}</h3>
-      <div class="cum-result-wrap">
-      <table class="data-table m8a-table">
-        <thead>
-          <tr>
-            <th>Categorie</th><th>Periode</th>
-            <th>Bronniveau<br><span class="m8a-subhead">Module 8 → 8a</span></th>
-            <th>Δ (dB)</th>
-            <th>Overschrijdingsring<br><span class="m8a-subhead">Module 8 → 8a</span></th>
-            <th>Woningen (BAG)<br><span class="m8a-subhead">Module 8 → 8a</span></th>
-            <th>Bewoners<br><span class="m8a-subhead">Module 8 → 8a</span></th>
-            <th>Afname</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${n === 0 ? `<tr><td colspan="8" class="empty-row">Plaats een turbine op de kaart en klik bij Module 8 op "Woningen ophalen (BAG)".</td></tr>` : r.rows.map((row, idx) => {
-            const firstOfCat = idx % 2 === 0;
-            const hasExceedanceLeft = row.afnamePct != null && Math.round(row.afnamePct) < 100 && row.ringM8a != null;
-            const rowClass = row.afnamePct != null && Math.round(row.afnamePct) >= 100 ? 'm8a-row-erased' : (hasExceedanceLeft ? 'm8a-row-partial' : '');
-            return `<tr class="${rowClass}">
-              <td>${firstOfCat ? row.catLabel : ''}</td>
-              <td>${row.periodLabel}</td>
-              <td>${row.lwM8 != null ? arrow(row.lwM8.toFixed(1) + ' ' + row.unweightedUnit, row.lwM8a.toFixed(1) + ' dB(A)') : dash}</td>
-              <td>${row.deltaDb != null ? row.deltaDb.toFixed(1) : dash}</td>
-              <td>${arrow(m8RingLabel(row.ringM8), m8RingLabel(row.ringM8a))} <span class="m8a-subhead">(downwind)</span><br>${arrow(m8RingLabel(row.ringM8Cross), m8RingLabel(row.ringM8aCross))} <span class="m8a-subhead">(zijwind)</span><br>${arrow(m8RingLabel(row.ringM8Up), m8RingLabel(row.ringM8aUp))} <span class="m8a-subhead">(upwind)</span></td>
-              <td>${row.housesM8 != null ? arrow(row.housesM8.toLocaleString('nl-NL'), row.housesM8a.toLocaleString('nl-NL')) : dash}</td>
-              <td>${row.peopleM8 != null ? arrow(Math.round(row.peopleM8).toLocaleString('nl-NL'), Math.round(row.peopleM8a).toLocaleString('nl-NL')) : dash}</td>
-              <td class="m8a-afname">${row.afnamePct != null ? '−' + Math.round(row.afnamePct) + '%' : dash}</td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-      </div>
-    </div>`).join('');
-}
-
 function renderModule8() {
   const contextCallout = document.getElementById('m8-context-callout');
   const fetchStatus = document.getElementById('m8-fetch-status');
@@ -3275,10 +3212,11 @@ function renderModule8() {
     }
   }
 
-  // m8ComputeRowsWithVercammen() = de bestaande 3 categorieën + een 4e, apart gelabeld blok voor de
-  // Vercammen-tertsbandtoetsing (zie functiecommentaar). Het ontdubbelde totaal hieronder blijft op de
-  // 3 categorieën gebaseerd (m8ComputeTotals()), dus Vercammen telt daar bewust niet in mee.
-  const rows = m8ComputeRowsWithVercammen();
+  // m8ComputeRowsWithAddons() = de bestaande 3 categorieën + een 4e (NSG, waarneembaarheid) en 5e
+  // (Vercammen, hinder), apart gelabeld blok voor de tertsbandtoetsing (zie functiecommentaar). Het
+  // ontdubbelde totaal hieronder blijft op de 3 categorieën gebaseerd (m8ComputeTotals()), dus NSG en
+  // Vercammen tellen daar bewust niet in mee.
+  const rows = m8ComputeRowsWithAddons();
   const totals = m8ComputeTotals();
   window.__m8LastTotals = totals; // t.b.v. QA-scripts
 
@@ -3368,7 +3306,6 @@ function renderModule8() {
   }
 
   renderModule8Jaarnorm();
-  renderModule8a();
   renderModule9();
   renderModule10();
   renderModule11();
@@ -3541,7 +3478,7 @@ function renderModule9() {
 
   const n = state.turbines3a.length;
   const hasData = !!state.m8AddressData;
-  const rows = m8ComputeRowsWithVercammen();
+  const rows = m8ComputeRowsWithAddons();
   const costPerPerson = state.m9CostPerPersonYear;
   const horizon = state.m9Horizon;
 
@@ -3663,7 +3600,7 @@ function renderModule10() {
 
   const n = state.turbines3a.length;
   const hasData = !!state.m8AddressData;
-  const rows = m8ComputeRowsWithVercammen();
+  const rows = m8ComputeRowsWithAddons();
   const dwTotal = M10_DW_SLAAP + M10_DW_HINDER;
 
   const withDaly = rows.map((r) => ({
@@ -4624,7 +4561,6 @@ function m13BuildReportHtml(mapImages) {
   const m12TotalVermogen = m12rows.reduce((s, row) => s + row.vermogenTotaalMw, 0);
   const hasBag = r.hasBag;
   const hasM12 = r.hasM12;
-  const rows8a = m8aComputeRows();
 
   // BELANGRIJK: hinder-, zorgkosten- en DALY-berekeningen moeten PER GELUIDSCATEGORIE (hoorbaar/
   // laagfrequent/infrasoon) worden toegepast op de bewoners die zich BINNEN DE RING VAN DIE CATEGORIE
@@ -4767,6 +4703,7 @@ function m13BuildReportHtml(mapImages) {
       </tbody>
     </table>
     <p>Vanuit dit bronvermogen en deze positie(s) berekent het model per categorie (hoorbaar/laagfrequent/infrasoon) en per scenario (best/middel/worst) de afstand waarop het geluidsniveau de norm overschrijdt (de "overschrijdingsring"), en telt het de unieke BAG-woningen binnen die ring.</p>
+    ${m13MapImagesHtml(mapViews, turbineList)}
   </section>`;
 
   // ---- Sectie: scenarioberekening (hoorbaar/LF/infrasoon) ----
@@ -4868,7 +4805,44 @@ function m13BuildReportHtml(mapImages) {
     ${dalyTableFor(2)}
   </section>`;
 
-  // ---- Sectie 7a: Laagfrequent geluid – Vercammen (per-tertsband toetsing, AANVULLEND) ----
+  // ---- Sectie 7a: Laagfrequent geluid – NSG (per-tertsband toetsing, AANVULLEND) ----
+  // Gebruikt m8ComputeNsgRows() rechtstreeks — bewust NIET verwerkt in catMatrix/rows8 hierboven,
+  // dus niet meegeteld in de hinder-/zorgkosten-/DALY-tabellen van §5–§7 (die blijven 3 categorieën,
+  // met een correcte rowspan="3"). LET OP: NSG is een WAARNEEMBAARHEIDSNORM (90%-gehoordrempel), geen
+  // hindernorm — zie §7b (Vercammen) hieronder voor de aanvullende hindertoetsing van dezelfde tonen.
+  const nsgRows = m8ComputeNsgRows();
+  const nsgWithCostDaly = nsgRows.map((c) => ({
+    ...c,
+    hinder: c.hinder.map((h) => {
+      const costYear = h.people != null ? h.people * costPerPerson : null;
+      const costHorizon = costYear != null ? costYear * horizon : null;
+      const dalyYear = h.people != null ? h.people * dwTotal : null;
+      const dalyHorizon = dalyYear != null ? dalyYear * horizon : null;
+      return { ...h, costYear, costHorizon, dalyYear, dalyHorizon };
+    }),
+  }));
+  const nsgScenarios = ['best', 'middel', 'worst'];
+  const nsgRowsHtml = nsgWithCostDaly.map((c, i) => c.hinder.map((h, hIdx) => `<tr>
+    ${hIdx === 0 ? `<td rowspan="3">${M8_SCENARIO_LABEL[nsgScenarios[i]]}</td><td rowspan="3">${m8RingLabelMulti(c.ring, c.ringUp, c.ringCross)}</td><td rowspan="3">${m13Int(c.houses)} / ${m13Int(c.people)}</td>` : ''}
+    <td>${h.pct}% (${escapeHtml(h.label)})</td>
+    <td>${m9Fmt(h.people)}</td>
+    <td>${m9FmtEuro(h.costHorizon)}</td>
+    <td>${m10FmtDaly(h.dalyHorizon)}</td>
+  </tr>`).join('')).join('');
+  const nsgSection = `
+  <section class="rp-section">
+    <h2>7a. Laagfrequent geluid – NSG (per tertsband, waarneembaarheid)</h2>
+    <p class="rp-note">Dit is <strong>geen vierde geluidscategorie</strong> en telt <strong>niet mee</strong> in de hinder-, zorgkosten- of DALY-tabellen van §5–§7 hierboven (die blijven strikt hoorbaar/laagfrequent/infrasoon, 3 categorieën). Het is een per-tertsband toetsing van dezelfde onderliggende laagfrequente geluidsenergie (20–200 Hz) aan de <strong>NSG-referentiecurve</strong> — de 90%-gehoordrempel van oudere personen (50–60 jaar). LET OP: NSG is een <strong>waarneembaarheidsnorm</strong>, geen hindernorm — hij beantwoordt de vraag "kun je het nog horen", niet "is het hinderlijk" (zie §7b hieronder voor die vraag, via de Vercammen-curve).</p>
+    <p>Wat je hier ziet: deze tabel laat per lage toon zien hoe hard die is op verschillende afstanden van de turbine, en vergelijkt dat met de NSG-gehoordrempel — de grens waarboven ouderen (50–60 jaar) de toon nog kunnen horen. Komt een toon boven de lijn uit, dan is die toon waarneembaar; dat zegt nog niets over hinder. Let op: (1) deze tonen zijn niet gemeten bij een echte turbine, maar geschat vanuit bredere geluidsbanden; (2) het extra geluid 's nachts (windschering) is ook een wetenschappelijk onderbouwde aanname, geen meting; (3) waarneembaar is niet hetzelfde als hinderlijk of zorgkosten-relevant — zie §7b voor die toetsing. Bron: <a href="https://www.rivm.nl/bibliotheek/rapporten/2021-0187.pdf" target="_blank" rel="noopener">RIVM-rapport 2021-0187, Onderzoeksprogramma Laagfrequent geluid (LFG)</a>, <a href="https://nsg.nl/nl/nsg-richtlijn_laagfrequent_geluid.html" target="_blank" rel="noopener">NSG-richtlijn laagfrequent geluid</a>.</p>
+    ${hasBag ? `
+    <table class="rp-table rp-table-compact">
+      <thead><tr><th>Scenario</th><th>Overschrijdingsring (≥ 1 tertsband boven NSG-gehoordrempel)</th><th>Woningen / bewoners</th><th>Hinderpercentage</th><th>Bewoners "met hinder" (indicatief*)</th><th>Zorgkosten (${horizon}j)</th><th>DALY (${horizon}j)</th></tr></thead>
+      <tbody>${nsgRowsHtml}</tbody>
+    </table>
+    <p class="rp-note"><em>* De hinderpercentages/zorgkosten/DALY's in deze tabel zijn puur rekentechnisch afgeleid (zelfde formules als §5–§7) en NIET wetenschappelijk gevalideerd voor een waarneembaarheidsnorm — waarneembaar zijn is geen synoniem voor hinder ondervinden. Deze kolommen zijn ter vergelijking met §7b (Vercammen) opgenomen, niet als zelfstandige claim.</em></p>` : '<p class="rp-note"><em>Geen BAG-gegevens opgehaald bij Module 8 — woningen/bewoners kunnen hier niet worden getoond.</em></p>'}
+  </section>`;
+
+  // ---- Sectie 7b: Laagfrequent geluid – Vercammen (per-tertsband toetsing, AANVULLEND) ----
   // Gebruikt m8ComputeVercammenRows() rechtstreeks — bewust NIET verwerkt in catMatrix/rows8 hierboven,
   // dus niet meegeteld in de hinder-/zorgkosten-/DALY-tabellen van §5–§7 (die blijven 3 categorieën,
   // met een correcte rowspan="3"). Dit is een andere toetsing van dezelfde onderliggende laagfrequente
@@ -4894,7 +4868,7 @@ function m13BuildReportHtml(mapImages) {
   </tr>`).join('')).join('');
   const vercammenSection = `
   <section class="rp-section">
-    <h2>7a. Laagfrequent geluid – Vercammen (per tertsband, aanvullende toetsing)</h2>
+    <h2>7b. Laagfrequent geluid – Vercammen (per tertsband, aanvullende toetsing)</h2>
     <p class="rp-note">Dit is <strong>geen vierde geluidscategorie</strong> en telt <strong>niet mee</strong> in de hinder-, zorgkosten- of DALY-tabellen van §5–§7 hierboven (die blijven strikt hoorbaar/laagfrequent/infrasoon, 3 categorieën). Het is een andere, per-tertsband toetsing van dezelfde onderliggende laagfrequente geluidsenergie (20–200 Hz) aan de <strong>Vercammen-curve</strong> — de curve die de Raad van State gebruikt om laagfrequent windturbinegeluid te beoordelen (<a href="https://www.commissiemer.nl/english/jurisprudence/ECLI:NL:RVS:2021:1681" target="_blank" rel="noopener">ECLI:NL:RVS:2021:1681</a>), i.p.v. het geaggregeerde dB(Lin)-getal uit §5's "Laagfrequent"-rij. Zie Module 3's dedicated Vercammen-tab voor de volledige toetsing per tertsband op 6 afstanden.</p>
     <p>Wat je hier ziet: deze tabel laat per lage toon zien hoe hard die is op verschillende afstanden van de turbine, en vergelijkt dat met de Vercammen-lijn — de lijn die de Raad van State gebruikt om te beoordelen of laagfrequent geluid van windturbines aanvaardbaar is. Komt een toon boven de lijn uit, dan is de kans groter dat mensen er hinder van ondervinden. Let op: (1) deze tonen zijn niet gemeten bij een echte turbine, maar geschat vanuit bredere geluidsbanden; (2) het extra geluid 's nachts (windschering) is ook een wetenschappelijk onderbouwde aanname, geen meting; (3) de Vercammen-lijn zegt iets over hinder, niet rechtstreeks over zorgkosten — daarvoor is een aparte rekenstap nodig. Bronnen: <a href="https://pas.commissiemer.nl/files/nl/3615/012687-3615-6-onderzoek-naar-laagfrequent-geluid-ten-gevolge-van-windturbines.pdf" target="_blank" rel="noopener">NSG-onderzoeksrapport (Vercammen-tabel)</a>, <a href="https://nsg.nl/nl/nsg-richtlijn_laagfrequent_geluid.html" target="_blank" rel="noopener">NSG-richtlijn laagfrequent geluid</a>.</p>
     ${hasBag ? `
@@ -5116,78 +5090,6 @@ function m13BuildReportHtml(mapImages) {
     </ol>
   </section>`;
 
-  // ---- Sectie: Position paper (A-weging) — dynamisch, o.b.v. Module 8a en de actuele turbinepositie(s) ----
-  const m13aFindRow = (scenario, catKey) => {
-    const s = rows8a.find((rr) => rr.scenario === scenario);
-    if (!s) return null;
-    return s.rows.find((rr) => rr.catKey === catKey && rr.periodLabel === 'Nacht') || null;
-  };
-  const m13aPctRound = (row) => (row && row.afnamePct != null) ? Math.round(row.afnamePct) : null;
-  const m13aErased = (row) => m13aPctRound(row) != null && m13aPctRound(row) >= 100;
-  const m13aResidual = (row) => m13aPctRound(row) != null && m13aPctRound(row) < 100 && row.housesM8a > 0;
-  const m13aScenarios = ['best', 'middel', 'worst'];
-  const lfNightRows = m13aScenarios.map((sc) => ({ scenario: sc, label: M8_SCENARIO_LABEL[sc], row: m13aFindRow(sc, 'laagfrequent') }));
-  const infraNightRows = m13aScenarios.map((sc) => ({ scenario: sc, label: M8_SCENARIO_LABEL[sc], row: m13aFindRow(sc, 'infrasoon') }));
-  const lfHasAnyData = lfNightRows.some((x) => x.row && x.row.housesM8 != null);
-  const infraHasAnyData = infraNightRows.some((x) => x.row && x.row.housesM8 != null);
-  const lfResidual = lfNightRows.filter((x) => m13aResidual(x.row));
-  const infraResidual = infraNightRows.filter((x) => m13aResidual(x.row));
-  const lfErasedCount = lfNightRows.filter((x) => m13aErased(x.row)).length;
-  const infraErasedCount = infraNightRows.filter((x) => m13aErased(x.row)).length;
-
-  const m13aResidualSentence = (label, residual, erasedCount) => {
-    if (residual.length === 0) {
-      return `voor <strong>${label}</strong> verdwijnt de overschrijding in alle drie de scenario's (best/middel/worst) volledig na A-weging (${erasedCount}/3 op nul woningen na weging)`;
-    }
-    const worst = residual[residual.length - 1];
-    return `voor <strong>${label}</strong> blijft in ${residual.length} van de 3 scenario's een overschrijding over na A-weging — het zwaarste geval (${worst.label.toLowerCase()}) resulteert in <strong>${m13Int(worst.row.housesM8a)} van de ${m13Int(worst.row.housesM8)} woningen</strong> die zonder A-weging binnen de overschrijdingsring zouden vallen (een afname van &ldquo;slechts&rdquo; ${m13aPctRound(worst.row)}% in plaats van 100%)`;
-  };
-
-  const m13aTableRow = (scenarioLabel, catLabel, row) => {
-    if (!row || row.housesM8 == null) {
-      return `<tr><td>${scenarioLabel}</td><td>${catLabel}</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>`;
-    }
-    return `<tr><td>${scenarioLabel}</td><td>${catLabel}</td><td>${row.lwM8.toFixed(1)} ${row.unweightedUnit} → ${row.lwM8a.toFixed(1)} dB(A)</td><td>${row.deltaDb != null ? row.deltaDb.toFixed(1) : '—'}</td><td>${m13Int(row.housesM8)} → ${m13Int(row.housesM8a)}</td><td>${row.afnamePct != null ? '−' + Math.round(row.afnamePct) + '%' : '—'}</td></tr>`;
-  };
-
-  const positioningPaperSection = (hasBag && (lfHasAnyData || infraHasAnyData)) ? `
-  <section class="rp-section rp-avoid-break">
-    <h2>12. Position paper: A-weging maskeert laagfrequent en infrasoon geluid</h2>
-    <h3>12.1 Kernboodschap</h3>
-    <p><strong>De Nederlandse geluidsnorm voor windturbines (${escapeHtml(norm.label)}${norm.lnight != null ? `, Lnight ≤ ${norm.lnight} dB` : ''}) rekent uitsluitend in A-gewogen decibellen — de eenheid die is afgestemd op het menselijk gehoor voor gewoon, hoorbaar geluid. Op laagfrequent geluid (20–125 Hz) trekt die weging tot circa 39 dB af; op infrasoon geluid (&lt;20 Hz) tot bijna 78 dB. Doorgerekend op de hierboven vermelde turbinepositie(s) ${m13aResidualSentence('infrasoon geluid', infraResidual, infraErasedCount)}, en ${m13aResidualSentence('laagfrequent geluid', lfResidual, lfErasedCount)} — niet omdat er geen geluid meer is, maar omdat de meetmethode het numeriek onzichtbaar maakt.</strong></p>
-    <p>Dat is geen bijverschijnsel maar een <strong>cirkelredenering</strong>: eerst een filter toepassen dat specifiek laagfrequent en infrasoon geluid onderdrukt, en vervolgens concluderen dat er geen probleem is (<a href="https://sonavyx.com/en/insights/iec-61672-1-frequency-weighting" target="_blank" rel="noopener">SonaVyx</a>). Denemarken doorbrak die redenering in 2012 met een aparte, ongewogen LFG-norm, getoetst bij representatieve <em>ongunstige</em> windsnelheden (6–8 m/s) in plaats van een jaargemiddelde (<a href="https://docs.wind-watch.org/vandenBerg-SoundOfHighWinds.pdf" target="_blank" rel="noopener">Van den Berg</a>). Nederland heeft die stap nooit gezet: de overheid achtte een aparte norm voor laagfrequent geluid &ldquo;tot nog toe onnodig&rdquo; (<a href="https://www.rivm.nl/sites/default/files/2018-11/Kennisbericht_Geluid_van_windturbines_versie_1punt0_20150611.pdf" target="_blank" rel="noopener">RIVM, 2015</a>), en beantwoordt Kamervragen over aanhoudende klachten met de stelling dat er &ldquo;geen reden&rdquo; is voor aanvullende normen (<a href="https://zoek.officielebekendmakingen.nl/ah-tk-20202021-620.html" target="_blank" rel="noopener">Rijksoverheid</a>).</p>
-    ${lfResidual.length > 0 ? `<p>Het scenario met de grootste resterende overschrijding na A-weging — <strong>${lfResidual[lfResidual.length - 1].label.toLowerCase()}, nacht, laagfrequent</strong> — is precies het type piekmoment dat een jaargemiddelde Lnight-toets wegmiddelt tussen de vele rustigere nachten (zie §8.3). Dat scenario, niet het jaargemiddelde, is het scenario waarop beleid en vergunningverlening zich zouden moeten richten als het doel is om laagfrequente en infrasone hinder daadwerkelijk te kunnen zien voordat een vergunning wordt verleend.</p>` : `<p>Bij deze turbinepositie(s) verdwijnt de overschrijding voor beide categorieën in alle drie de scenario's volledig na A-weging. Dat betekent niet dat er geen laagfrequent of infrasoon geluid is — het betekent dat de gekozen meetmethode het bij deze specifieke plaatsing numeriek volledig onzichtbaar maakt, en dat een andere plaatsing (dichter bij woningen, of een zwaardere turbine) dit beeld kan omslaan naar een resterende overschrijding zoals bij een minder gunstige locatie.</p>`}
-
-    <h3>12.2 Waar dit rapport is getoetst</h3>
-    <p>De cijfers hierboven zijn niet abstract: ze zijn doorgerekend op de ${n} hierboven vermelde turbinepositie(s) (${escapeHtml(turbineList)}, bronvermogen ${state.lwa.toFixed(1)} dB(A)), met de zes vaste toetsingsringen van het model (500 / 900 / 1.300 / 1.500 / 2.000 / 5.000 m).</p>
-    ${m13MapImagesHtml(mapViews, turbineList)}
-
-    <h3>12.3 Wat de A-weging numeriek wegfiltert</h3>
-    <table class="rp-table rp-table-compact">
-      <thead><tr><th>Scenario</th><th>Categorie</th><th>Bronniveau<br><span class="rp-src">ongewogen → A-gewogen</span></th><th>Δ (dB)</th><th>Woningen<br><span class="rp-src">ongewogen → A-gewogen</span></th><th>Afname</th></tr></thead>
-      <tbody>
-        ${lfNightRows.map((x) => m13aTableRow(x.label, 'Laagfrequent', x.row)).join('')}
-        ${infraNightRows.map((x) => m13aTableRow(x.label, 'Infrasoon', x.row)).join('')}
-      </tbody>
-    </table>
-    <p class="rp-note">Alle rijen betreffen de nachtperiode (zie §2); cijfers afgeleid van Module 8a, ringen en woningtellingen zoals gedefinieerd in Module 3/8.</p>
-
-    <h3>12.4 Beperkingen van Module 8a en beleidsaanbevelingen</h3>
-    <p>Module 8a maakt het effect van A-weging zichtbaar, maar heeft zelf vijf methodologische beperkingen. Elke beperking wijst naar een concrete stap die nodig is om de onderliggende blinde vlek in de bestaande normstelling weg te nemen — niet in het model, maar in beleid en vergunningverlening.</p>
-    <ol class="rp-list">
-      <li><strong>Geen wettelijk vastgestelde dag-norm.</strong> Het model toetst de dag-periode indicatief aan dezelfde Lnight-waarde als de nacht, omdat een aparte wettelijke dagnorm voor laagfrequent/infrasoon geluid ontbreekt. <em>Aanbeveling:</em> introduceer een expliciete, aparte toetsingswaarde voor laagfrequent en infrasoon geluid overdag, analoog aan de bestaande Lden/Lnight-tweedeling voor hoorbaar geluid.</li>
-      <li><strong>A-gewogen infrasoon is een rekenexercitie, geen erkende meetmethode.</strong> Er bestaat geen gepubliceerde praktijkstandaard die infrasoon geluid van windturbines routinematig A-weegt en tegen de Lnight-norm toetst. <em>Aanbeveling:</em> herstel een onafhankelijk, doorlopend expertiseplatform voor windturbinegeluid met een specifiek mandaat voor laagfrequent/infrasoon meting — de eerdere pilot van het Kennisplatform Windenergie werd na evaluatie stopgezet en niet uitgebreid (<a href="https://zoek.officielebekendmakingen.nl/kst-33612-61.pdf" target="_blank" rel="noopener">Kamerstuk 33 612, nr. 61</a>); laat dat platform een erkende, ongewogen meetmethode vaststellen vóórdat nieuwe vergunningen worden verleend.</li>
-      <li><strong>Toetsingsring van 5 km ligt ruim binnen de werkelijke reikwijdte van infrasoon.</strong> Overschrijdingsafstanden worden afgerond op de eerstvolgende vaste ring, met 5.000 m als maximum. Onder gunstige atmosferische omstandigheden kan infrasoon van grote turbines zich over meer dan 10 km verspreiden (<a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson e.a., 2026</a>), en wordt infrasoon volgens andere bronnen in de standaard emissiemeting (20–20.000 Hz) in het geheel niet meegenomen (<a href="https://www.platformwindenergiedezijpe.nl/wp-content/uploads/2020/11/Geluid-windturbines.pdf" target="_blank" rel="noopener">Platform Windenergie De Zijpe</a>). <em>Aanbeveling:</em> verplicht in de vergunningsaanvraag propagatiemodellering tot minimaal 10–15 km voor infrasoon bij gevoelige bestemmingen, en laat de emissiemeting het volledige frequentiebereik &lt;20 Hz omvatten.</li>
-      <li><strong>Definitieverschil tussen de aangeleverde position papers en de octaafbanden van het model.</strong> De aangeleverde position papers definiëren &ldquo;laagfrequent geluid&rdquo; breder (20–200 Hz) dan de octaafbanden die dit model gebruikt (31,5/63/125 Hz); de richting van de bevindingen is gelijk, maar de exacte getallen zijn niet 1-op-1 herleidbaar naar die bredere definitie. <em>Aanbeveling:</em> harmoniseer de wettelijke/beleidsmatige definitie van laagfrequent geluid met een eenduidige, internationaal herkenbare tertsbanddefinitie zoals in de Deense norm.</li>
-      <li><strong>Geen doorrekening naar zorgkosten of gezondheidsverlies op basis van A-weging.</strong> Module 9 (zorgkosten) en Module 10 (DALY's) blijven gebaseerd op de ongewogen/G-gewogen bewonersaantallen van Module 8; het A-wegingseffect van Module 8a wordt daar niet in doorgerekend. <em>Aanbeveling:</em> laat gezondheidseffectonderzoek (RIVM, GGD) blootstelling baseren op ongewogen, laagfrequent-specifieke geluidsniveaus in plaats van op de A-gewogen dB(A)-Lnight-waarde alleen.</li>
-    </ol>
-    <p class="rp-note">Bronnen bij deze position paper: <a href="https://sonavyx.com/en/insights/iec-61672-1-frequency-weighting" target="_blank" rel="noopener">SonaVyx — IEC 61672-1 frequency weighting</a> · <a href="https://docs.wind-watch.org/vandenBerg-SoundOfHighWinds.pdf" target="_blank" rel="noopener">Van den Berg — The Sound of High Winds</a> · <a href="https://www.rivm.nl/sites/default/files/2018-11/Kennisbericht_Geluid_van_windturbines_versie_1punt0_20150611.pdf" target="_blank" rel="noopener">RIVM (2015)</a> · <a href="https://zoek.officielebekendmakingen.nl/ah-tk-20202021-620.html" target="_blank" rel="noopener">Kamervragen Beckerman &amp; Van Gerven</a> · <a href="https://zoek.officielebekendmakingen.nl/kst-33612-61.pdf" target="_blank" rel="noopener">Kamerstuk 33 612, nr. 61</a> · <a href="https://www.platformwindenergiedezijpe.nl/wp-content/uploads/2020/11/Geluid-windturbines.pdf" target="_blank" rel="noopener">Platform Windenergie De Zijpe</a> · <a href="https://www.sciencedirect.com/science/article/pii/S0003682X26000817" target="_blank" rel="noopener">Mattsson e.a. (2026), Applied Acoustics</a>.</p>
-  </section>` : `
-  <section class="rp-section">
-    <h2>12. Position paper: A-weging maskeert laagfrequent en infrasoon geluid</h2>
-    <p><em>${n === 0 ? 'Plaats minstens één turbine in Module 3 en haal de BAG-woningen op bij Module 8 om deze positioning paper met locatiespecifieke cijfers te vullen.' : 'Nog geen BAG-gegevens opgehaald bij Module 8 voor deze turbinepositie(s) — plaats de turbine(s) en klik op "Woningen ophalen (BAG)" om deze sectie te vullen.'}</em></p>
-  </section>`;
-
   const bronnenSection = `
   <section class="rp-section">
     <h2>Bronnen</h2>
@@ -5287,12 +5189,12 @@ function m13BuildReportHtml(mapImages) {
   ${hinderSection}
   ${costSection}
   ${dalySection}
+  ${nsgSection}
   ${vercammenSection}
   ${analysisSection}
   ${valueSection}
   ${compareSection}
   ${advisorySection}
-  ${positioningPaperSection}
   ${bronnenSection}
   <div class="rp-footer">Automatisch gegenereerd door het interactieve windturbinegeluidsmodel (Module 13). Dient ter beleidsmatige illustratie — vervangt geen formeel akoestisch onderzoek, planschadetaxatie of gezondheidskundig advies. Klik linksboven op "Afdrukken / opslaan als PDF" en kies als bestemming "Opslaan als PDF" om dit rapport te downloaden.</div>
 </div>
@@ -5300,7 +5202,7 @@ function m13BuildReportHtml(mapImages) {
 </html>`;
 }
 
-// ---- Kaartafbeeldingen voor het rapport (§12) — legt de daadwerkelijke turbinepositie(s)
+// ---- Kaartafbeeldingen voor het rapport (§3) — legt de daadwerkelijke turbinepositie(s)
 // vast, niet een statische referentieafbeelding. Gebruikt html2canvas om de volledige
 // kaartcontainer (MapLibre-GL-tegels + Leaflet-canvasrenderer met de ringen + DOM-markers)
 // tot één PNG te composeren. preserveDrawingBuffer:true op tileLayer3a (zie applyMapTileTheme3a)
@@ -5332,32 +5234,100 @@ function m13WaitMapIdle(timeout) {
   });
 }
 
-// Steekproef op het vastgelegde canvas: hoeveel fractie van de pixels is NIET (bijna-)wit.
-// De tegellaag (positron-stijl) kleurt verreweg het grootste deel van het beeld; blijft de
-// achtergrondkaart leeg (WebGL-buffer nog niet klaar op het moment van uitlezen), dan bestaat
-// het beeld alleen uit de dunne ring-omtrekken en het turbine-icoon op een verder wit vlak —
-// een fractie van doorgaans <30% niet-wit, tegenover >90% wanneer de tegels wel zijn getekend.
+// Wacht actief tot de GL-camera daadwerkelijk op de verwachte zoom/positie staat én alle
+// tegels klaar zijn, in plaats van te vertrouwen op ÉÉN 'idle'-event. Dat event kan namelijk
+// "vals" afgaan: als het geregistreerd wordt vlak nadat de kaart AL idle was (vóór de eigenlijke
+// setView-camerawijziging is doorgevoerd door de maplibre-gl-leaflet-brug), lost de promise meteen
+// op terwijl de tegellaag nog op de OUDE camera staat — precies het scenario waarbij de
+// (canvas-getekende) ringen al op de NIEUWE positie staan maar de tegels nog niet, wat op het
+// "rechter kaartbeeld" als een duidelijke ring/tegel-mismatch zichtbaar wordt.
+function m13WaitMapCameraSynced(expectedCenter, expectedZoom, timeout) {
+  return new Promise((resolve) => {
+    if (!map3a || !tileLayer3a || typeof tileLayer3a.getMaplibreMap !== 'function') { resolve(); return; }
+    const glMap = tileLayer3a.getMaplibreMap();
+    if (!glMap || expectedCenter == null || expectedZoom == null) { resolve(); return; }
+    const start = Date.now();
+    const maxWait = timeout || 2500;
+    const zoomEps = 0.03;
+    const llEps = 0.0005; // ruwweg enkele tientallen meters — genoeg om een echte camera-sync te onderscheiden van ruis
+    const poll = () => {
+      let camMatches = false;
+      try {
+        const z = glMap.getZoom();
+        const c = glMap.getCenter();
+        camMatches = Math.abs(z - expectedZoom) < zoomEps
+          && Math.abs(c.lat - expectedCenter.lat) < llEps
+          && Math.abs(c.lng - expectedCenter.lng) < llEps;
+      } catch (e) { camMatches = true; }
+      let tilesLoaded = true;
+      try { if (typeof glMap.areTilesLoaded === 'function') tilesLoaded = glMap.areTilesLoaded(); } catch (e) { /* negeren */ }
+      let notMoving = true;
+      try { if (typeof glMap.isMoving === 'function') notMoving = !glMap.isMoving(); } catch (e) { /* negeren */ }
+      if ((camMatches && tilesLoaded && notMoving) || (Date.now() - start) >= maxWait) {
+        resolve();
+      } else {
+        setTimeout(poll, 80);
+      }
+    };
+    poll();
+  });
+}
+
+// Steekproef op het vastgelegde canvas, per grid-cel i.p.v. één globaal gemiddelde. Een
+// eerdere versie beoordeelde alleen het GEMIDDELDE aandeel niet-witte pixels over het hele
+// beeld — daardoor kon een beeld waarvan bijvoorbeeld het rechterdeel volledig wit/leeg was
+// (tegels daar nog niet geladen) toch "goedgekeurd" worden zolang de ring-omtrekken en labels
+// in de rest van het beeld het gemiddelde boven de drempel trokken. Dat is exact het defect dat
+// gerapporteerd werd: links wél achtergrond, rechts (waar de ringen/woningen staan) wit.
+// Door het beeld in cellen te verdelen en te eisen dat ELKE cel voor zichzelf een minimum
+// haalt, wordt een groot leeg blok in één regio wél afgekeurd, ook als het beeld als geheel
+// gemiddeld genoeg "kleur" heeft.
 function m13NonWhiteFraction(canvas) {
   try {
     const ctx = canvas.getContext('2d');
     const { width, height } = canvas;
-    if (!width || !height) return 0;
+    if (!width || !height) return { overall: 0, worstCell: 0 };
     const data = ctx.getImageData(0, 0, width, height).data;
-    let nonWhite = 0;
-    let total = 0;
-    const step = 4 * 37; // steekproef i.p.v. elke pixel — snel genoeg voor een 2x-scale canvas
-    for (let i = 0; i < data.length; i += step) {
-      total++;
+    const cols = 3, rows = 2; // grove 3x2-raster — groot genoeg om lokaal spaarzame (landelijke) tegel-inhoud niet af te keuren, fijn genoeg om een leeg kwadrant te vangen
+    const cellW = Math.floor(width / cols);
+    const cellH = Math.floor(height / rows);
+    const stride = 6; // pixelstap binnen elke cel
+    const cellFracs = [];
+    let totalNonWhite = 0;
+    let totalSampled = 0;
+    const isBlankPixel = (i) => {
+      const alpha = data[i + 3];
       // Zowel een (bijna-)wit gevulde als een grotendeels transparante pixel telt als "leeg":
       // een mislukte capture kan beide vormen aannemen, afhankelijk van wat er onder het
       // canvas-element doorschijnt op het moment van uitlezen.
-      const alpha = data[i + 3];
-      const isBlankPixel = alpha < 10 || (data[i] > 245 && data[i + 1] > 245 && data[i + 2] > 245);
-      if (!isBlankPixel) nonWhite++;
+      return alpha < 10 || (data[i] > 245 && data[i + 1] > 245 && data[i + 2] > 245);
+    };
+    for (let cy = 0; cy < rows; cy++) {
+      for (let cx = 0; cx < cols; cx++) {
+        const x0 = cx * cellW, y0 = cy * cellH;
+        const x1 = (cx === cols - 1) ? width : x0 + cellW;
+        const y1 = (cy === rows - 1) ? height : y0 + cellH;
+        let nonWhite = 0, sampled = 0;
+        for (let y = y0; y < y1; y += stride) {
+          const rowOffset = y * width;
+          for (let x = x0; x < x1; x += stride) {
+            const i = (rowOffset + x) * 4;
+            sampled++;
+            if (!isBlankPixel(i)) nonWhite++;
+          }
+        }
+        const frac = sampled ? nonWhite / sampled : 0;
+        cellFracs.push(frac);
+        totalNonWhite += nonWhite;
+        totalSampled += sampled;
+      }
     }
-    return total ? nonWhite / total : 0;
+    return {
+      overall: totalSampled ? totalNonWhite / totalSampled : 0,
+      worstCell: cellFracs.length ? Math.min(...cellFracs) : 0,
+    };
   } catch (e) {
-    return 1; // kon niet samplen (bv. CORS) — niet blokkeren op deze check
+    return { overall: 1, worstCell: 1 }; // kon niet samplen (bv. CORS) — niet blokkeren op deze check
   }
 }
 
@@ -5365,25 +5335,41 @@ async function m13CaptureSingleView(opts) {
   const mapEl = document.getElementById('turbine-map-3a');
   if (!mapEl || typeof html2canvas !== 'function' || !map3a) return null;
   const container = mapEl.closest('.m3a-map-wrap') || mapEl;
-  const maxAttempts = (opts && opts.maxAttempts) || 5;
+  const maxAttempts = (opts && opts.maxAttempts) || 6;
+  // Wanneer de aanroeper weet welke camera (center/zoom) verwacht wordt na een setView
+  // (bv. de "regionale" weergave), geven we die door zodat we kunnen wachten tot de
+  // GL-tegellaag DAADWERKELIJK op die positie staat — in plaats van te vertrouwen op een
+  // enkel 'idle'-event dat vals kan afgaan (zie m13WaitMapCameraSynced hierboven).
+  const expectedCenter = opts && opts.expectedCenter;
+  const expectedZoom = opts && opts.expectedZoom;
   container.classList.add('m13-capturing');
   try {
     map3a.invalidateSize();
-    // Ruimere marge dan voorheen (900ms/120ms): op een tragere verbinding (bv. Render's
-    // gratis omgeving) is de MapLibre-GL-tegellaag na een zoom-/pan-wijziging soms nog niet
-    // klaar met tekenen wanneer html2canvas de canvas-buffer uitleest, waardoor de
-    // achtergrondkaart in het vastgelegde beeld leeg/wit blijft.
-    await m13WaitMapIdle(1200);
+    if (expectedCenter != null && expectedZoom != null) {
+      await m13WaitMapCameraSynced(expectedCenter, expectedZoom, 2500);
+    } else {
+      // Ruimere marge dan voorheen (900ms/120ms): op een tragere verbinding (bv. Render's
+      // gratis omgeving) is de MapLibre-GL-tegellaag na een zoom-/pan-wijziging soms nog niet
+      // klaar met tekenen wanneer html2canvas de canvas-buffer uitleest, waardoor de
+      // achtergrondkaart in het vastgelegde beeld leeg/wit blijft.
+      await m13WaitMapIdle(1200);
+    }
     await new Promise((r) => setTimeout(r, 220));
+    // Dubbele requestAnimationFrame: forceert dat de browser minstens één volledige verf-cyclus
+    // heeft afgerond en naar het scherm (en daarmee de WebGL-readback-buffer) heeft geflushed
+    // vóór html2canvas de canvas leest — zonder dit kan de buffer nog de VORIGE frame bevatten.
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     // De wachttijd hierboven is een gok, geen garantie: op een trage verbinding of een zwaar
     // belaste pagina (bv. net na het inladen van duizenden BAG-adressen) kan de tegellaag ook
-    // na 1400ms nog leeg zijn. Daarom controleren we het resultaat zelf en proberen we het
-    // — met een oplopende extra wachttijd en een geforceerde herteken-aanroep — tot 5x opnieuw
-    // (was 3x: bleek in de praktijk niet genoeg voor de EERSTE capture van de pagina, zie
-    // m13CaptureMapViews) voordat we de beste (meest gevulde) poging teruggeven.
+    // daarna nog (deels) leeg zijn. Daarom controleren we het resultaat zelf PER GRID-CEL
+    // (niet alleen het gemiddelde — zie m13NonWhiteFraction) en proberen we het — met een
+    // oplopende extra wachttijd en een geforceerde herteken-aanroep — tot 6x opnieuw voordat we
+    // de beste (meest gelijkmatig gevulde) poging teruggeven.
     let bestCanvas = null;
-    let bestFrac = -1;
+    let bestScore = -1;
     const glMap = tileLayer3a && typeof tileLayer3a.getMaplibreMap === 'function' ? tileLayer3a.getMaplibreMap() : null;
+    const WORST_CELL_MIN = 0.06; // elke cel moet minstens dit aandeel niet-wit hebben
+    const OVERALL_MIN = 0.5;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const canvas = await html2canvas(mapEl, {
         useCORS: true,
@@ -5391,12 +5377,20 @@ async function m13CaptureSingleView(opts) {
         scale: 2,
         logging: false,
       });
-      const frac = m13NonWhiteFraction(canvas);
-      if (frac > bestFrac) { bestFrac = frac; bestCanvas = canvas; }
-      if (frac >= 0.5) break; // achtergrondkaart is duidelijk zichtbaar — geen extra poging nodig
+      const { overall, worstCell } = m13NonWhiteFraction(canvas);
+      // Score gedomineerd door de zwakste cel: een beeld met één groot leeg blok mag nooit
+      // "beste poging tot nu toe" worden t.o.v. een beeld dat overal gelijkmatig gevuld is,
+      // ook al is het globale gemiddelde van het eerste toevallig hoger.
+      const score = Math.min(worstCell, overall);
+      if (score > bestScore) { bestScore = score; bestCanvas = canvas; }
+      if (worstCell >= WORST_CELL_MIN && overall >= OVERALL_MIN) break; // achtergrond overal zichtbaar — geen extra poging nodig
       if (glMap && typeof glMap.triggerRepaint === 'function') glMap.triggerRepaint();
       if (glMap && typeof glMap.resize === 'function') { try { glMap.resize(); } catch (e) { /* negeren */ } }
-      await m13WaitMapIdle(900);
+      if (expectedCenter != null && expectedZoom != null) {
+        await m13WaitMapCameraSynced(expectedCenter, expectedZoom, 900);
+      } else {
+        await m13WaitMapIdle(900);
+      }
       await new Promise((r) => setTimeout(r, 450 + attempt * 350));
     }
     return bestCanvas ? bestCanvas.toDataURL('image/png') : null;
@@ -5430,7 +5424,7 @@ async function m13CaptureMapViews() {
     try { await html2canvas(mapElWarmup, { useCORS: true, backgroundColor: null, scale: 1, logging: false }); } catch (e) { /* negeren, dit was slechts een opwarmronde */ }
   }
   try {
-    closeup = await m13CaptureSingleView();
+    closeup = await m13CaptureSingleView({ expectedCenter: originalCenter, expectedZoom: originalZoom });
     // Was originalZoom - 4 (16x zo veel oppervlak): op een normale plaatsingszoom (~11) kwam de
     // "regionale" kaart daardoor op een landsdekkend zicht uit, met de turbine als vrijwel
     // onzichtbare speldenprik. -2 (4x zoveel oppervlak) toont wel de bredere omgeving
@@ -5438,8 +5432,10 @@ async function m13CaptureMapViews() {
     const regioZoom = Math.max(map3a.getMinZoom ? map3a.getMinZoom() : 6, originalZoom - 2);
     if (regioZoom < originalZoom) {
       map3a.setView(originalCenter, regioZoom, { animate: false });
-      await new Promise((r) => setTimeout(r, 350));
-      regional = await m13CaptureSingleView();
+      // Geeft de verwachte (nieuwe) center/zoom door aan de capture, zodat die actief wacht tot
+      // de GL-tegellaag ook echt op deze camera staat i.p.v. op een vast getal milliseconden te
+      // vertrouwen — dit is de kern van de fix voor de gerapporteerde ring/tegel-mismatch.
+      regional = await m13CaptureSingleView({ expectedCenter: originalCenter, expectedZoom: regioZoom });
     }
   } finally {
     map3a.setView(originalCenter, originalZoom, { animate: false });
