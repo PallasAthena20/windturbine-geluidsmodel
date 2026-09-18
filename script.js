@@ -640,9 +640,8 @@ function m14aRenderDayInfoTable(bodyId, resultCalloutId, categoryKey) {
 function renderModule14a() {
   // Geen eigen invoervelden meer: richting komt uit Module 14 (state.m14Bearing), norm uit
   // Module 5 (getActiveNorm()) \u2014 zie de gebruikersinstructie "14a moet gebaseerd zijn op de
-  // eerste modules, geen module op zichzelf". Voor de 'eigen/lokale norm'-preset bestaat er geen
-  // Lden-waarde (alleen Lnight, zie NORM_PRESETS/getActiveNorm): in dat geval blijft de
-  // Lden-toetsing hieronder leeg (hasNorm=false) en tonen de tabellen alleen de rekenwaarden.
+  // eerste modules, geen module op zichzelf". Bij de 'eigen/lokale norm'-preset komen de Lden- en
+  // Lnight-waarden uit Module 1 (state.normCustomLden/state.normCustomLnight, zie getActiveNorm()).
   const norm = getActiveNorm();
   const ldenNorm = Number(norm.lden);
   const nightNorm = Number(norm.lnight);
@@ -652,7 +651,8 @@ function renderModule14a() {
   if (contextCallout) {
     const ldenNormText = Number.isFinite(ldenNorm) ? `${ldenNorm.toFixed(1)} dB(A)` : 'geen Lden-norm bij deze normkeuze';
     const nightNormText = Number.isFinite(nightNorm) ? `${nightNorm.toFixed(1)} dB(A)` : 'geen Lnight-norm bij deze normkeuze';
-    contextCallout.innerHTML = `<strong>Gebruikte instellingen (overgenomen uit eerdere modules, niet los instelbaar):</strong> richting van de woning t.o.v. de turbine = <strong>${m14BearingLabel(state.m14Bearing)}</strong> (wijzig in Module 14) &mdash; normkeuze = <strong>${escapeHtml(norm.label)}</strong> (wijzig in Module 5): Lden ${ldenNormText}, L<sub>night</sub> ${nightNormText}.`;
+    const normSourceHint = state.normPreset === 'eigen' ? '(waarden ingesteld bij Module 1, normkeuze bij Module 5)' : '(wijzig in Module 5)';
+    contextCallout.innerHTML = `<strong>Gebruikte instellingen (overgenomen uit eerdere modules, niet los instelbaar):</strong> richting van de woning t.o.v. de turbine = <strong>${m14BearingLabel(state.m14Bearing)}</strong> (wijzig in Module 14) &mdash; normkeuze = <strong>${escapeHtml(norm.label)}</strong> ${normSourceHint}: Lden ${ldenNormText}, L<sub>night</sub> ${nightNormText}.`;
   }
 
   m14aRenderTable('m14a-lden-table-body', 'm14a-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld)', pct, 'hoorbaar', false);
@@ -690,7 +690,7 @@ const state = {
   lwa: 106.0, windBearing: 0, daynight: 'dag', scenario: 'best', curtailment: false,
   category: 'hoorbaar', turbines: [], selectedTurbineId: null,
   cumDistance: 500, cumShowReceptors: false,
-  normPreset: 'oud', normCustomLnight: 41,
+  normPreset: 'oud', normCustomLnight: 41, normCustomLden: 47,
   // Module 1: minimale afstand turbine-woning (knop met vaste keuzes) — getoetst in Module 3
   // via een live BAG-check (dichtstbijzijnde woning per geplaatste turbine, zie script.js §M1min.
   m1MinAfstandHuis: null, m1MinAfstandResults: null, m1MinAfstandFetching: false, m1MinAfstandError: null,
@@ -720,15 +720,16 @@ const state = {
   m14Distance: 900, m14Bearing: 180,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
-// 'eigen' heeft alleen een vaste Lnight-waarde (state.normCustomLnight); er bestaat in dit model
-// geen los invoerbare eigen Lden-norm, dus getActiveNorm() geeft voor 'eigen' geen lden-veld terug.
+// 'eigen' gebruikt de zelf ingevulde Lden- en Lnight-waarden uit Module 1 (state.normCustomLden /
+// state.normCustomLnight) — die invoer is bewust in Module 1 geplaatst (niet in Module 5 zelf) zodat
+// deze in lijn is met de overige "vroege module bepaalt, latere modules lezen uit"-opzet van dit model.
 const NORM_PRESETS = {
   oud: { lden: 47, lnight: 41, label: 'Oude landelijke norm (Activiteitenbesluit/-regeling)' },
   who: { lden: 45, lnight: null, label: 'WHO-advieswaarde' },
 };
 function getActiveNorm() {
   if (state.normPreset === 'eigen') {
-    return { lnight: state.normCustomLnight, label: 'Eigen/lokale norm' };
+    return { lden: state.normCustomLden, lnight: state.normCustomLnight, label: 'Eigen/lokale norm' };
   }
   return NORM_PRESETS[state.normPreset];
 }
@@ -775,21 +776,40 @@ const scenarioList = document.getElementById('scenario-list');
 const factorRows = document.getElementById('factor-rows');
 const worstCaseReadout = document.getElementById('worst-case-readout');
 const normPresetSelect = document.getElementById('norm-preset-select');
-const normCustomLnightField = document.getElementById('norm-custom-lnight-field');
-const normCustomLnightInput = document.getElementById('norm-custom-lnight');
+const normCustomValuesNote = document.getElementById('norm-custom-values-note');
+const m1CustomLdenInput = document.getElementById('m1-custom-lden');
+const m1CustomLnightInput = document.getElementById('m1-custom-lnight');
 const normContextCallout = document.getElementById('norm-context-callout');
 const normTableBody = document.getElementById('norm-table-body');
 const normTableHead = document.getElementById('norm-table-head');
+function updateNormCustomValuesNote() {
+  if (!normCustomValuesNote) return;
+  const isCustom = state.normPreset === 'eigen';
+  normCustomValuesNote.style.display = isCustom ? '' : 'none';
+  if (isCustom) {
+    normCustomValuesNote.innerHTML = `Eigen normwaarden (ingesteld bij <strong>Module 1</strong>): Lden <strong>${state.normCustomLden.toFixed(1)} dB(A)</strong>, L<sub>night</sub> <strong>${state.normCustomLnight.toFixed(1)} dB(A)</strong> \u2014 wijzig deze waarden bij Module 1.`;
+  }
+}
 if (normPresetSelect) {
   normPresetSelect.addEventListener('change', () => {
     state.normPreset = normPresetSelect.value;
-    const isCustom = state.normPreset === 'eigen';
-    normCustomLnightField.style.display = isCustom ? '' : 'none';
+    updateNormCustomValuesNote();
     render();
   });
-  normCustomLnightInput.addEventListener('input', () => {
-    state.normCustomLnight = parseFloat(normCustomLnightInput.value);
+}
+if (m1CustomLdenInput) {
+  m1CustomLdenInput.addEventListener('input', () => {
+    state.normCustomLden = parseFloat(m1CustomLdenInput.value);
+    if (Number.isNaN(state.normCustomLden)) state.normCustomLden = 47;
+    updateNormCustomValuesNote();
+    render();
+  });
+}
+if (m1CustomLnightInput) {
+  m1CustomLnightInput.addEventListener('input', () => {
+    state.normCustomLnight = parseFloat(m1CustomLnightInput.value);
     if (Number.isNaN(state.normCustomLnight)) state.normCustomLnight = 41;
+    updateNormCustomValuesNote();
     render();
   });
 }
@@ -1167,6 +1187,7 @@ function m5LfgCombinedTableRowsHtml(baseState, norm) {
 
 function renderNormModule() {
   if (!normTableBody) return;
+  updateNormCustomValuesNote();
   const n = state.turbines3a.length;
   const norm = getActiveNorm();
   const cat = CATEGORY[state.category];
