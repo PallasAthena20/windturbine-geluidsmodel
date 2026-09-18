@@ -355,14 +355,6 @@ const M14_SPEED_BINS = [
   { key: 'bft7p', v: 15.5 },
 ];
 
-// Kans op geamplificeerd geluid (stabiele atmosfeer 's nachts / AM-piek overdag) — hergebruikt de
-// cijfers die Module 2 al onderbouwt: ~33% stabiele nachten (Van den Berg 2004; RIVM OPS S1+S2-uren),
-// <25% overdag (Nguyen et al. 2021). Toegepast als eenvoudig twee-toestandsmodel (aan/uit).
-const M14_P_NIGHT_AMPLIFIED = 0.33;
-const M14_NIGHT_AMPLIFICATION_DB = 12; // model se worst-case groupMax (windschering-plafond, Module 2)
-const M14_P_DAY_AMPLIFIED = 0.25;
-const M14_DAY_AMPLIFICATION_DB = 3; // model se worst-case AM-plafond (Module 2)
-
 // Relatieve LWA(v)-vormfactor t.o.v. het nominale (rated) niveau — ontleend aan een officieel
 // gepubliceerd Vestas-testrapport (V112-3.0MW-klasse, gestandaardiseerde 10 m-windsnelheid).
 // Bron: https://majorprojects.planningportal.nsw.gov.au (SSD-6696, Vestas test report).
@@ -410,85 +402,27 @@ function m14PeriodLevel(d, bearingToReceiver, lwaBase, pAmplified, amplification
   return 10 * Math.log10(sumPow);
 }
 
-function m14Compute(d, bearingToReceiver, lwaBase) {
-  const Ldag = m14PeriodLevel(d, bearingToReceiver, lwaBase, M14_P_DAY_AMPLIFIED, M14_DAY_AMPLIFICATION_DB);
-  const Lavond = Ldag; // zie toelichting in de UI: bewuste modelkeuze, geen aparte avondstatistiek
-  const Lnacht = m14PeriodLevel(d, bearingToReceiver, lwaBase, M14_P_NIGHT_AMPLIFIED, M14_NIGHT_AMPLIFICATION_DB);
-  if (Ldag == null || Lnacht == null) return null;
-  const lden = 10 * Math.log10(
-    (12 / 24) * Math.pow(10, Ldag / 10) +
-    (4 / 24) * Math.pow(10, (Lavond + 5) / 10) +
-    (8 / 24) * Math.pow(10, (Lnacht + 10) / 10)
-  );
-  return { Ldag, Lavond, Lnacht, Lden: lden, Lnight: Lnacht };
-}
-
-function renderModule14() {
-  const body = document.getElementById('m14-table-body');
-  const resultCallout = document.getElementById('m14-result-callout');
-  if (!body || !resultCallout) return;
-  const result = m14Compute(state.m14Distance, state.m14Bearing, state.lwa);
-  if (!result) {
-    body.innerHTML = '<tr><td colspan="4" class="empty-row">Berekening kon niet worden uitgevoerd.</td></tr>';
-    resultCallout.textContent = '';
-    return;
-  }
-  const rows = [
-    { label: 'Dag', def: '07:00\u201319:00, +0 dB', level: result.Ldag },
-    { label: 'Avond', def: '19:00\u201323:00, +5 dB', level: result.Lavond },
-    { label: 'Nacht', def: '23:00\u201307:00, +10 dB', level: result.Lnacht },
-  ];
-  body.innerHTML = rows.map(r => `<tr><td>${r.label}</td><td>${r.def}</td><td>${r.level.toFixed(1)} dB(A)</td><td>${r.label === 'Dag' ? '\u00d7 12u' : r.label === 'Avond' ? '\u00d7 4u, +5 dB' : '\u00d7 8u, +10 dB'}</td></tr>`).join('');
-  const norm = getActiveNorm();
-  let normText = 'Er is geen Lnight-norm geselecteerd (zie Module 5).';
-  if (norm && norm.lnight != null) {
-    const exceeds = result.Lnight > norm.lnight;
-    normText = `Lnight (= Lnacht, energetisch jaargemiddeld) van <strong>${result.Lnight.toFixed(1)} dB(A)</strong> ${exceeds ? 'overschrijdt' : 'blijft binnen'} de ${escapeHtml(norm.label)} (${norm.lnight} dB) op ${state.m14Distance} m, met de woning op ${m14BearingLabel(state.m14Bearing)} van de turbine.`;
-  }
-  resultCallout.innerHTML = `<strong>Lden (jaargemiddeld) \u2248 ${result.Lden.toFixed(1)} dB(A)</strong> — Ldag ${result.Ldag.toFixed(1)} / Lavond ${result.Lavond.toFixed(1)} / Lnacht ${result.Lnacht.toFixed(1)} dB(A). ${normText}`;
-}
-
 function m14BearingLabel(bearing) {
   const map = { 0: 'het noorden', 45: 'het noordoosten', 90: 'het oosten', 135: 'het zuidoosten', 180: 'het zuiden', 225: 'het zuidwesten', 270: 'het westen', 315: 'het noordwesten' };
   return map[bearing] || `${bearing}\u00b0`;
 }
 
-function initModule14() {
-  const distanceSelect = document.getElementById('m14-distance-select');
-  const bearingSelect = document.getElementById('m14-bearing-select');
-  if (!distanceSelect || !bearingSelect) return;
-  distanceSelect.innerHTML = DISTANCES.map(d => `<option value="${d}">${d} m</option>`).join('');
-  distanceSelect.value = String(state.m14Distance);
-  bearingSelect.value = String(state.m14Bearing);
-  distanceSelect.addEventListener('change', () => {
-    state.m14Distance = parseInt(distanceSelect.value, 10);
-    renderModule14();
-  });
-  bearingSelect.addEventListener('change', () => {
-    state.m14Bearing = parseInt(bearingSelect.value, 10);
-    renderModule14();
-    renderModule14a();
-  });
-  renderModule14();
-}
-
-// ---------- Module 14a: Lden per scenario (best/middel/worst) + eigen norm ----------
-// Bouwt voort op Module 14: hergebruikt m14PeriodLevel() voor het windroos/snelheids-gewogen
-// jaargemiddelde, maar vervangt de kansgewogen 33%/25%-amplificatie door de vaste scenario-
-// toeslagen die de rest van dit model al gebruikt (SCENARIO_FACTORS/combinedFactors, Module 2).
+// ---------- Module 14: Lden per scenario (best/middel/worst) + eigen norm ----------
+// Hergebruikt m14PeriodLevel() voor het windroos/snelheids-gewogen jaargemiddelde, met de vaste
+// scenario-toeslagen die de rest van dit model al gebruikt (SCENARIO_FACTORS/combinedFactors, Module 2).
 // Wiskundig geldig omdat een constante dB-toeslag, toegepast op elke van de 48 windroos-
 // combinaties vóór het energetisch middelen, exact gelijk is aan die toeslag achteraf optellen
 // bij het al gemiddelde niveau (de energetische som schaalt lineair mee met een uniforme
 // dB-verschuiving) — vandaar m14PeriodLevel(d, bearing, lwaBase, 0, 0) (pAmplified=0) als basis.
-const M14A_SCENARIOS = [
+const M14_SCENARIOS = [
   { key: 'best', label: 'Best case' },
   { key: 'middel', label: 'Middenscenario' },
   { key: 'worst', label: 'Worst case' },
 ];
 
-// Richting en norm komen NIET meer uit eigen Module 14a-invoervelden, maar rechtstreeks uit
-// Module 14 (state.m14Bearing) en Module 5 (getActiveNorm()) \u2014 zie renderModule14a().
-function m14aScenarioLevels(d, bearingToReceiver, lwaBase, scenarioKey, categoryKey) {
+// Richting komt uit de select in deze module, norm rechtstreeks uit
+// Module 5 (getActiveNorm()) \u2014 zie renderModule14().
+function m14ScenarioLevels(d, bearingToReceiver, lwaBase, scenarioKey, categoryKey) {
   const base = m14PeriodLevel(d, bearingToReceiver, lwaBase, 0, 0, categoryKey);
   if (base == null) return null;
   const addonDag = combinedFactors(d, scenarioKey, 'dag', false).total;
@@ -509,7 +443,7 @@ function m14aScenarioLevels(d, bearingToReceiver, lwaBase, scenarioKey, category
 // verdeling daarbinnen tussen middenscenario/worst case volgt uit de shear-capacity-verhouding bij
 // de ingestelde geostrofische wind (state.m7Ugeo). Bij geen turbines op de kaart (Module 3) wordt
 // De Bilt als inland-referentie gebruikt \u2014 zie m6TurbineAnchor(). Som van de drie is altijd 100.
-function m14aScenarioPercentages() {
+function m14ScenarioPercentages() {
   const anchor = m6TurbineAnchor();
   const pct = m6ScenarioPercentages(anchor.lat, anchor.lng);
   return { best: pct.best, middel: pct.middel, worst: pct.worst, anchor, distKm: pct.distKm };
@@ -518,7 +452,7 @@ function m14aScenarioPercentages() {
 // Energetisch gewogen jaargemiddelde over best/middel/worst, gewogen naar hun kans van voorkomen
 // (pct, in %, som = 100). Vereist alle drie scenario's in rowScenarios \u2014 geeft null als een van
 // de drie ontbreekt (bv. de dagperiode-tabel, die bewust geen worst case toont).
-function m14aWeightedValue(rowScenarios, metricKey, pct) {
+function m14WeightedValue(rowScenarios, metricKey, pct) {
   const get = (key) => rowScenarios.find((s) => s.key === key)?.result?.[metricKey];
   const b = get('best'), m = get('middel'), w = get('worst');
   if (b == null || m == null || w == null) return null;
@@ -532,20 +466,20 @@ function m14aWeightedValue(rowScenarios, metricKey, pct) {
 // Bouwt een toetsingstabel: rijen = afstanden, kolommen = de gevraagde scenario's plus (indien
 // alle drie scenario's aanwezig zijn) een kansgewogen jaargemiddelde-kolom, elke cel getoetst aan
 // `norm` (of ongetoetst als norm ongeldig is). `metricKey` selecteert Lden/Lnacht/Ldag uit het
-// resultaat van m14aScenarioLevels. `pct` = m14aScenarioPercentages() resultaat.
-function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm, metricLabelForSummary, pct, categoryKey, indicative) {
+// resultaat van m14ScenarioLevels. `pct` = m14ScenarioPercentages() resultaat.
+function m14RenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm, metricLabelForSummary, pct, categoryKey, indicative) {
   const body = document.getElementById(bodyId);
   const resultCallout = document.getElementById(resultCalloutId);
   if (!body || !resultCallout) return;
   const catKey = categoryKey || 'hoorbaar';
   const unit = CATEGORY[catKey].unit;
-  const scenarios = M14A_SCENARIOS.filter((s) => scenarioKeys.includes(s.key));
+  const scenarios = M14_SCENARIOS.filter((s) => scenarioKeys.includes(s.key));
   const hasNorm = Number.isFinite(norm);
   const showWeighted = pct && ['best', 'middel', 'worst'].every((k) => scenarioKeys.includes(k));
 
   const rowsData = DISTANCES.map((d) => ({
     d,
-    scenarios: scenarios.map((s) => ({ ...s, result: m14aScenarioLevels(d, state.m14Bearing, state.lwa, s.key, catKey) })),
+    scenarios: scenarios.map((s) => ({ ...s, result: m14ScenarioLevels(d, state.m14Bearing, state.lwa, s.key, catKey) })),
   }));
 
   body.innerHTML = rowsData.map(({ d, scenarios: rowScenarios }) => {
@@ -559,7 +493,7 @@ function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm,
     }).join('');
     let weightedCell = '';
     if (showWeighted) {
-      const weighted = m14aWeightedValue(rowScenarios, metricKey, pct);
+      const weighted = m14WeightedValue(rowScenarios, metricKey, pct);
       if (weighted == null) {
         weightedCell = '<td class="empty-row">&mdash;</td>';
       } else if (!hasNorm) {
@@ -591,7 +525,7 @@ function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm,
   if (showWeighted) {
     const okDistances = rowsData
       .filter((r) => {
-        const weighted = m14aWeightedValue(r.scenarios, metricKey, pct);
+        const weighted = m14WeightedValue(r.scenarios, metricKey, pct);
         return weighted != null && weighted <= norm;
       })
       .map((r) => r.d);
@@ -613,17 +547,17 @@ function m14aRenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm,
 // Louter informatieve dagperiode-uitsplitsing (best case + middenscenario): er bestaat geen
 // zelfstandige, wettelijke dagnorm in dit model \u2014 de dagperiode telt alleen mee binnen de
 // Lden-jaargemiddelde toetsing (tabel 1). Toont daarom kale Ldag-waarden zonder norm-toetsing.
-function m14aRenderDayInfoTable(bodyId, resultCalloutId, categoryKey) {
+function m14RenderDayInfoTable(bodyId, resultCalloutId, categoryKey) {
   const body = document.getElementById(bodyId);
   const resultCallout = document.getElementById(resultCalloutId);
   if (!body || !resultCallout) return;
   const catKey = categoryKey || 'hoorbaar';
   const unit = CATEGORY[catKey].unit;
-  const scenarios = M14A_SCENARIOS.filter((s) => ['best', 'middel'].includes(s.key));
+  const scenarios = M14_SCENARIOS.filter((s) => ['best', 'middel'].includes(s.key));
 
   const rowsData = DISTANCES.map((d) => ({
     d,
-    scenarios: scenarios.map((s) => ({ ...s, result: m14aScenarioLevels(d, state.m14Bearing, state.lwa, s.key, catKey) })),
+    scenarios: scenarios.map((s) => ({ ...s, result: m14ScenarioLevels(d, state.m14Bearing, state.lwa, s.key, catKey) })),
   }));
 
   body.innerHTML = rowsData.map(({ d, scenarios: rowScenarios }) => {
@@ -637,52 +571,129 @@ function m14aRenderDayInfoTable(bodyId, resultCalloutId, categoryKey) {
   resultCallout.innerHTML = `<strong>L<sub>dag</sub> (jaargemiddeld, dagperiode):</strong> louter informatief \u2014 er geldt geen zelfstandige dagnorm; de dagperiode telt uitsluitend mee binnen de Lden-jaargemiddelde toetsing hierboven. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14Bearing)} (Module 14).`;
 }
 
-function renderModule14a() {
-  // Geen eigen invoervelden meer: richting komt uit Module 14 (state.m14Bearing), norm uit
-  // Module 5 (getActiveNorm()) \u2014 zie de gebruikersinstructie "14a moet gebaseerd zijn op de
-  // eerste modules, geen module op zichzelf". Bij de 'eigen/lokale norm'-preset komen de Lden- en
+function renderModule14() {
+  // Richting komt uit de select hierboven in deze module (state.m14Bearing), norm uit
+  // Module 5 (getActiveNorm()). Bij de 'eigen/lokale norm'-preset komen de Lden- en
   // Lnight-waarden uit Module 1 (state.normCustomLden/state.normCustomLnight, zie getActiveNorm()).
   const norm = getActiveNorm();
   const ldenNorm = Number(norm.lden);
   const nightNorm = Number(norm.lnight);
-  const pct = m14aScenarioPercentages();
+  const pct = m14ScenarioPercentages();
 
-  const contextCallout = document.getElementById('m14a-context-callout');
+  const contextCallout = document.getElementById('m14-context-callout');
   if (contextCallout) {
     const ldenNormText = Number.isFinite(ldenNorm) ? `${ldenNorm.toFixed(1)} dB(A)` : 'geen Lden-norm bij deze normkeuze';
     const nightNormText = Number.isFinite(nightNorm) ? `${nightNorm.toFixed(1)} dB(A)` : 'geen Lnight-norm bij deze normkeuze';
     const normSourceHint = state.normPreset === 'eigen' ? '(waarden ingesteld bij Module 1, normkeuze bij Module 5)' : '(wijzig in Module 5)';
-    contextCallout.innerHTML = `<strong>Gebruikte instellingen (overgenomen uit eerdere modules, niet los instelbaar):</strong> richting van de woning t.o.v. de turbine = <strong>${m14BearingLabel(state.m14Bearing)}</strong> (wijzig in Module 14) &mdash; normkeuze = <strong>${escapeHtml(norm.label)}</strong> ${normSourceHint}: Lden ${ldenNormText}, L<sub>night</sub> ${nightNormText}.`;
+    contextCallout.innerHTML = `<strong>Gebruikte instellingen:</strong> richting van de woning t.o.v. de turbine = <strong>${m14BearingLabel(state.m14Bearing)}</strong> (wijzig hierboven) &mdash; normkeuze = <strong>${escapeHtml(norm.label)}</strong> ${normSourceHint}: Lden ${ldenNormText}, L<sub>night</sub> ${nightNormText}.`;
   }
 
-  m14aRenderTable('m14a-lden-table-body', 'm14a-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld)', pct, 'hoorbaar', false);
-  m14aRenderTable('m14a-night-table-body', 'm14a-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode)', pct, 'hoorbaar', false);
-  m14aRenderDayInfoTable('m14a-day-table-body', 'm14a-day-result-callout', 'hoorbaar');
+  m14RenderTable('m14-lden-table-body', 'm14-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld)', pct, 'hoorbaar', false);
+  m14RenderTable('m14-night-table-body', 'm14-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode)', pct, 'hoorbaar', false);
+  m14RenderDayInfoTable('m14-day-table-body', 'm14-day-result-callout', 'hoorbaar');
 
   // Laagfrequent geluid (dB(Lin), ongewogen) \u2014 zelfde 3-tabelstructuur, norm alleen indicatief
   // (er bestaat geen wettelijke Lden/Lnight-norm in dB(Lin); zie Module 8/8a-conventie).
-  m14aRenderTable('m14a-lf-lden-table-body', 'm14a-lf-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld, laagfrequent)', pct, 'laagfrequent', true);
-  m14aRenderTable('m14a-lf-night-table-body', 'm14a-lf-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode, laagfrequent)', pct, 'laagfrequent', true);
-  m14aRenderDayInfoTable('m14a-lf-day-table-body', 'm14a-lf-day-result-callout', 'laagfrequent');
+  m14RenderTable('m14-lf-lden-table-body', 'm14-lf-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld, laagfrequent)', pct, 'laagfrequent', true);
+  m14RenderTable('m14-lf-night-table-body', 'm14-lf-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode, laagfrequent)', pct, 'laagfrequent', true);
+  m14RenderDayInfoTable('m14-lf-day-table-body', 'm14-lf-day-result-callout', 'laagfrequent');
 
   // Infrasoon geluid (dB(G)) \u2014 zelfde 3-tabelstructuur, norm alleen indicatief.
-  m14aRenderTable('m14a-inf-lden-table-body', 'm14a-inf-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld, infrasoon)', pct, 'infrasoon', true);
-  m14aRenderTable('m14a-inf-night-table-body', 'm14a-inf-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode, infrasoon)', pct, 'infrasoon', true);
-  m14aRenderDayInfoTable('m14a-inf-day-table-body', 'm14a-inf-day-result-callout', 'infrasoon');
+  m14RenderTable('m14-inf-lden-table-body', 'm14-inf-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld, infrasoon)', pct, 'infrasoon', true);
+  m14RenderTable('m14-inf-night-table-body', 'm14-inf-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode, infrasoon)', pct, 'infrasoon', true);
+  m14RenderDayInfoTable('m14-inf-day-table-body', 'm14-inf-day-result-callout', 'infrasoon');
 
-  const pctCallout = document.getElementById('m14a-pct-callout');
+  const pctCallout = document.getElementById('m14-pct-callout');
   if (pctCallout) {
     const locLabel = pct.anchor.isDefault
       ? 'geen turbine geplaatst op de kaart (Module 3), dus is De Bilt als standaard inland-referentie gebruikt'
       : `de turbinelocatie(s) uit Module 3, ${pct.distKm.toFixed(0)} km tot de kust`;
     pctCallout.innerHTML = `<strong>Kansgewogen jaargemiddelde \u2014 gebruikte kansen:</strong> best case ${pct.best.toFixed(0)}%, middenscenario ${pct.middel.toFixed(0)}%, worst case ${pct.worst.toFixed(0)}% van de nachten per jaar. Gebaseerd op ${locLabel}, en op de ingestelde geostrofische wind in Module 7 (U<sub>geo</sub> = ${state.m7Ugeo} m/s). Wijzig je de turbinelocatie (Module 3) of U<sub>geo</sub> (Module 7), dan werkt deze weging hier automatisch mee door.`;
   }
+
+  m14RenderStilstand();
 }
 
-function initModule14a() {
-  // Geen eigen inputs meer om te initialiseren \u2014 renderModule14a() leest de richting en norm
-  // rechtstreeks uit state.m14Bearing (Module 14) en getActiveNorm() (Module 5) bij elke render.
-  renderModule14a();
+// Minimum aantal stilstandnachten per jaar dat nodig is om het kansgewogen jaargemiddelde
+// (hoorbaar, Lnacht, eerste ring) binnen `norm` te krijgen. Loopt n = 0..365 op en hergebruikt
+// uitsluitend m8JaargemiddeldeMetStilstand() (Module 8) \u2014 raakt de hoorbaar/Lnacht dB-berekening
+// zelf niet aan. Geeft null als de norm ook bij volledige stilstand (365 nachten) niet gehaald wordt.
+function m14StilstandMinNachten(levels, pct, norm) {
+  if (!Number.isFinite(norm)) return null;
+  for (let n = 0; n <= M8_JAAR_NACHTEN; n++) {
+    const result = m8JaargemiddeldeMetStilstand(levels, pct, n);
+    if (result.jaargemiddelde <= norm) return n;
+  }
+  return null;
+}
+
+// Interactieve stilstand-vraag bij de nachtperiode-tabel (hoorbaar, eerste ring = DISTANCES[0] =
+// 500 m): "hoeveel nachten moet de turbine stilstaan om het kansgewogen jaargemiddelde Lnacht
+// binnen de norm te krijgen?". Bouwt uitsluitend voort op reeds bestaande resultaten
+// (m14ScenarioLevels/m14ScenarioPercentages) en de generieke Module 8-stilstandfuncties \u2014 dit is
+// een post-processing schaling op de bestaande hoorbaar-uitkomst, geen nieuwe dB-rekenlogica.
+function m14RenderStilstand() {
+  const container = document.getElementById('m14-stilstand-container');
+  const input = document.getElementById('m14-stilstand-input');
+  if (!container || !input) return;
+  const d0 = DISTANCES[0];
+  const pct = m14ScenarioPercentages();
+  const levels = {
+    best: m14ScenarioLevels(d0, state.m14Bearing, state.lwa, 'best', 'hoorbaar')?.Lnacht,
+    middel: m14ScenarioLevels(d0, state.m14Bearing, state.lwa, 'middel', 'hoorbaar')?.Lnacht,
+    worst: m14ScenarioLevels(d0, state.m14Bearing, state.lwa, 'worst', 'hoorbaar')?.Lnacht,
+  };
+  if (levels.best == null || levels.middel == null || levels.worst == null) {
+    container.innerHTML = '<p class="empty-row">Berekening kon niet worden uitgevoerd.</p>';
+    return;
+  }
+  const norm = getActiveNorm();
+  const nightNorm = Number(norm?.lnight);
+  if (!Number.isFinite(nightNorm)) {
+    container.innerHTML = '<p>Er is geen L<sub>night</sub>-norm geselecteerd (zie Module 5) \u2014 deze vraag kan niet worden getoetst.</p>';
+    return;
+  }
+
+  const stilNachten = Math.max(0, Math.min(M8_JAAR_NACHTEN, Math.round(Number(state.m14StilstandNachten)) || 0));
+  const zonderStilstand = m8JaargemiddeldeMetStilstand(levels, pct, 0);
+  const minNachten = m14StilstandMinNachten(levels, pct, nightNorm);
+  const huidigeStand = m8JaargemiddeldeMetStilstand(levels, pct, stilNachten);
+
+  let minText;
+  if (minNachten === 0) {
+    minText = `Zonder enige stilstand blijft het kansgewogen jaargemiddelde L<sub>night</sub> op ${d0} m al binnen de norm (${zonderStilstand.jaargemiddelde.toFixed(1)} &le; ${nightNorm.toFixed(1)} dB(A)) \u2014 stilstand is hiervoor niet nodig.`;
+  } else if (minNachten == null) {
+    const bijVolledig = m8JaargemiddeldeMetStilstand(levels, pct, M8_JAAR_NACHTEN).jaargemiddelde;
+    minText = `Ook bij volledige stilstand (365 nachten per jaar) blijft het kansgewogen jaargemiddelde L<sub>night</sub> op ${d0} m (${bijVolledig.toFixed(1)} dB(A)) boven de norm (${nightNorm.toFixed(1)} dB(A)).`;
+  } else {
+    minText = `De turbine moet minimaal <strong>${minNachten} van de 365 nachten</strong> per jaar stilstaan om het kansgewogen jaargemiddelde L<sub>night</sub> op ${d0} m binnen de norm (${nightNorm.toFixed(1)} dB(A)) te krijgen.`;
+  }
+
+  const exceeds = huidigeStand.jaargemiddelde > nightNorm;
+  const currentText = `Bij <strong>${stilNachten} stilstandnacht${stilNachten === 1 ? '' : 'en'}</strong> per jaar komt het kansgewogen jaargemiddelde L<sub>night</sub> op ${d0} m uit op <strong>${huidigeStand.jaargemiddelde.toFixed(1)} dB(A)</strong> (was ${zonderStilstand.jaargemiddelde.toFixed(1)} dB(A) zonder stilstand) \u2014 dat ${exceeds ? 'overschrijdt' : 'blijft binnen'} de norm van ${nightNorm.toFixed(1)} dB(A). Verdeling van de ${M8_JAAR_NACHTEN} nachten: ${huidigeStand.nBest} best case, ${huidigeStand.nMiddel} middenscenario, ${huidigeStand.nWorst} worst case en ${huidigeStand.nStil} stilstand (bij voorrang worden de zwaarste nachten \u2014 eerst worst case, dan middenscenario, dan best case \u2014 stilgezet, dezelfde aanpak als Module 8).`;
+
+  container.innerHTML = `<p>${minText}</p><p>${currentText}</p>`;
+}
+
+function initModule14() {
+  const bearingSelect = document.getElementById('m14-bearing-select');
+  const stilstandInput = document.getElementById('m14-stilstand-input');
+  if (bearingSelect) {
+    bearingSelect.value = String(state.m14Bearing);
+    bearingSelect.addEventListener('change', () => {
+      state.m14Bearing = parseInt(bearingSelect.value, 10);
+      renderModule14();
+    });
+  }
+  if (stilstandInput) {
+    stilstandInput.value = String(state.m14StilstandNachten);
+    stilstandInput.addEventListener('input', () => {
+      const v = parseInt(stilstandInput.value, 10);
+      state.m14StilstandNachten = Number.isFinite(v) ? Math.max(0, Math.min(365, v)) : 0;
+      m14RenderStilstand();
+    });
+  }
+  renderModule14();
 }
 
 // ---------- App state ----------
@@ -715,9 +726,10 @@ const state = {
   // Module 12: bouw-/investeringskosten per turbine (PBL-eindadvies SDE++ 2026) — zie script.js §M12.
   // Volledig losstaand van de geplaatste turbine(s)/locatie(s) hierboven: vrije invoer per turbinegroep.
   m12Groups: [],
-  // Module 14: formele Lden-schatting (uitbreidingsoptie) — vaste afstand + peilrichting
-  // ontvanger t.o.v. de turbine, losstaand van de op de kaart geplaatste turbines.
-  m14Distance: 900, m14Bearing: 180,
+  // Module 14: Lden/Lnight per scenario — peilrichting ontvanger t.o.v. de turbine, losstaand
+  // van de op de kaart geplaatste turbines. m14StilstandNachten: aantal stilstandnachten/jaar
+  // ingevuld bij de interactieve stilstand-vraag (eerste ring, 500 m, hoorbaar/Lnacht).
+  m14Bearing: 180, m14StilstandNachten: 0,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' gebruikt de zelf ingevulde Lden- en Lnight-waarden uit Module 1 (state.normCustomLden /
@@ -1149,7 +1161,7 @@ function m5NormTableHeadHtml(categoryKey) {
 //                  een band kan onder de NSG-drempel liggen (niet hoorbaar) én boven de Vercammen-grens
 //                  liggen (wel hinderlijk), of andersom.
 // Vervangt voor deze ene tab de eerdere dag/upwind/zijwind-kolommen: die voegden voor laagfrequent
-// geluid weinig toe naast de twee per-tertsband-toetsingen hieronder. Module 14a en de hoorbaar-/
+// geluid weinig toe naast de twee per-tertsband-toetsingen hieronder. Module 14 en de hoorbaar-/
 // infrasoon-rekenlogica zelf blijven volledig buiten deze functie.
 function m5LfgCombinedTableRowsHtml(baseState, norm) {
   const catLw = computeCategoryLw(baseState.lwa);
@@ -1294,7 +1306,6 @@ function render() {
   renderModule7();
   renderModule8();
   renderModule14();
-  renderModule14a();
 }
 
 // ---------- Locatie toevoegen: adreszoeker (PDOK Locatieserver) & coordinaten ----------
@@ -1671,7 +1682,7 @@ function ringsForTurbine3a(turbine, lwCat) {
   const synthState = { scenario: state.scenario, daynight: state.daynight3a, curtailment: state.curtailment, windBearing: state.windBearing };
   const isVercammen = state.category === 'laagfrequent-vercammen';
   // Basis 'laagfrequent'-tab: zelfde onderliggende dB(Lin)-getal blijft bestaan (lpAt() hieronder,
-  // ongewijzigd t.b.v. Module 14a), maar de RING-tooltip toont nu één samengevat NSG-hoorbaarheidsoordeel
+  // ongewijzigd t.b.v. Module 14), maar de RING-tooltip toont nu één samengevat NSG-hoorbaarheidsoordeel
   // per richting i.p.v. het kale dB(Lin)-getal — zie nsgWorstBand()/nsgVerdictLabel() hierboven.
   const isLaagfrequentNsg = state.category === 'laagfrequent';
   const circles = [];
@@ -5527,7 +5538,6 @@ async function m13OpenReport() {
 // ---------- Wire up turbine controls & init ----------
 initMap3a();
 initModule14();
-initModule14a();
 render();
 renderModule12();
 renderModule13();

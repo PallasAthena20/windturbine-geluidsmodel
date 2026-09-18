@@ -121,7 +121,7 @@
         <input type="number" id="m1-custom-lnight" value="41" step="0.5" min="25" max="55">
       </div>
     </div>
-    <span class="hint">Vul hier je eigen Lden- en L<sub>night</sub>-norm in dB(A) in &mdash; bijvoorbeeld de norm die jouw gemeente hanteert. Deze waarden worden overal in het model gebruikt zodra je bij Module 5 &ldquo;Eigen/lokale norm&rdquo; kiest als te toetsen norm (o.a. voor de Lden-toetsing in Module 14a).</span>
+    <span class="hint">Vul hier je eigen Lden- en L<sub>night</sub>-norm in dB(A) in &mdash; bijvoorbeeld de norm die jouw gemeente hanteert. Deze waarden worden overal in het model gebruikt zodra je bij Module 5 &ldquo;Eigen/lokale norm&rdquo; kiest als te toetsen norm (o.a. voor de Lden-toetsing in Module 14).</span>
   </section>
 
   <!-- MODULE 2 -->
@@ -942,17 +942,11 @@
   <section class="module module-future" id="module-14">
     <div class="module-head">
       <span class="module-num">Module 14</span>
-      <h2>Formele Lden-schatting <span class="badge-future">Uitbreidingsoptie — experimenteel</span></h2>
+      <h2>Lden en L<sub>night</sub> per scenario, getoetst aan de normkeuze uit Module 5 <span class="badge-future">Uitbreidingsoptie — experimenteel</span></h2>
     </div>
-    <p class="module-desc">Module 5 toetst rechtstreeks op de dB-waarde Nacht voor het <strong>huidige</strong>, door jou gekozen scenario en de <strong>huidige</strong> windrichting (Module 2/3) — een "wat als"-doorrekening van één momentopname, geen Lden. Deze module doet iets anders: ze rekent een <strong>jaargemiddelde</strong> Ldag/Lavond/Lnacht uit door te middelen over een echte windroos (alle windrichtingen én windsnelheden, gewogen naar hoe vaak ze voorkomen) en combineert die met de officiële Lden-formule uit het <a href="https://mp.nl/sites/default/files/2019-08/reken%20en%20meetvoorschrift%20windturbines_0.pdf" target="_blank" rel="noopener">Reken- en meetvoorschrift windturbines</a>. Zie de toelichting onderaan voor exact welke aannames dit nog steeds geen volwaardig, site-specifiek akoestisch onderzoek maken.</p>
-
-    <div class="callout" id="m14-intro-callout">Kies hieronder een afstand en een richting waarin de woning ligt <em>t.o.v. de turbine</em> (dit is dus geen windrichting, maar de vaste ligging van de ontvanger). Het model rekent vervolgens zelf, voor elk van de 12 windroos-sectoren en 4 windsnelheidsklassen, uit of die combinatie voor déze woning downwind, upwind of zijwind betekent.</div>
+    <p class="module-desc">Rekent een <strong>jaargemiddelde</strong> Ldag/Lavond/Lnacht/Lden uit door te middelen over een echte windroos (12 sectoren van 30&deg;, elk onderverdeeld in 4 windsnelheidsklassen — KNMI-klimaatnormaal 1991&ndash;2020, station De Bilt) en een windsnelheidsafhankelijk bronvermogen L<sub>WA</sub>(v) (vormfactor ontleend aan een officieel gepubliceerd Vestas-testrapport, V112-3.0MW-klasse), gecombineerd met de officiële Lden-formule uit het Reken- en meetvoorschrift windturbines. Anders dan één vast kansgewogen jaargemiddelde op basis van een landelijk vast percentage, rekent deze module drie afzonderlijke <strong>scenario's</strong> los door &mdash; dezelfde best/middel/worst-case-definities als Module 2, 5 en 8 (een vaste dB-toeslag per scenario, geen kansmodel) &mdash; voor alle standaardafstanden tegelijk, &eacute;n telt ze daarnaast op tot een eigen <strong>kansgewogen jaargemiddelde</strong>-kolom die de locatie- en windafhankelijke percentages van Module 6/7 gebruikt. Kies hieronder de richting waarin de woning ligt <em>t.o.v. de turbine</em> (dit is dus geen windrichting, maar de vaste ligging van de ontvanger) &mdash; het model rekent voor elk van de 12 windroos-sectoren en 4 windsnelheidsklassen zelf uit of die combinatie voor déze woning downwind, upwind of zijwind betekent. De Lden-/L<sub>night</sub>-norm komt rechtstreeks uit de normkeuze in Module 5 (landelijke norm, WHO-advieswaarde of eigen/lokale norm) &mdash; wijzig je die daar, dan werkt dat hier automatisch door. Vervolgens zie je drie uitsplitsingen voor <strong>hoorbaar geluid</strong>: de Lden-toetsing per scenario (plus kansgewogen jaargemiddelde) tegen de Lden-norm, de nachtperiode (L<sub>nacht</sub>) per afstand en scenario (plus kansgewogen jaargemiddelde en een interactieve stilstandnachten-vraag op de eerste ring) tegen de L<sub>night</sub>-norm, en &mdash; louter informatief, want er bestaat geen zelfstandige dagnorm &mdash; de dagperiode (L<sub>dag</sub>) per afstand voor best case en middenscenario (zonder kansgewogen kolom). Daaronder wordt exact dezelfde drieluik-tabelstructuur nog twee keer herhaald, met dezelfde normwaarden als (nadrukkelijk niet-wettelijk) <strong>indicatief referentiepunt</strong>: eerst voor <strong>laagfrequent geluid</strong> (dB(Lin), ongewogen, zoals ook getoond in de Module 3-tab), daarna voor <strong>infrasoon geluid</strong> (dB(G)). Let op: bij de normkeuze "eigen/lokale norm" (Module 5) kent dit model alleen een Lnight-waarde, geen Lden-waarde &mdash; de Lden-toetsing hieronder blijft dan leeg (alleen de rekenwaarden zijn zichtbaar).</p>
 
     <div class="cum-controls">
-      <div class="cum-field">
-        <label for="m14-distance-select">Afstand turbine–woning</label>
-        <select id="m14-distance-select"></select>
-      </div>
       <div class="cum-field">
         <label for="m14-bearing-select">Richting van de woning t.o.v. de turbine</label>
         <select id="m14-bearing-select">
@@ -968,141 +962,132 @@
       </div>
     </div>
 
-    <div class="data-table-card">
-      <h3>Jaargemiddelde niveaus per periode (hoorbaar geluid, dB(A)) — bronvermogen o.b.v. Module 1</h3>
-      <table class="data-table" id="m14-table">
-        <thead><tr><th>Periode</th><th>Definitie</th><th>Niveau</th><th>Weging in Lden</th></tr></thead>
-        <tbody id="m14-table-body"></tbody>
-      </table>
-    </div>
-
-    <p class="callout m8-totals-highlight" id="m14-result-callout"></p>
-
-    <div class="method-callout">
-      <h3>Wat is hier wél en nog steeds niet "formeel"?</h3>
-      <p><strong>Nieuw t.o.v. Module 2/5:</strong> (1) een windsnelheidsafhankelijk bronvermogen L<sub>WA</sub>(v) in plaats van één vaste waarde — vorm ontleend aan een officieel gepubliceerd Vestas-testrapport (V112-3.0MW-klasse) met L<sub>WA</sub> van 94,5 dB(A) bij 3 m/s oplopend tot een nominaal plateau van 106,5 dB(A) vanaf ±8 m/s (<a href="https://majorprojects.planningportal.nsw.gov.au/prweb/PRRestService/mp/01/getContent?AttachRef=SSD-6696!20190227T080323.628%20GMT" target="_blank" rel="noopener">NSW Planning Portal, SSD-6696</a>), als relatieve vormfactor toegepast op jouw Module 1-waarde; (2) een echte, meetstation-gebaseerde windroos — 12 sectoren van 30°, elk onderverdeeld in 4 windsnelheidsklassen (Beaufort 1–2/3–4/5–6/≥7) — op basis van het <a href="https://cdn.knmi.nl/knmi/asc/normalen2021/windroos/WindRoos_260_H_pct.csv" target="_blank" rel="noopener">KNMI-klimaatnormaal 1991–2020, station De Bilt</a>; (3) energetische (logaritmische) middeling over alle 48 combinaties van richting × snelheid, met de bestaande richtingsafhankelijke propagatiefunctie uit Module 3–5; (4) de officiële Lden-combinatieformule (dag ×12u, avond ×4u +5 dB, nacht ×8u +10 dB) uit het Reken- en meetvoorschrift, met Lnight = Lnacht zonder ophoging.</p>
-      <p><strong>Nog steeds vereenvoudigd:</strong> de KNMI-windroos van De Bilt is een <strong>landelijk gemiddelde</strong>, geen meting op de daadwerkelijke turbinelocatie — kustlocaties en hooggelegen/open terrein wijken hiervan af. De L<sub>WA</sub>(v)-curve is een <strong>generieke vorm</strong> van één turbinetype, geschaald naar jouw Module 1-waarde — niet de fabrieksopgave van de daadwerkelijk beoogde turbine. Windschering/torenzog/AM ('s nachts +12 dB, overdag +3 dB als AM-maximum) worden hier niet als vaste scenario-toeslag toegepast, maar als kans-gewogen tweetoestandsmodel: 33% kans op de nachtelijke stabiele-atmosfeer-toeslag (<a href="https://documents.dps.ny.gov/public/Common/ViewDoc.aspx?DocRefId=%7BC7734D7B-E8F8-4334-9690-6F023A8E95CE%7D&amp;DocTitle=ACWE%20Exh%20MH-R5%20Van%20den%20Berg%20Turbines%20Night%20JSV%202004" target="_blank" rel="noopener">Van den Berg, 2004</a>; RIVM OPS ~33% S1+S2-uren) en 25% kans op de AM-toeslag overdag (<a href="https://docs.wind-watch.org/nguyen2021.pdf" target="_blank" rel="noopener">Nguyen et al., 2021</a>: "minder dan 25% overdag") — een grove aan/uit-benadering van een continu verschijnsel, geen kansverdeling. Avond wordt gelijkgesteld aan dag: er bestaat geen aparte, gepubliceerde avondstatistiek, en anders dan bij de eerder verwijderde Lden-poging is dit nu een bewuste modelkeuze (turbines draaien continu, geen avondcurtailment verondersteld), geen kopie van een scenario-uitkomst. Curtailment (Module 2) wordt in deze module niet meegenomen — dat is een vergunningsspecifieke operationele keuze, geen statistische eigenschap van "de" turbine. Terreindemping, obstakels en een windsnelheidsconversie tussen 10 m en ashoogte ontbreken net als elders in dit model. Kortom: dit is een aanzienlijke stap dichter bij een Reken- en meetvoorschrift-conforme Lden dan de eerder verwijderde tabel, maar <strong>vervangt geen formeel, site-specifiek akoestisch onderzoek</strong>.</p>
-    </div>
-  </section>
-
-  <section class="module module-future" id="module-14a">
-    <div class="module-head">
-      <span class="module-num">Module 14a</span>
-      <h2>Lden en L<sub>night</sub> per scenario, getoetst aan de normkeuze uit Module 5 <span class="badge-future">Uitbreidingsoptie — experimenteel</span></h2>
-    </div>
-    <p class="module-desc">Bouwt voort op Module 14: hetzelfde windroos-gewogen jaargemiddelde (12 sectoren &times; 4 windsnelheidsklassen) en hetzelfde windsnelheidsafhankelijke bronvermogen. Het verschil: Module 14 versmelt windschering/torenzog/AM tot &eacute;&eacute;n vast kansgewogen jaargemiddelde (33%/25% landelijk); deze module rekent drie afzonderlijke <strong>scenario's</strong> los door &mdash; dezelfde best/middel/worst-case-definities als Module 2, 5 en 8 (een vaste dB-toeslag per scenario, geen kansmodel) &mdash; voor alle standaardafstanden tegelijk, &eacute;n telt ze daarnaast op tot een eigen <strong>kansgewogen jaargemiddelde</strong>-kolom die de locatie- en windafhankelijke percentages van Module 6/7 gebruikt in plaats van een landelijk vast percentage. Deze module heeft <strong>geen eigen invoervelden</strong> meer voor richting of norm: de richting van de woning t.o.v. de turbine komt rechtstreeks uit Module 14, en de Lden-/L<sub>night</sub>-norm komt rechtstreeks uit de normkeuze in Module 5 (landelijke norm, WHO-advieswaarde of eigen/lokale norm) &mdash; wijzig je die daar, dan werkt dat hier automatisch door. Vervolgens zie je drie uitsplitsingen voor <strong>hoorbaar geluid</strong>: de Lden-toetsing per scenario (plus kansgewogen jaargemiddelde) tegen de Lden-norm, de nachtperiode (L<sub>nacht</sub>) per afstand en scenario (plus kansgewogen jaargemiddelde) tegen de L<sub>night</sub>-norm, en &mdash; louter informatief, want er bestaat geen zelfstandige dagnorm &mdash; de dagperiode (L<sub>dag</sub>) per afstand voor best case en middenscenario (zonder kansgewogen kolom). Daaronder wordt exact dezelfde drieluik-tabelstructuur nog twee keer herhaald, met dezelfde normwaarden als (nadrukkelijk niet-wettelijk) <strong>indicatief referentiepunt</strong>: eerst voor <strong>laagfrequent geluid</strong> (dB(Lin), ongewogen, zoals ook getoond in de Module 3-tab), daarna voor <strong>infrasoon geluid</strong> (dB(G)). Let op: bij de normkeuze "eigen/lokale norm" (Module 5) kent dit model alleen een Lnight-waarde, geen Lden-waarde &mdash; de Lden-toetsing hieronder blijft dan leeg (alleen de rekenwaarden zijn zichtbaar).</p>
-
-    <div class="callout" id="m14a-intro-callout">Deze module toont per afstand en scenario hoe je uitkomt tegenover de Lden-/L<sub>night</sub>-norm die in Module 5 is gekozen, met de richting uit Module 14 &mdash; plus een kansgewogen jaargemiddelde-kolom en een informatieve dagperiode-uitsplitsing (best case en middenscenario) zonder eigen norm &mdash; eerst voor hoorbaar geluid, daarna nogmaals voor laagfrequent en infrasoon geluid met dezelfde normwaarden als louter indicatief referentiepunt (er bestaat geen wettelijke jaargemiddelde-norm in dB(Lin) of dB(G)).</div>
-    <p class="callout" id="m14a-pct-callout"></p>
-    <p class="callout" id="m14a-context-callout"></p>
+    <div class="callout" id="m14-intro-callout">Deze module toont per afstand en scenario hoe je uitkomt tegenover de Lden-/L<sub>night</sub>-norm die in Module 5 is gekozen &mdash; plus een kansgewogen jaargemiddelde-kolom en een informatieve dagperiode-uitsplitsing (best case en middenscenario) zonder eigen norm &mdash; eerst voor hoorbaar geluid, daarna nogmaals voor laagfrequent en infrasoon geluid met dezelfde normwaarden als louter indicatief referentiepunt (er bestaat geen wettelijke jaargemiddelde-norm in dB(Lin) of dB(G)).</div>
+    <p class="callout" id="m14-pct-callout"></p>
+    <p class="callout" id="m14-context-callout"></p>
 
     <div class="data-table-card">
       <h3>1. Lden-jaargemiddelde per afstand en scenario, getoetst aan de Lden-norm (Module 5) <span class="cat-badge cat-hoorbaar">Hoorbaar</span></h3>
       <div class="cum-result-wrap">
-        <table class="data-table norm-table" id="m14a-lden-table">
+        <table class="data-table norm-table" id="m14-lden-table">
           <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th><th>Kansgewogen jaargemiddelde</th></tr></thead>
-          <tbody id="m14a-lden-table-body"></tbody>
+          <tbody id="m14-lden-table-body"></tbody>
         </table>
       </div>
     </div>
-    <p class="callout m8-totals-highlight" id="m14a-lden-result-callout"></p>
+    <p class="callout m8-totals-highlight" id="m14-lden-result-callout"></p>
 
     <div class="data-table-card">
       <h3>2. Nachtperiode (L<sub>nacht</sub> = L<sub>night</sub>, jaargemiddeld) per afstand en scenario, getoetst aan de L<sub>night</sub>-norm (Module 5) <span class="cat-badge cat-hoorbaar">Hoorbaar</span></h3>
       <div class="cum-result-wrap">
-        <table class="data-table norm-table" id="m14a-night-table">
+        <table class="data-table norm-table" id="m14-night-table">
           <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th><th>Kansgewogen jaargemiddelde</th></tr></thead>
-          <tbody id="m14a-night-table-body"></tbody>
+          <tbody id="m14-night-table-body"></tbody>
         </table>
       </div>
     </div>
-    <p class="callout m8-totals-highlight" id="m14a-night-result-callout"></p>
+    <p class="callout m8-totals-highlight" id="m14-night-result-callout"></p>
+
+    <div class="callout" id="m14-stilstand-intro-callout">Hoeveel nachten moet de windturbine stilstaan om op de eerste ring (500 m) het kansgewogen jaargemiddelde voor hoorbaar geluid (L<sub>night</sub>) binnen de norm te krijgen? Vul hieronder een aantal stilstandnachten in en bekijk het kansgewogen jaargemiddelde teruglopen &mdash; bij voorrang worden de zwaarste nachten stilgezet (eerst worst case, dan middenscenario, dan best case), dezelfde aanpak als bij de stilstandsimulatie in Module 8.</div>
+
+    <div class="cum-controls">
+      <div class="cum-field">
+        <label for="m14-stilstand-input">Aantal stilstandnachten per jaar (van de 365)</label>
+        <input type="number" id="m14-stilstand-input" value="0" step="1" min="0" max="365">
+      </div>
+    </div>
+
+    <div class="callout" id="m14-stilstand-callout">
+      <div id="m14-stilstand-container"></div>
+    </div>
 
     <div class="data-table-card">
       <h3>3. Dagperiode (L<sub>dag</sub>, jaargemiddeld) per afstand — alleen best case en middenscenario, louter informatief (geen zelfstandige dagnorm) <span class="cat-badge cat-hoorbaar">Hoorbaar</span></h3>
       <div class="cum-result-wrap">
-        <table class="data-table norm-table" id="m14a-day-table">
+        <table class="data-table norm-table" id="m14-day-table">
           <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th></tr></thead>
-          <tbody id="m14a-day-table-body"></tbody>
+          <tbody id="m14-day-table-body"></tbody>
         </table>
       </div>
     </div>
-    <p class="callout m8-totals-highlight" id="m14a-day-result-callout"></p>
+    <p class="callout m8-totals-highlight" id="m14-day-result-callout"></p>
 
-    <div class="callout" id="m14a-lf-intro-callout"><strong>Laagfrequent geluid (dB(Lin), ongewogen)</strong> — zelfde drieluik-tabelstructuur (Lden / L<sub>night</sub> / dagperiode-info) als hierboven, nu toegepast op de <em>ongewogen</em> laagfrequente bronbijdrage uit Module 3 (20–200 Hz, dB(Lin)) in plaats van het A-gewogen hoorbare geluid. Er bestaat <strong>geen wettelijke jaargemiddelde-norm in dB(Lin)</strong>: de Lden-/L<sub>night</sub>-norm uit Module 5 (beide in dB(A)) wordt hieronder uitsluitend als indicatief getalsmatig referentiepunt gebruikt — net als bij de laagfrequent-toetsing in Module 8 — niet als een geldig toetsingskader voor deze eenheid.</div>
+    <div class="callout" id="m14-lf-intro-callout"><strong>Laagfrequent geluid (dB(Lin), ongewogen)</strong> — zelfde drieluik-tabelstructuur (Lden / L<sub>night</sub> / dagperiode-info) als hierboven, nu toegepast op de <em>ongewogen</em> laagfrequente bronbijdrage uit Module 3 (20–200 Hz, dB(Lin)) in plaats van het A-gewogen hoorbare geluid. Er bestaat <strong>geen wettelijke jaargemiddelde-norm in dB(Lin)</strong>: de Lden-/L<sub>night</sub>-norm uit Module 5 (beide in dB(A)) wordt hieronder uitsluitend als indicatief getalsmatig referentiepunt gebruikt — net als bij de laagfrequent-toetsing in Module 8 — niet als een geldig toetsingskader voor deze eenheid.</div>
 
     <div class="data-table-card">
       <h3>4. Lden-jaargemiddelde per afstand en scenario, indicatief getoetst aan de Lden-norm (Module 5) <span class="cat-badge cat-laagfrequent">Laagfrequent</span></h3>
       <div class="cum-result-wrap">
-        <table class="data-table norm-table" id="m14a-lf-lden-table">
+        <table class="data-table norm-table" id="m14-lf-lden-table">
           <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th><th>Kansgewogen jaargemiddelde</th></tr></thead>
-          <tbody id="m14a-lf-lden-table-body"></tbody>
+          <tbody id="m14-lf-lden-table-body"></tbody>
         </table>
       </div>
     </div>
-    <p class="callout m8-totals-highlight" id="m14a-lf-lden-result-callout"></p>
+    <p class="callout m8-totals-highlight" id="m14-lf-lden-result-callout"></p>
 
     <div class="data-table-card">
       <h3>5. Nachtperiode (L<sub>nacht</sub> = L<sub>night</sub>, jaargemiddeld) per afstand en scenario, indicatief getoetst aan de L<sub>night</sub>-norm (Module 5) <span class="cat-badge cat-laagfrequent">Laagfrequent</span></h3>
       <div class="cum-result-wrap">
-        <table class="data-table norm-table" id="m14a-lf-night-table">
+        <table class="data-table norm-table" id="m14-lf-night-table">
           <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th><th>Kansgewogen jaargemiddelde</th></tr></thead>
-          <tbody id="m14a-lf-night-table-body"></tbody>
+          <tbody id="m14-lf-night-table-body"></tbody>
         </table>
       </div>
     </div>
-    <p class="callout m8-totals-highlight" id="m14a-lf-night-result-callout"></p>
+    <p class="callout m8-totals-highlight" id="m14-lf-night-result-callout"></p>
 
     <div class="data-table-card">
       <h3>6. Dagperiode (L<sub>dag</sub>, jaargemiddeld) per afstand — alleen best case en middenscenario, louter informatief (geen norm) <span class="cat-badge cat-laagfrequent">Laagfrequent</span></h3>
       <div class="cum-result-wrap">
-        <table class="data-table norm-table" id="m14a-lf-day-table">
+        <table class="data-table norm-table" id="m14-lf-day-table">
           <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th></tr></thead>
-          <tbody id="m14a-lf-day-table-body"></tbody>
+          <tbody id="m14-lf-day-table-body"></tbody>
         </table>
       </div>
     </div>
-    <p class="callout m8-totals-highlight" id="m14a-lf-day-result-callout"></p>
+    <p class="callout m8-totals-highlight" id="m14-lf-day-result-callout"></p>
 
-    <div class="callout" id="m14a-inf-intro-callout"><strong>Infrasoon geluid (dB(G))</strong> — zelfde drieluik-tabelstructuur, nu toegepast op de G-gewogen infrasone bronbijdrage uit Module 3 (&lt;20 Hz, dB(G)). Ook hier bestaat <strong>geen wettelijke jaargemiddelde-norm in dB(G)</strong>: dezelfde Lden-/L<sub>night</sub>-norm uit Module 5 (dB(A)) dient uitsluitend als indicatief referentiepunt, niet als wettelijk toetsingskader. Zie Module 3 voor de losstaande vergelijking met de ISO 7196-hoorbaarheidsdrempel (90–100 dB(G)), die voor infrasoon geluid het enige gepubliceerde referentiepunt is.</div>
+    <div class="callout" id="m14-inf-intro-callout"><strong>Infrasoon geluid (dB(G))</strong> — zelfde drieluik-tabelstructuur, nu toegepast op de G-gewogen infrasone bronbijdrage uit Module 3 (&lt;20 Hz, dB(G)). Ook hier bestaat <strong>geen wettelijke jaargemiddelde-norm in dB(G)</strong>: dezelfde Lden-/L<sub>night</sub>-norm uit Module 5 (dB(A)) dient uitsluitend als indicatief referentiepunt, niet als wettelijk toetsingskader. Zie Module 3 voor de losstaande vergelijking met de ISO 7196-hoorbaarheidsdrempel (90–100 dB(G)), die voor infrasoon geluid het enige gepubliceerde referentiepunt is.</div>
 
     <div class="data-table-card">
       <h3>7. Lden-jaargemiddelde per afstand en scenario, indicatief getoetst aan de Lden-norm (Module 5) <span class="cat-badge cat-infrasoon">Infrasoon</span></h3>
       <div class="cum-result-wrap">
-        <table class="data-table norm-table" id="m14a-inf-lden-table">
+        <table class="data-table norm-table" id="m14-inf-lden-table">
           <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th><th>Kansgewogen jaargemiddelde</th></tr></thead>
-          <tbody id="m14a-inf-lden-table-body"></tbody>
+          <tbody id="m14-inf-lden-table-body"></tbody>
         </table>
       </div>
     </div>
-    <p class="callout m8-totals-highlight" id="m14a-inf-lden-result-callout"></p>
+    <p class="callout m8-totals-highlight" id="m14-inf-lden-result-callout"></p>
 
     <div class="data-table-card">
       <h3>8. Nachtperiode (L<sub>nacht</sub> = L<sub>night</sub>, jaargemiddeld) per afstand en scenario, indicatief getoetst aan de L<sub>night</sub>-norm (Module 5) <span class="cat-badge cat-infrasoon">Infrasoon</span></h3>
       <div class="cum-result-wrap">
-        <table class="data-table norm-table" id="m14a-inf-night-table">
+        <table class="data-table norm-table" id="m14-inf-night-table">
           <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th><th>Kansgewogen jaargemiddelde</th></tr></thead>
-          <tbody id="m14a-inf-night-table-body"></tbody>
+          <tbody id="m14-inf-night-table-body"></tbody>
         </table>
       </div>
     </div>
-    <p class="callout m8-totals-highlight" id="m14a-inf-night-result-callout"></p>
+    <p class="callout m8-totals-highlight" id="m14-inf-night-result-callout"></p>
 
     <div class="data-table-card">
       <h3>9. Dagperiode (L<sub>dag</sub>, jaargemiddeld) per afstand — alleen best case en middenscenario, louter informatief (geen norm) <span class="cat-badge cat-infrasoon">Infrasoon</span></h3>
       <div class="cum-result-wrap">
-        <table class="data-table norm-table" id="m14a-inf-day-table">
+        <table class="data-table norm-table" id="m14-inf-day-table">
           <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th></tr></thead>
-          <tbody id="m14a-inf-day-table-body"></tbody>
+          <tbody id="m14-inf-day-table-body"></tbody>
         </table>
       </div>
     </div>
-    <p class="callout m8-totals-highlight" id="m14a-inf-day-result-callout"></p>
+    <p class="callout m8-totals-highlight" id="m14-inf-day-result-callout"></p>
 
     <div class="method-callout">
+      <h3>Windroos, bronvermogen en Lden-formule &mdash; bronnen</h3>
+      <p>De jaargemiddelde-berekening hierboven (voor elk scenario) combineert: (1) een windsnelheidsafhankelijk bronvermogen L<sub>WA</sub>(v) in plaats van één vaste waarde &mdash; vorm ontleend aan een officieel gepubliceerd Vestas-testrapport (V112-3.0MW-klasse) met L<sub>WA</sub> van 94,5 dB(A) bij 3 m/s oplopend tot een nominaal plateau van 106,5 dB(A) vanaf &plusmn;8 m/s (<a href="https://majorprojects.planningportal.nsw.gov.au/prweb/PRRestService/mp/01/getContent?AttachRef=SSD-6696!20190227T080323.628%20GMT" target="_blank" rel="noopener">NSW Planning Portal, SSD-6696</a>), als relatieve vormfactor toegepast op jouw Module 1-waarde; (2) een echte, meetstation-gebaseerde windroos &mdash; 12 sectoren van 30&deg;, elk onderverdeeld in 4 windsnelheidsklassen (Beaufort 1&ndash;2/3&ndash;4/5&ndash;6/&ge;7) &mdash; op basis van het <a href="https://cdn.knmi.nl/knmi/asc/normalen2021/windroos/WindRoos_260_H_pct.csv" target="_blank" rel="noopener">KNMI-klimaatnormaal 1991&ndash;2020, station De Bilt</a>; (3) energetische (logaritmische) middeling over alle 48 combinaties van richting &times; snelheid, met de bestaande richtingsafhankelijke propagatiefunctie uit Module 3&ndash;5; (4) de officiële Lden-combinatieformule (dag &times;12u, avond &times;4u +5 dB, nacht &times;8u +10 dB) uit het <a href="https://mp.nl/sites/default/files/2019-08/reken%20en%20meetvoorschrift%20windturbines_0.pdf" target="_blank" rel="noopener">Reken- en meetvoorschrift windturbines</a>, met L<sub>night</sub> = L<sub>nacht</sub> zonder ophoging. De KNMI-windroos van De Bilt is een <strong>landelijk gemiddelde</strong>, geen meting op de daadwerkelijke turbinelocatie &mdash; kustlocaties en hooggelegen/open terrein wijken hiervan af. De L<sub>WA</sub>(v)-curve is een <strong>generieke vorm</strong> van één turbinetype, geschaald naar jouw Module 1-waarde &mdash; niet de fabrieksopgave van de daadwerkelijk beoogde turbine. Terreindemping, obstakels en een windsnelheidsconversie tussen 10 m en ashoogte ontbreken net als elders in dit model. Windschering/torenzog/AM worden hier &mdash; anders dan in een eerdere, inmiddels verwijderde versie van deze module met één landelijk vast kansgewogen percentage (33% 's nachts, 25% overdag) &mdash; als vaste scenario-toeslag per best/middel/worst case toegepast, zie hieronder voor die definities en voor de kansgewogen jaargemiddelde-kolom die wel weer met locatie- en windafhankelijke kansen werkt.</p>
       <h3>Wat betekenen "best/middel/worst" hier precies?</h3>
-      <p>Dezelfde definities als Module 2/5/8: <strong>best case</strong> = geen windschering-, torenzog- of AM-toeslag (0 dB). <strong>Middenscenario</strong> = matige toeslag (windschering 5 dB &#39;s nachts, torenzog tot 2 dB afstandsafhankelijk, AM 1 dB) &mdash; net als in Module 2 wordt hiervan het maximum genomen, niet de som (overlappende fysica). <strong>Worst case</strong> = dezelfde logica met 12/5/3 dB, en wordt hier alleen in de Lden- en L<sub>night</sub>-tabel getoond (voor de dagperiode-tabel is op verzoek alleen best case/middenscenario opgenomen — de worst-case dagbijdrage telt wel gewoon mee in de Lden-berekening hierboven). Curtailment wordt hier, net als in de basis-Module 14, niet meegenomen (vergunningsspecifieke keuze, geen statistische eigenschap van de turbine).</p>
-      <p><strong>Wat is de kolom "Kansgewogen jaargemiddelde"?</strong> De losse best/middel/worst-kolommen tonen "als dit weertype zich voordoet, dan komt de waarde zo uit" &mdash; zonder te zeggen hoe vaak dat weertype voorkomt. De kansgewogen kolom telt de drie scenario's energetisch bij elkaar op naar hun werkelijke aandeel: het percentage stabiele nachten volgt uit de afstand tot de kust (Module 6, Van den Berg 2008), en de verdeling daarbinnen tussen middenscenario en worst case volgt uit de shear-capacity-verhouding (Module 7, Abraham &amp; Monahan 2019 / Van Hooijdonk e.a. 2015), bij de huidige turbinelocatie(s) uit Module 3 en de ingestelde geostrofische wind U<sub>geo</sub> uit Module 7. Dit is dezelfde onderliggende aanpak als de kansgewogen 33%/25%-amplificatie in de basis-Module 14, maar dan met een locatie- en windafhankelijke kans in plaats van &eacute;&eacute;n landelijk vast percentage.</p>
+      <p>Dezelfde definities als Module 2/5/8: <strong>best case</strong> = geen windschering-, torenzog- of AM-toeslag (0 dB). <strong>Middenscenario</strong> = matige toeslag (windschering 5 dB &#39;s nachts, torenzog tot 2 dB afstandsafhankelijk, AM 1 dB) &mdash; net als in Module 2 wordt hiervan het maximum genomen, niet de som (overlappende fysica). <strong>Worst case</strong> = dezelfde logica met 12/5/3 dB, en wordt hier alleen in de Lden- en L<sub>night</sub>-tabel getoond (voor de dagperiode-tabel is op verzoek alleen best case/middenscenario opgenomen — de worst-case dagbijdrage telt wel gewoon mee in de Lden-berekening hierboven). Curtailment wordt hier niet meegenomen (vergunningsspecifieke keuze, geen statistische eigenschap van de turbine) &mdash; behalve in de interactieve stilstandnachten-vraag bij de nachtperiode-tabel hierboven, die curtailment juist expliciet simuleert.</p>
+      <p><strong>Wat is de kolom "Kansgewogen jaargemiddelde"?</strong> De losse best/middel/worst-kolommen tonen "als dit weertype zich voordoet, dan komt de waarde zo uit" &mdash; zonder te zeggen hoe vaak dat weertype voorkomt. De kansgewogen kolom telt de drie scenario's energetisch bij elkaar op naar hun werkelijke aandeel: het percentage stabiele nachten volgt uit de afstand tot de kust (Module 6, Van den Berg 2008), en de verdeling daarbinnen tussen middenscenario en worst case volgt uit de shear-capacity-verhouding (Module 7, Abraham &amp; Monahan 2019 / Van Hooijdonk e.a. 2015), bij de huidige turbinelocatie(s) uit Module 3 en de ingestelde geostrofische wind U<sub>geo</sub> uit Module 7. Dit is dezelfde aanpak als de energetisch gewogen jaargemiddelde-berekening in Module 8, maar dan met een locatie- en windafhankelijke kans (Module 6/7) in plaats van een vaste toeslag per bewoner/richting.</p>
       <p>De Lden-norm en L<sub>night</sub>-norm komen rechtstreeks uit de normkeuze die je in Module 5 hebt gemaakt (landelijke norm, WHO-advieswaarde of eigen/lokale norm) &mdash; deze module heeft geen eigen, hiervan losstaande normwaarden meer. Controleer in Module 5 welke normkeuze op jouw situatie van toepassing is (zie ook de Position paper A-weging windturbinegeluid voor Deense/Duitse referentiewaarden). Kies je de "eigen/lokale norm", dan kent dit model daarbij alleen een Lnight-waarde — de Lden-toetsing hierboven blijft in dat geval leeg.</p>
       <p><strong>Waarom worden tabel 4–5 en 7–8 (laagfrequent/infrasoon) tegen dezelfde dB(A)-norm getoetst?</strong> Dat is nadrukkelijk een modelkeuze, geen weergave van bestaand recht. Het Nederlandse Activiteitenbesluit kent alleen een Lden/Lnight-jaargemiddelde-norm in dB(A); voor laagfrequent geluid (dB(Lin)) en infrasoon geluid (dB(G)) bestaat <strong>geen vergelijkbare wettelijke jaargemiddelde-grenswaarde</strong>. De tabellen hierboven rekenen daarom met dezelfde <em>getalswaarde</em> als de Lden-/L<sub>night</sub>-norm uit Module 5, maar passen die toe op een fysiek andere grootheid (ongewogen respectievelijk G-gewogen niveau in plaats van A-gewogen niveau) &mdash; de "overschrijding" die je ziet is dus illustratief, niet een indicatie dat een wettelijke norm wordt overtreden. Dit is dezelfde conventie als eerder gebruikt in Module 8 en de jaargemiddelde-toetsing in het eindrapport (Module 13): expliciet gelabeld als "indicatief", zodat het verschil tussen een harde wettelijke toets (tabel 1–2, hoorbaar) en een illustratieve vergelijking (tabel 4–5 en 7–8) niet verloren gaat. Gebruik deze cijfers dus als signaal dat laagfrequent/infrasoon geluid überhaupt aanwezig is op een bepaalde afstand — niet als toetsingsuitkomst voor een vergunning.</p>
     </div>
