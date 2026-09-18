@@ -5310,7 +5310,7 @@ function m13NonWhiteFraction(canvas) {
     const { width, height } = canvas;
     if (!width || !height) return { overall: 0, worstCell: 0 };
     const data = ctx.getImageData(0, 0, width, height).data;
-    const cols = 3, rows = 2; // grove 3x2-raster — groot genoeg om lokaal spaarzame (landelijke) tegel-inhoud niet af te keuren, fijn genoeg om een leeg kwadrant te vangen
+    const cols = 4, rows = 3; // 4x3-raster (was 3x2) — fijner, zodat een kwadrant-grote lege regio (zoals gerapporteerd bij de closeup-kaart) niet aan de aandacht van de per-cel check kan ontsnappen, terwijl elke cel nog groot genoeg blijft om lokaal spaarzame (landelijke) tegel-inhoud niet af te keuren
     const cellW = Math.floor(width / cols);
     const cellH = Math.floor(height / rows);
     const stride = 6; // pixelstap binnen elke cel
@@ -5357,7 +5357,7 @@ async function m13CaptureSingleView(opts) {
   const mapEl = document.getElementById('turbine-map-3a');
   if (!mapEl || typeof html2canvas !== 'function' || !map3a) return null;
   const container = mapEl.closest('.m3a-map-wrap') || mapEl;
-  const maxAttempts = (opts && opts.maxAttempts) || 6;
+  const maxAttempts = (opts && opts.maxAttempts) || 8; // was 6 — iets meer marge voor een trage verbinding (bv. Render's gratis omgeving) bij de tegelrijke closeup-weergave
   // Wanneer de aanroeper weet welke camera (center/zoom) verwacht wordt na een setView
   // (bv. de "regionale" weergave), geven we die door zodat we kunnen wachten tot de
   // GL-tegellaag DAADWERKELIJK op die positie staat — in plaats van te vertrouwen op een
@@ -5446,6 +5446,16 @@ async function m13CaptureMapViews() {
     try { await html2canvas(mapElWarmup, { useCORS: true, backgroundColor: null, scale: 1, logging: false }); } catch (e) { /* negeren, dit was slechts een opwarmronde */ }
   }
   try {
+    // Regionale capture forceerde altijd al een verse setView() vóór het wachten/vastleggen
+    // (nodig omdat regioZoom afwijkt van de huidige camera) — de closeup-capture deed dat
+    // NIET, en vertrouwde puur op "de camera staat er toch al". Bij een turbine die net via
+    // coördinaten/adres is toegevoegd (of na een auto-fit-bounds bij meerdere turbines) kan de
+    // GL-laag intern nog een inconsistente/oude raster-buffer hebben t.o.v. de daadwerkelijke
+    // containermaat na invalidateSize() hierboven — zichtbaar als een scherp begrensd kwadrant
+    // met tegels en de rest blanco. Een expliciete (no-op qua positie) setView() dwingt de
+    // maplibre-gl-leaflet-brug tot exact dezelfde volledige camera-resync/herteken-cyclus als
+    // de regionale weergave al kreeg, vóórdat we op "camera synced" gaan wachten.
+    map3a.setView(originalCenter, originalZoom, { animate: false });
     closeup = await m13CaptureSingleView({ expectedCenter: originalCenter, expectedZoom: originalZoom });
     // Was originalZoom - 4 (16x zo veel oppervlak): op een normale plaatsingszoom (~11) kwam de
     // "regionale" kaart daardoor op een landsdekkend zicht uit, met de turbine als vrijwel
