@@ -1022,7 +1022,7 @@
     </div>
     <p class="callout m8-totals-highlight" id="m14-day-result-callout"></p>
 
-    <div class="callout" id="m14-lf-intro-callout"><strong>Laagfrequent geluid (dB(Lin), ongewogen)</strong> — zelfde drieluik-tabelstructuur (Lden / L<sub>night</sub> / dagperiode-info) als hierboven, nu toegepast op de <em>ongewogen</em> laagfrequente bronbijdrage uit Module 3 (20–200 Hz, dB(Lin)) in plaats van het A-gewogen hoorbare geluid. Er bestaat <strong>geen wettelijke jaargemiddelde-norm in dB(Lin)</strong>: de Lden-/L<sub>night</sub>-norm uit Module 5 (beide in dB(A)) wordt hieronder uitsluitend als indicatief getalsmatig referentiepunt gebruikt — net als bij de laagfrequent-toetsing in Module 8 — niet als een geldig toetsingskader voor deze eenheid.</div>
+    <div class="callout" id="m14-lf-intro-callout"><strong>Laagfrequent geluid (dB(Lin), ongewogen)</strong> — zelfde drieluik-tabelstructuur (Lden / L<sub>night</sub> / dagperiode-info) als hierboven, nu toegepast op de <em>ongewogen</em> laagfrequente bronbijdrage uit Module 3 (20–200 Hz, dB(Lin)) in plaats van het A-gewogen hoorbare geluid. Voor tabel 4 (Lden) en tabel 6 (dagperiode) bestaat <strong>geen wettelijke jaargemiddelde-norm in dB(Lin)</strong>: de Lden-norm uit Module 5 (dB(A)) wordt daar uitsluitend als indicatief getalsmatig referentiepunt gebruikt, niet als een geldig toetsingskader voor deze eenheid. Tabel 5 (nachtperiode) is hierop een uitzondering: die toetst wél aan een echte, in de jurisprudentie erkende norm — de Vercammen-hindernorm per tertsband.</div>
 
     <div class="data-table-card">
       <h3>4. Lden-jaargemiddelde per afstand en scenario, indicatief getoetst aan de Lden-norm (Module 5) <span class="cat-badge cat-laagfrequent">Laagfrequent</span></h3>
@@ -1036,7 +1036,7 @@
     <p class="callout m8-totals-highlight" id="m14-lf-lden-result-callout"></p>
 
     <div class="data-table-card">
-      <h3>5. Nachtperiode (L<sub>nacht</sub> = L<sub>night</sub>, jaargemiddeld) per afstand en scenario, indicatief getoetst aan de L<sub>night</sub>-norm (Module 5) <span class="cat-badge cat-laagfrequent">Laagfrequent</span></h3>
+      <h3>5. Nachtperiode — getoetst aan de Vercammen-hindernorm per tertsband (20–125 Hz) <span class="cat-badge cat-laagfrequent">Laagfrequent</span></h3>
       <div class="cum-result-wrap">
         <table class="data-table norm-table" id="m14-lf-night-table">
           <thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th><th>Kansgewogen jaargemiddelde</th></tr></thead>
@@ -1045,6 +1045,19 @@
       </div>
     </div>
     <p class="callout m8-totals-highlight" id="m14-lf-night-result-callout"></p>
+
+    <div class="callout" id="m14-stilstand-vercammen-intro-callout">Hoeveel nachten moet de windturbine stilstaan om op de eerste ring (500 m) het kansgewogen jaargemiddelde op <strong>alle 9 tertsbanden</strong> binnen de Vercammen-hindernorm te krijgen (geen hinder meer)? Vul hieronder een aantal stilstandnachten in — bij voorrang worden de zwaarste nachten stilgezet (eerst worst case, dan middenscenario, dan best case), dezelfde aanpak als bij de stilstandsimulatie in Module 8 en bij de L<sub>night</sub>-stilstandvraag hierboven.</div>
+
+    <div class="cum-controls">
+      <div class="cum-field">
+        <label for="m14-stilstand-vercammen-input">Aantal stilstandnachten per jaar (van de 365)</label>
+        <input type="number" id="m14-stilstand-vercammen-input" value="0" step="1" min="0" max="365">
+      </div>
+    </div>
+
+    <div class="callout" id="m14-stilstand-vercammen-callout">
+      <div id="m14-stilstand-vercammen-container"></div>
+    </div>
 
     <div class="data-table-card">
       <h3>6. Dagperiode (L<sub>dag</sub>, jaargemiddeld) per afstand — alleen best case en middenscenario, louter informatief (geen norm) <span class="cat-badge cat-laagfrequent">Laagfrequent</span></h3>

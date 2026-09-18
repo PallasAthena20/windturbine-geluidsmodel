@@ -571,6 +571,147 @@ function m14RenderDayInfoTable(bodyId, resultCalloutId, categoryKey) {
   resultCallout.innerHTML = `<strong>L<sub>dag</sub> (jaargemiddeld, dagperiode):</strong> louter informatief \u2014 er geldt geen zelfstandige dagnorm; de dagperiode telt uitsluitend mee binnen de Lden-jaargemiddelde toetsing hierboven. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14Bearing)} (Module 14).`;
 }
 
+// ---------- Module 14: Vercammen-hindernorm i.p.v. placeholder-toetsing voor laagfrequent Lnacht ----------
+// Op verzoek van gebruiker vervangt dit tabel 5 (Lnacht, laagfrequent): niet langer een indicatieve
+// toetsing van het ongewogen dB(Lin)-niveau aan de dB(A)-Lnight-norm (dimensioneel niet kloppend),
+// maar de daadwerkelijke Vercammen-hindernorm per tertsband \u2014 dezelfde grenswaarden
+// (VERCAMMEN_CURVE) en tertsband-brondecompositie (computeTertsbandLw) als de per-scenario
+// Vercammen-tab in Module 3, nu doorgerekend als windroos-gewogen jaargemiddelde (zelfde methodiek
+// als m14PeriodLevel hierboven) i.p.v. een momentopname op \u00e9\u00e9n punt in de tijd. Vercammen wordt
+// hier bewust alleen op de nachtperiode toegepast: dat is ook hoe de bestaande Vercammen-tab in
+// Module 3 en de jurisprudentie (bv. ECLI:NL:RVS:2021:1681) het toepassen \u2014 er bestaat geen
+// gangbare "Vercammen-Lden".
+
+// Windroos-gewogen jaargemiddeld bronniveau van \u00e9\u00e9n tertsband, gepropageerd naar afstand d in
+// richting bearingToReceiver \u2014 zelfde opbouw als m14PeriodLevel hierboven, nu per tertsband i.p.v.
+// per geaggregeerde categorie (hergebruikt computeTertsbandLw i.p.v. computeCategoryLw, en dezelfde
+// mLaagfrequent-richtingsfunctie als tertsbandLevelAt in Module 3).
+function m14PeriodLevelBand(d, bearingToReceiver, lwaBase, freq) {
+  const contributions = [];
+  M14_WINDROOS.forEach((sector) => {
+    const downwindBearing = (sector.bearing + 180) % 360;
+    const x = xFromAngle(bearingToReceiver, downwindBearing);
+    M14_SPEED_BINS.forEach((bin) => {
+      const sectorFreq = sector[bin.key];
+      if (!sectorFreq) return;
+      const offset = m14LwaOffsetForSpeed(bin.v);
+      if (offset == null) return;
+      const lwBand = computeTertsbandLw(lwaBase + offset)[freq];
+      const base = lwBand - ADIV_120 - mLaagfrequent(x) * Math.log10(d / 120);
+      contributions.push({ freq: sectorFreq, level: base });
+    });
+  });
+  const totalFreq = contributions.reduce((s, c) => s + c.freq, 0);
+  if (totalFreq <= 0) return null;
+  const sumPow = contributions.reduce((s, c) => s + (c.freq / totalFreq) * Math.pow(10, c.level / 10), 0);
+  return 10 * Math.log10(sumPow);
+}
+
+// Nachtniveau van \u00e9\u00e9n tertsband voor \u00e9\u00e9n scenario (best/middel/worst) \u2014 zelfde
+// nacht-scenario-toeslag (combinedFactors) als m14ScenarioLevels() gebruikt voor de geaggregeerde
+// categorie\u00ebn.
+function m14VercammenScenarioBandLevel(d, bearingToReceiver, lwaBase, scenarioKey, freq) {
+  const base = m14PeriodLevelBand(d, bearingToReceiver, lwaBase, freq);
+  if (base == null) return null;
+  const addonNacht = combinedFactors(d, scenarioKey, 'nacht', false).total;
+  return base + addonNacht;
+}
+
+// Beoordeelt \u00e9\u00e9n scenario op afstand d: retourneert de tertsband met de grootste
+// overschrijdingsmarge t.o.v. zijn eigen Vercammen-grenswaarde \u2014 zelfde "koptekst"-conventie als
+// vercammenWorstBand() in Module 3/8 (\u00e9\u00e9n representatief scalair per punt).
+function m14VercammenWorstBandForScenario(d, bearingToReceiver, lwaBase, scenarioKey) {
+  let worst = null;
+  TERTSBAND_FREQS.forEach((freq) => {
+    const level = m14VercammenScenarioBandLevel(d, bearingToReceiver, lwaBase, scenarioKey, freq);
+    if (level == null) return;
+    const threshold = VERCAMMEN_CURVE[freq];
+    const margin = level - threshold;
+    if (worst == null || margin > worst.margin) worst = { freq, level, threshold, margin, exceeds: margin > 0 };
+  });
+  return worst;
+}
+
+// Kansgewogen jaargemiddelde per tertsband op afstand d, met `stilNachten` stilstandnachten per jaar
+// \u2014 hergebruikt uitsluitend m8JaargemiddeldeMetStilstand() (Module 8) per tertsband, geen nieuwe
+// stilstand- of dB-rekenlogica. Retourneert de tertsband met de grootste overschrijdingsmarge, plus
+// de volledige per-band-uitkomst voor eventuele detailweergave.
+function m14VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, lwaBase, pct, stilNachten) {
+  let worst = null;
+  const perBand = [];
+  TERTSBAND_FREQS.forEach((freq) => {
+    const levels = {
+      best: m14VercammenScenarioBandLevel(d, bearingToReceiver, lwaBase, 'best', freq),
+      middel: m14VercammenScenarioBandLevel(d, bearingToReceiver, lwaBase, 'middel', freq),
+      worst: m14VercammenScenarioBandLevel(d, bearingToReceiver, lwaBase, 'worst', freq),
+    };
+    if (levels.best == null || levels.middel == null || levels.worst == null) return;
+    const result = m8JaargemiddeldeMetStilstand(levels, pct, stilNachten);
+    const threshold = VERCAMMEN_CURVE[freq];
+    const margin = result.jaargemiddelde - threshold;
+    const entry = { freq, level: result.jaargemiddelde, threshold, margin, exceeds: margin > 0 };
+    perBand.push(entry);
+    if (worst == null || margin > worst.margin) worst = entry;
+  });
+  return { worst, perBand };
+}
+
+// Minimum aantal stilstandnachten per jaar zodat op afstand d ALLE 9 tertsbanden van het
+// kansgewogen jaargemiddelde binnen hun eigen Vercammen-grenswaarde vallen ("geen hinder" \u2014
+// zelfde exceeds-conventie als vercammenWorstBand/vercammenVerdictLabel elders in dit model).
+function m14VercammenStilstandMinNachten(d, bearingToReceiver, lwaBase, pct) {
+  for (let n = 0; n <= M8_JAAR_NACHTEN; n++) {
+    const { worst } = m14VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, lwaBase, pct, n);
+    if (!worst || !worst.exceeds) return n;
+  }
+  return null;
+}
+
+// Vervangt de generieke m14RenderTable() voor tabel 5 (Lnacht, laagfrequent): toont per afstand en
+// scenario niet \u00e9\u00e9n dB(Lin)-getal tegen een dB(A)-placeholder, maar de tertsband met de grootste
+// Vercammen-overschrijdingsmarge (zelfde \u00e9\u00e9n-scalair-per-cel-conventie als elders in dit model).
+function m14RenderVercammenNachtTable(bodyId, resultCalloutId) {
+  const body = document.getElementById(bodyId);
+  const resultCallout = document.getElementById(resultCalloutId);
+  if (!body || !resultCallout) return;
+  const pct = m14ScenarioPercentages();
+  const stilNachten = Math.max(0, Math.min(M8_JAAR_NACHTEN, Math.round(Number(state.m14StilstandNachtenVercammen)) || 0));
+
+  const rowsData = DISTANCES.map((d) => {
+    const scenarioCells = ['best', 'middel', 'worst'].map((key) => m14VercammenWorstBandForScenario(d, state.m14Bearing, state.lwa, key));
+    const weighted = m14VercammenJaargemiddeldeWorstBand(d, state.m14Bearing, state.lwa, pct, stilNachten).worst;
+    return { d, scenarioCells, weighted };
+  });
+
+  body.innerHTML = rowsData.map(({ d, scenarioCells, weighted }) => {
+    const cells = scenarioCells.map((b) => {
+      if (!b) return '<td class="empty-row">&mdash;</td>';
+      return `<td class="${b.exceeds ? 'norm-exceed' : 'norm-ok'}">${b.level.toFixed(1)} dB(Lin) @ ${b.freq} Hz (${b.margin >= 0 ? '+' : ''}${b.margin.toFixed(1)})</td>`;
+    }).join('');
+    const weightedCell = weighted
+      ? `<td class="${weighted.exceeds ? 'norm-exceed' : 'norm-ok'}">${weighted.level.toFixed(1)} dB(Lin) @ ${weighted.freq} Hz (${weighted.margin >= 0 ? '+' : ''}${weighted.margin.toFixed(1)})</td>`
+      : '<td class="empty-row">&mdash;</td>';
+    return `<tr><td>${d} m</td>${cells}${weightedCell}</tr>`;
+  }).join('');
+
+  const summary = ['best', 'middel', 'worst'].map((key, i) => {
+    const okDistances = rowsData.filter((r) => r.scenarioCells[i] && !r.scenarioCells[i].exceeds).map((r) => r.d);
+    const minOk = okDistances.length ? Math.min(...okDistances) : null;
+    return { label: M14_SCENARIOS[i].label, minOk };
+  });
+  const okWeighted = rowsData.filter((r) => r.weighted && !r.weighted.exceeds).map((r) => r.d);
+  const minOkWeighted = okWeighted.length ? Math.min(...okWeighted) : null;
+  summary.push({ label: `Kansgewogen jaargemiddelde (best ${pct.best.toFixed(0)}% / middel ${pct.middel.toFixed(0)}% / worst ${pct.worst.toFixed(0)}%)${stilNachten ? `, bij ${stilNachten} stilstandnachten/jaar` : ''}`, minOk: minOkWeighted });
+
+  const summaryText = summary.map((s) => (
+    s.minOk != null
+      ? `${escapeHtml(s.label)}: vanaf ${s.minOk} m geen hinder meer volgens Vercammen (op alle 9 tertsbanden)`
+      : `${escapeHtml(s.label)}: op geen van de getoonde afstanden voldoen alle 9 tertsbanden aan de Vercammen-curve`
+  )).join(' \u2014 ');
+
+  resultCallout.innerHTML = `<strong>Nachtperiode, per tertsband getoetst aan de Vercammen-hindernorm</strong> (per cel: de tertsband met de grootste overschrijdingsmarge van de 9): ${summaryText}. Bron grenswaarden: <a href="https://pas.commissiemer.nl/files/nl/3615/012687-3615-6-onderzoek-naar-laagfrequent-geluid-ten-gevolge-van-windturbines.pdf" target="_blank" rel="noopener">NSG-onderzoeksrapport (Peutz)</a>, toegepast in o.a. <a href="https://www.commissiemer.nl/english/jurisprudence/ECLI:NL:RVS:2021:1681" target="_blank" rel="noopener">ECLI:NL:RVS:2021:1681</a>. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14Bearing)} (Module 14).`;
+}
+
 function renderModule14() {
   // Richting komt uit de select hierboven in deze module (state.m14Bearing), norm uit
   // Module 5 (getActiveNorm()). Bij de 'eigen/lokale norm'-preset komen de Lden- en
@@ -595,7 +736,7 @@ function renderModule14() {
   // Laagfrequent geluid (dB(Lin), ongewogen) \u2014 zelfde 3-tabelstructuur, norm alleen indicatief
   // (er bestaat geen wettelijke Lden/Lnight-norm in dB(Lin); zie Module 8/8a-conventie).
   m14RenderTable('m14-lf-lden-table-body', 'm14-lf-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld, laagfrequent)', pct, 'laagfrequent', true);
-  m14RenderTable('m14-lf-night-table-body', 'm14-lf-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode, laagfrequent)', pct, 'laagfrequent', true);
+  m14RenderVercammenNachtTable('m14-lf-night-table-body', 'm14-lf-night-result-callout');
   m14RenderDayInfoTable('m14-lf-day-table-body', 'm14-lf-day-result-callout', 'laagfrequent');
 
   // Infrasoon geluid (dB(G)) \u2014 zelfde 3-tabelstructuur, norm alleen indicatief.
@@ -613,6 +754,7 @@ function renderModule14() {
 
   m14RenderStilstand();
   m14RenderStilstandLden();
+  m14RenderStilstandVercammen();
 }
 
 // Minimum aantal stilstandnachten/-dagen per jaar dat nodig is om het kansgewogen jaargemiddelde
@@ -724,6 +866,45 @@ function m14RenderStilstandLden() {
   container.innerHTML = `<p>${minText}</p><p>${currentText}</p>`;
 }
 
+// Interactieve stilstand-vraag bij de Vercammen-hindernorm-tabel (laagfrequent, nachtperiode,
+// eerste ring = DISTANCES[0] = 500 m): "hoeveel nachten moet de turbine stilstaan om op alle 9
+// tertsbanden van het kansgewogen jaargemiddelde geen hinder meer te hebben volgens Vercammen?".
+// Zelfde opzet als m14RenderStilstand()/m14RenderStilstandLden() hierboven, nu per tertsband i.p.v.
+// \u00e9\u00e9n dB(A)-getal \u2014 hergebruikt uitsluitend m8JaargemiddeldeMetStilstand() (via
+// m14VercammenJaargemiddeldeWorstBand), geen nieuwe stilstand- of dB-rekenlogica.
+function m14RenderStilstandVercammen() {
+  const container = document.getElementById('m14-stilstand-vercammen-container');
+  const input = document.getElementById('m14-stilstand-vercammen-input');
+  if (!container || !input) return;
+  const d0 = DISTANCES[0];
+  const pct = m14ScenarioPercentages();
+  const stilNachten = Math.max(0, Math.min(M8_JAAR_NACHTEN, Math.round(Number(state.m14StilstandNachtenVercammen)) || 0));
+
+  const zonderStilstand = m14VercammenJaargemiddeldeWorstBand(d0, state.m14Bearing, state.lwa, pct, 0).worst;
+  const minNachten = m14VercammenStilstandMinNachten(d0, state.m14Bearing, state.lwa, pct);
+  const huidigeStand = m14VercammenJaargemiddeldeWorstBand(d0, state.m14Bearing, state.lwa, pct, stilNachten).worst;
+
+  if (!zonderStilstand || !huidigeStand) {
+    container.innerHTML = '<p class="empty-row">Berekening kon niet worden uitgevoerd.</p>';
+    return;
+  }
+
+  let minText;
+  if (minNachten === 0) {
+    minText = `Zonder enige stilstand valt het kansgewogen jaargemiddelde op ${d0} m al op alle 9 tertsbanden binnen de Vercammen-curve (grootste marge: ${zonderStilstand.freq} Hz, ${zonderStilstand.level.toFixed(1)} &le; ${zonderStilstand.threshold.toFixed(1)} dB(Lin)) \u2014 stilstand is hiervoor niet nodig.`;
+  } else if (minNachten == null) {
+    const bijVolledig = m14VercammenJaargemiddeldeWorstBand(d0, state.m14Bearing, state.lwa, pct, M8_JAAR_NACHTEN).worst;
+    minText = `Ook bij volledige stilstand (365 nachten per jaar) blijft op ${d0} m de tertsband van ${bijVolledig.freq} Hz boven de Vercammen-grens (${bijVolledig.level.toFixed(1)} > ${bijVolledig.threshold.toFixed(1)} dB(Lin)).`;
+  } else {
+    minText = `De turbine moet minimaal <strong>${minNachten} van de 365 nachten</strong> per jaar stilstaan om op ${d0} m alle 9 tertsbanden van het kansgewogen jaargemiddelde binnen de Vercammen-hindernorm te krijgen (geen hinder meer).`;
+  }
+
+  const exceeds = huidigeStand.exceeds;
+  const currentText = `Bij <strong>${stilNachten} stilstandnacht${stilNachten === 1 ? '' : 'en'}</strong> per jaar is op ${d0} m de tertsband met de grootste overschrijdingsmarge <strong>${huidigeStand.freq} Hz</strong>, met een kansgewogen jaargemiddelde van <strong>${huidigeStand.level.toFixed(1)} dB(Lin)</strong> tegen een Vercammen-grens van ${huidigeStand.threshold.toFixed(1)} dB(Lin) (was ${zonderStilstand.level.toFixed(1)} dB(Lin) op ${zonderStilstand.freq} Hz zonder stilstand) \u2014 dat ${exceeds ? 'overschrijdt de Vercammen-curve (hinder)' : 'blijft binnen de Vercammen-curve (geen hinder)'}.`;
+
+  container.innerHTML = `<p>${minText}</p><p>${currentText}</p>`;
+}
+
 function initModule14() {
   const bearingSelect = document.getElementById('m14-bearing-select');
   const stilstandInput = document.getElementById('m14-stilstand-input');
@@ -749,6 +930,16 @@ function initModule14() {
       const v = parseInt(stilstandLdenInput.value, 10);
       state.m14StilstandDagenLden = Number.isFinite(v) ? Math.max(0, Math.min(365, v)) : 0;
       m14RenderStilstandLden();
+    });
+  }
+  const stilstandVercammenInput = document.getElementById('m14-stilstand-vercammen-input');
+  if (stilstandVercammenInput) {
+    stilstandVercammenInput.value = String(state.m14StilstandNachtenVercammen);
+    stilstandVercammenInput.addEventListener('input', () => {
+      const v = parseInt(stilstandVercammenInput.value, 10);
+      state.m14StilstandNachtenVercammen = Number.isFinite(v) ? Math.max(0, Math.min(365, v)) : 0;
+      m14RenderStilstandVercammen();
+      m14RenderVercammenNachtTable('m14-lf-night-table-body', 'm14-lf-night-result-callout');
     });
   }
   renderModule14();
@@ -787,7 +978,7 @@ const state = {
   // Module 14: Lden/Lnight per scenario — peilrichting ontvanger t.o.v. de turbine, losstaand
   // van de op de kaart geplaatste turbines. m14StilstandNachten: aantal stilstandnachten/jaar
   // ingevuld bij de interactieve stilstand-vraag (eerste ring, 500 m, hoorbaar/Lnacht).
-  m14Bearing: 180, m14StilstandNachten: 0, m14StilstandDagenLden: 0,
+  m14Bearing: 180, m14StilstandNachten: 0, m14StilstandDagenLden: 0, m14StilstandNachtenVercammen: 0,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' gebruikt de zelf ingevulde Lden- en Lnight-waarden uit Module 1 (state.normCustomLden /
