@@ -193,8 +193,36 @@ const TERTSBAND_FREQS = [20, 25, 31.5, 40, 50, 63, 80, 100, 125];
 const TERTSBAND_OCTAVE_MAP = { 20: 16, 25: 31.5, 31.5: 31.5, 40: 31.5, 50: 63, 63: 63, 80: 63, 100: 125, 125: 125 };
 // Elke octaafband bevat precies 3 tertsbanden; bij een (aannames van een) vlak spectrum binnen de
 // octaafband draagt elke tertsband 1/3 van de energie, oftewel 10·log10(3) ≈ 4,77 dB minder dan de
-// octaafband zelf. Dit is een schatting, geen meting — zie de methodologische kanttekening in de UI.
+// octaafband zelf. Dit was voorheen een schatting zonder meetbasis — hieronder gekalibreerd op
+// daadwerkelijk gemeten turbinespectra (zie TERTSBAND_SHAPE_DB).
 const TERTS_SPLIT_DB = 10 * Math.log10(3);
+
+// Kalibratie van de tertsband-vorm op gemeten turbinespectra i.p.v. de vlakke 1/3-aanname hierboven.
+// Bron: Peutz, "Onderzoek naar laagfrequent geluid ten gevolge van windturbines" (rapport F 22656-2-RA-001,
+// i.o.v. Commissie m.e.r.), tabel 3.2, p. 13: https://pas.commissiemer.nl/files/nl/3615/012687-3615-6-
+// onderzoek-naar-laagfrequent-geluid-ten-gevolge-van-windturbines.pdf — geeft LWA (dB(A), "worst case"
+// gegarandeerd vermogen incl. 1,5 dB marge) per tertsband voor 3 referentieturbines (5 MW; 8 MW zonder
+// serrations; 8 MW met serrations). Herleiding (reproduceerbaar): per tertsband omgerekend naar dB(Lin)
+// met de standaard IEC 61672-1 A-wegingscorrectie op tertsbandniveau (20 Hz: -50,5 dB; 25: -44,7; 31,5:
+// -39,4; 40: -34,6; 50: -30,2; 63: -26,2; 80: -22,5; 100: -19,1; 125: -16,1 dB — dezelfde tabel als A_CORR
+// hierboven, nu op tertsbandmiddenfrequenties i.p.v. octaafbandmiddenfrequenties); per octaafband (31,5/
+// 63/125 Hz) is vervolgens de offset van elke tertsband t.o.v. de eigen (Lin-)octaafsom bepaald en
+// gemiddeld over de 3 referentieturbines. Vervangt zo de vlakke aanname door de daadwerkelijk gemeten
+// spectrale verdeling (bv. binnen de 125 Hz-octaafband draagt de 125 Hz-tertsband zelf gemeten ca. 1,5 dB
+// méér dan een vlakke verdeling, en 160 Hz juist minder).
+// Twee expliciete beperkingen, bewust niet stilgehouden:
+// (1) 31,5 Hz ontbreekt als kolom in tabel 3.2 (die springt van 25 naar 40 Hz, zie ook de brontekst op
+//     p. 13) — de 31,5 Hz-waarde is daarom log-frequentie-lineair geïnterpoleerd tussen de gemeten 25 en
+//     40 Hz-waarden vóór de offsetberekening. Een schatting, geen meting.
+// (2) 20 Hz (octaafband 16 Hz) is NIET gekalibreerd: tabel 3.2 geeft voor die octaafband alléén de 20 Hz-
+//     tertsband, zonder de 12,5/16 Hz-buurbanden — er is dus geen octaafsom om een offset tegen af te
+//     zetten. Hiervoor blijft de vlakke -4,77 dB-aanname staan.
+const TERTSBAND_SHAPE_DB = {
+  20: -TERTS_SPLIT_DB,                    // ongekalibreerd, zie beperking (2) hierboven
+  25: -2.99, 31.5: -5.09, 40: -7.26,      // octaafband 31,5 Hz (31,5 Hz geïnterpoleerd, zie beperking (1))
+  50: -4.76, 63: -3.96, 80: -5.79,        // octaafband 63 Hz — volledig op meting gebaseerd
+  100: -4.68, 125: -3.31,                 // octaafband 125 Hz — volledig op meting gebaseerd (160 Hz ongebruikt)
+};
 // Vercammen-grenswaarden per tertsband (dB, onweighted/Lin), uit het NSG-onderzoeksrapport (Vercammen/
 // NSG-tabel, zie bronverwijzing hierboven), zoals gebruikt in de Nederlandse jurisprudentie.
 const VERCAMMEN_CURVE = { 20: 71, 25: 65, 31.5: 60, 40: 55, 50: 50, 63: 46, 80: 42, 100: 39, 125: 36 };
@@ -205,7 +233,7 @@ function computeTertsbandLw(lwaInput) {
   const bands = {};
   TERTSBAND_FREQS.forEach((freq) => {
     const octave = TERTSBAND_OCTAVE_MAP[freq];
-    bands[freq] = cat.lwUnweighted[BAND_INDEX[octave]] - TERTS_SPLIT_DB;
+    bands[freq] = cat.lwUnweighted[BAND_INDEX[octave]] + TERTSBAND_SHAPE_DB[freq];
   });
   return bands;
 }
