@@ -612,12 +612,13 @@ function renderModule14() {
   }
 
   m14RenderStilstand();
+  m14RenderStilstandLden();
 }
 
-// Minimum aantal stilstandnachten per jaar dat nodig is om het kansgewogen jaargemiddelde
-// (hoorbaar, Lnacht, eerste ring) binnen `norm` te krijgen. Loopt n = 0..365 op en hergebruikt
-// uitsluitend m8JaargemiddeldeMetStilstand() (Module 8) \u2014 raakt de hoorbaar/Lnacht dB-berekening
-// zelf niet aan. Geeft null als de norm ook bij volledige stilstand (365 nachten) niet gehaald wordt.
+// Minimum aantal stilstandnachten/-dagen per jaar dat nodig is om het kansgewogen jaargemiddelde
+// (hoorbaar, eerste ring) binnen `norm` te krijgen. Loopt n = 0..365 op en hergebruikt
+// uitsluitend m8JaargemiddeldeMetStilstand() (Module 8) \u2014 raakt de hoorbaar/Lden/Lnacht dB-berekening
+// zelf niet aan. Geeft null als de norm ook bij volledige stilstand (365) niet gehaald wordt.
 function m14StilstandMinNachten(levels, pct, norm) {
   if (!Number.isFinite(norm)) return null;
   for (let n = 0; n <= M8_JAAR_NACHTEN; n++) {
@@ -675,6 +676,54 @@ function m14RenderStilstand() {
   container.innerHTML = `<p>${minText}</p><p>${currentText}</p>`;
 }
 
+// Interactieve stilstand-vraag bij de Lden-tabel (hoorbaar, eerste ring = DISTANCES[0] = 500 m):
+// "hoeveel dagen moet de turbine stilstaan om het kansgewogen jaargemiddelde Lden binnen de norm
+// te krijgen?". Zelfde opzet als m14RenderStilstand() hierboven (Lnight/nachten), nu toegepast op
+// Lden met een volledige dag (24 u, dus dag- + avond- + nachtperiode tegelijk uit) als eenheid \u2014
+// hergebruikt uitsluitend de generieke Module 8-stilstandfuncties, geen nieuwe dB-rekenlogica.
+function m14RenderStilstandLden() {
+  const container = document.getElementById('m14-stilstand-lden-container');
+  const input = document.getElementById('m14-stilstand-lden-input');
+  if (!container || !input) return;
+  const d0 = DISTANCES[0];
+  const pct = m14ScenarioPercentages();
+  const levels = {
+    best: m14ScenarioLevels(d0, state.m14Bearing, state.lwa, 'best', 'hoorbaar')?.Lden,
+    middel: m14ScenarioLevels(d0, state.m14Bearing, state.lwa, 'middel', 'hoorbaar')?.Lden,
+    worst: m14ScenarioLevels(d0, state.m14Bearing, state.lwa, 'worst', 'hoorbaar')?.Lden,
+  };
+  if (levels.best == null || levels.middel == null || levels.worst == null) {
+    container.innerHTML = '<p class="empty-row">Berekening kon niet worden uitgevoerd.</p>';
+    return;
+  }
+  const norm = getActiveNorm();
+  const ldenNorm = Number(norm?.lden);
+  if (!Number.isFinite(ldenNorm)) {
+    container.innerHTML = '<p>Er is geen Lden-norm geselecteerd (zie Module 5) \u2014 deze vraag kan niet worden getoetst.</p>';
+    return;
+  }
+
+  const stilDagen = Math.max(0, Math.min(M8_JAAR_NACHTEN, Math.round(Number(state.m14StilstandDagenLden)) || 0));
+  const zonderStilstand = m8JaargemiddeldeMetStilstand(levels, pct, 0);
+  const minDagen = m14StilstandMinNachten(levels, pct, ldenNorm);
+  const huidigeStand = m8JaargemiddeldeMetStilstand(levels, pct, stilDagen);
+
+  let minText;
+  if (minDagen === 0) {
+    minText = `Zonder enige stilstand blijft het kansgewogen jaargemiddelde Lden op ${d0} m al binnen de norm (${zonderStilstand.jaargemiddelde.toFixed(1)} &le; ${ldenNorm.toFixed(1)} dB(A)) \u2014 stilstand is hiervoor niet nodig.`;
+  } else if (minDagen == null) {
+    const bijVolledig = m8JaargemiddeldeMetStilstand(levels, pct, M8_JAAR_NACHTEN).jaargemiddelde;
+    minText = `Ook bij volledige stilstand (365 dagen per jaar) blijft het kansgewogen jaargemiddelde Lden op ${d0} m (${bijVolledig.toFixed(1)} dB(A)) boven de norm (${ldenNorm.toFixed(1)} dB(A)).`;
+  } else {
+    minText = `De turbine moet minimaal <strong>${minDagen} van de 365 dagen</strong> per jaar volledig stilstaan (dag, avond \u00e9n nacht) om het kansgewogen jaargemiddelde Lden op ${d0} m binnen de norm (${ldenNorm.toFixed(1)} dB(A)) te krijgen.`;
+  }
+
+  const exceeds = huidigeStand.jaargemiddelde > ldenNorm;
+  const currentText = `Bij <strong>${stilDagen} stilstanddag${stilDagen === 1 ? '' : 'en'}</strong> per jaar komt het kansgewogen jaargemiddelde Lden op ${d0} m uit op <strong>${huidigeStand.jaargemiddelde.toFixed(1)} dB(A)</strong> (was ${zonderStilstand.jaargemiddelde.toFixed(1)} dB(A) zonder stilstand) \u2014 dat ${exceeds ? 'overschrijdt' : 'blijft binnen'} de norm van ${ldenNorm.toFixed(1)} dB(A). Verdeling van de ${M8_JAAR_NACHTEN} dagen: ${huidigeStand.nBest} best case, ${huidigeStand.nMiddel} middenscenario, ${huidigeStand.nWorst} worst case en ${huidigeStand.nStil} stilstand (bij voorrang worden de zwaarste dagen \u2014 eerst worst case, dan middenscenario, dan best case \u2014 stilgezet, dezelfde aanpak als Module 8/de L<sub>night</sub>-stilstandvraag hierboven).`;
+
+  container.innerHTML = `<p>${minText}</p><p>${currentText}</p>`;
+}
+
 function initModule14() {
   const bearingSelect = document.getElementById('m14-bearing-select');
   const stilstandInput = document.getElementById('m14-stilstand-input');
@@ -691,6 +740,15 @@ function initModule14() {
       const v = parseInt(stilstandInput.value, 10);
       state.m14StilstandNachten = Number.isFinite(v) ? Math.max(0, Math.min(365, v)) : 0;
       m14RenderStilstand();
+    });
+  }
+  const stilstandLdenInput = document.getElementById('m14-stilstand-lden-input');
+  if (stilstandLdenInput) {
+    stilstandLdenInput.value = String(state.m14StilstandDagenLden);
+    stilstandLdenInput.addEventListener('input', () => {
+      const v = parseInt(stilstandLdenInput.value, 10);
+      state.m14StilstandDagenLden = Number.isFinite(v) ? Math.max(0, Math.min(365, v)) : 0;
+      m14RenderStilstandLden();
     });
   }
   renderModule14();
@@ -729,7 +787,7 @@ const state = {
   // Module 14: Lden/Lnight per scenario — peilrichting ontvanger t.o.v. de turbine, losstaand
   // van de op de kaart geplaatste turbines. m14StilstandNachten: aantal stilstandnachten/jaar
   // ingevuld bij de interactieve stilstand-vraag (eerste ring, 500 m, hoorbaar/Lnacht).
-  m14Bearing: 180, m14StilstandNachten: 0,
+  m14Bearing: 180, m14StilstandNachten: 0, m14StilstandDagenLden: 0,
 };
 // Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
 // 'eigen' gebruikt de zelf ingevulde Lden- en Lnight-waarden uit Module 1 (state.normCustomLden /
