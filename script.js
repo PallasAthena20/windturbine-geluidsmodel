@@ -304,11 +304,25 @@ function nsgWorstBand(d, x, testState, lwaInput) {
 }
 
 // Eén leesbare NSG-hoorbaarheidslabel + marge, voor gebruik in zowel de kaart-tooltip als de tabellen —
-// zodat beide plekken exact dezelfde formulering gebruiken.
+// zodat beide plekken exact dezelfde formulering gebruiken. LET OP: NSG is een WAARNEEMBAARHEIDSNORM
+// (90%-gehoordrempel van oudere personen, 50-60 jaar) — de vraag die hij beantwoordt is "kun je het nog
+// horen", niet "is het hinderlijk". Zie vercammenVerdictLabel() hieronder voor het andere criterium.
 function nsgVerdictLabel(band) {
   if (!band) return '\u2014';
   const sign = band.margin >= 0 ? '+' : '';
   const verdict = band.exceeds ? 'Hoorbaar volgens NSG' : 'Niet hoorbaar volgens NSG';
+  return `${verdict} (marge ${sign}${band.margin.toFixed(1)} dB)`;
+}
+
+// Analoog aan nsgVerdictLabel(), maar voor de Vercammen-curve. LET OP: Vercammen is een HINDERNORM, geen
+// gehoordrempel — de curve komt uit hinderonderzoek en wordt in de Nederlandse/Vlaamse jurisprudentie
+// gebruikt om te beoordelen vanaf welk niveau laagfrequent geluid als hinderlijk/klachtwaardig geldt.
+// Een band kan dus onder de NSG-gehoordrempel liggen (niet hoorbaar) en tegelijk boven de Vercammen-grens
+// (wel hinderlijk), of andersom — het zijn twee onafhankelijke toetsen met een andere vraagstelling.
+function vercammenVerdictLabel(band) {
+  if (!band) return '\u2014';
+  const sign = band.margin >= 0 ? '+' : '';
+  const verdict = band.exceeds ? 'Hinder volgens Vercammen' : 'Geen hinder volgens Vercammen';
   return `${verdict} (marge ${sign}${band.margin.toFixed(1)} dB)`;
 }
 
@@ -765,6 +779,7 @@ const normCustomLnightField = document.getElementById('norm-custom-lnight-field'
 const normCustomLnightInput = document.getElementById('norm-custom-lnight');
 const normContextCallout = document.getElementById('norm-context-callout');
 const normTableBody = document.getElementById('norm-table-body');
+const normTableHead = document.getElementById('norm-table-head');
 if (normPresetSelect) {
   normPresetSelect.addEventListener('change', () => {
     state.normPreset = normPresetSelect.value;
@@ -795,6 +810,7 @@ const normPresetSelect3a = document.getElementById('norm-preset-select-3a');
 const normCustomLnightField3a = document.getElementById('norm-custom-lnight-field-3a');
 const normCustomLnightInput3a = document.getElementById('norm-custom-lnight-3a');
 const normTableTitle3a = document.getElementById('norm-table-title-3a');
+const normTableHead3a = document.getElementById('norm-table-head-3a');
 const normAweightNote3a = document.getElementById('norm-aweight-note-3a');
 const normLdenCallout3a = document.getElementById('norm-lden-callout-3a');
 const locTabs3a = document.querySelectorAll('[data-loc-tab-3a]');
@@ -1062,21 +1078,20 @@ function turbineIcon(selected) {
 // (snelst dempend) en zijwind/crosswind (tussenliggend) — in plaats van, zoals voorheen, uitsluitend
 // downwind. Dit maakt expliciet zichtbaar dat een woning die niet exact downwind van de turbine
 // ligt, op dezelfde afstand een lager niveau ondervindt en dus mogelijk niet overschrijdt.
+//
+// Voor categoryKey 'laagfrequent' wordt hieronder afgetakt naar een eigen, smallere tabelvorm
+// (m5LfgCombinedTableRowsHtml) — zie die functie voor de reden. Andere categorieën (hoorbaar,
+// laagfrequent-vercammen, en via CATEGORY eventuele overige) blijven ONGEWIJZIGD de dag/downwind/
+// upwind/zijwind-vorm hieronder gebruiken; met name de hoorbaar- en infrasoon-rekenlogica zelf
+// (lpAt/computeCategoryLw) wordt nergens in dit bestand opnieuw geïmplementeerd.
 function m5NormTableRowsHtml(categoryKey, baseState, norm) {
+  if (categoryKey === 'laagfrequent') {
+    return m5LfgCombinedTableRowsHtml(baseState, norm);
+  }
   const lwCat = computeCategoryLw(baseState.lwa)[categoryKey];
   const dayState = Object.assign({}, baseState, { daynight: 'dag' });
   const nightState = Object.assign({}, baseState, { daynight: 'nacht' });
-  // Basis 'laagfrequent' toetst niet langer dB(Lin) tegen een dB(A)-afgeleide Lnight-norm (dimensioneel
-  // niet kloppend), maar per tertsband tegen de NSG-gehoordrempelcurve — zie nsgWorstBand() hierboven.
-  // lpAt()/computeCategoryLw() zelf blijven ongewijzigd (Module 14a hangt hiervan af); alleen de
-  // "Toetsing"-kolom wisselt van vergelijkingsmethode voor deze ene categorie.
-  const useNsg = categoryKey === 'laagfrequent';
-  const toetsCell = (lval, d, x) => {
-    if (useNsg) {
-      const worst = nsgWorstBand(d, x, nightState, baseState.lwa);
-      if (!worst) return `<td class="norm-na">n.v.t.</td>`;
-      return `<td class="${worst.exceeds ? 'norm-exceed' : 'norm-ok'}">${nsgVerdictLabel(worst).replace(' volgens NSG', '')}</td>`;
-    }
+  const toetsCell = (lval) => {
     if (norm.lnight == null) return `<td class="norm-na">n.v.t.</td>`;
     const exceed = lval > norm.lnight;
     const diff = lval - norm.lnight;
@@ -1087,7 +1102,66 @@ function m5NormTableRowsHtml(categoryKey, baseState, norm) {
     const lDown = lpAt(d, 1, categoryKey, lwCat, nightState);
     const lUp = lpAt(d, -1, categoryKey, lwCat, nightState);
     const lCross = lpAt(d, 0, categoryKey, lwCat, nightState);
-    return `<tr><td>${d} m</td><td>${lday.toFixed(1)}</td><td>${lDown.toFixed(1)}</td>${toetsCell(lDown, d, 1)}<td>${lUp.toFixed(1)}</td>${toetsCell(lUp, d, -1)}<td>${lCross.toFixed(1)}</td>${toetsCell(lCross, d, 0)}</tr>`;
+    return `<tr><td>${d} m</td><td>${lday.toFixed(1)}</td><td>${lDown.toFixed(1)}</td>${toetsCell(lDown)}<td>${lUp.toFixed(1)}</td>${toetsCell(lUp)}<td>${lCross.toFixed(1)}</td>${toetsCell(lCross)}</tr>`;
+  }).join('');
+}
+
+// Kopregel bij m5NormTableRowsHtml() — voor 'laagfrequent' een eigen, kortere kopregel (zie hieronder);
+// voor alle overige categorieën de bestaande dag/downwind/upwind/zijwind-koppen, ongewijzigd.
+function m5NormTableHeadHtml(categoryKey) {
+  if (categoryKey === 'laagfrequent') {
+    return `<tr><th>Afstand</th><th>Hoorbaar</th><th>Totaal LFG</th><th>NSG<br><span class="th-sub">waarneembaarheid</span></th><th>Vercammen<br><span class="th-sub">hinder</span></th></tr>`;
+  }
+  return `<tr><th>Afstand</th><th>Dag</th><th>Nacht downwind</th><th>Toetsing downwind</th><th>Nacht upwind</th><th>Toetsing upwind</th><th>Nacht zijwind</th><th>Toetsing zijwind</th></tr>`;
+}
+
+// Gecombineerde tabelvorm voor de "Laagfrequent"-tab: per vaste afstand (downwind, nacht — de kritische,
+// verst dragende richting) tegelijk vier oordelen naast elkaar:
+//  1) Hoorbaar   — de aparte categorie "hoorbaar geluid", dB(A) getoetst aan de hierboven gekozen
+//                  Lnight-norm. Hergebruikt exact dezelfde lpAt()/computeCategoryLw()-aanroep als de
+//                  "hoorbaar"-tab zelf; er wordt hier niets van die rekenlogica opnieuw geïmplementeerd.
+//  2) Totaal LFG — het geaggregeerde, ongewogen dB(Lin)-niveau (som van alle 9 tertsbanden). Zuiver
+//                  informatief: hiervoor bestaat geen normwaarde, dus geen kleur/oordeel op deze cel.
+//  3) NSG        — WAARNEEMBAARHEIDSNORM: kan een gemiddelde oudere (50-60 jaar) dit geluid nog horen?
+//                  Per tertsband getoetst; getoonde band = grootste overschrijdingsmarge.
+//  4) Vercammen  — HINDERNORM: vanaf welk niveau geldt laagfrequent geluid als hinderlijk/klachtwaardig
+//                  (Nederlandse/Vlaamse jurisprudentie)? Eigen, onafhankelijke toetsing t.o.v. NSG —
+//                  een band kan onder de NSG-drempel liggen (niet hoorbaar) én boven de Vercammen-grens
+//                  liggen (wel hinderlijk), of andersom.
+// Vervangt voor deze ene tab de eerdere dag/upwind/zijwind-kolommen: die voegden voor laagfrequent
+// geluid weinig toe naast de twee per-tertsband-toetsingen hieronder. Module 14a en de hoorbaar-/
+// infrasoon-rekenlogica zelf blijven volledig buiten deze functie.
+function m5LfgCombinedTableRowsHtml(baseState, norm) {
+  const catLw = computeCategoryLw(baseState.lwa);
+  const nightState = Object.assign({}, baseState, { daynight: 'nacht' });
+  const hoorbaarLw = catLw['hoorbaar'];
+  const lfgLw = catLw['laagfrequent'];
+  const x = 1; // downwind — kritische, verst dragende richting (zelfde keuze als voorheen)
+  return DISTANCES.map((d) => {
+    const hoorbaarLevel = lpAt(d, x, 'hoorbaar', hoorbaarLw, nightState);
+    let hoorbaarCell;
+    if (norm.lnight == null) {
+      hoorbaarCell = `<td class="norm-na">n.v.t.</td>`;
+    } else {
+      const exceed = hoorbaarLevel > norm.lnight;
+      const diff = hoorbaarLevel - norm.lnight;
+      hoorbaarCell = `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${hoorbaarLevel.toFixed(1)} dB(A) \u2014 ${exceed ? 'boven norm' : 'binnen norm'} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)} dB)</td>`;
+    }
+
+    const totaalLevel = lpAt(d, x, 'laagfrequent', lfgLw, nightState);
+    const totaalCell = `<td class="norm-na">${totaalLevel.toFixed(1)} dB(Lin)</td>`;
+
+    const nsg = nsgWorstBand(d, x, nightState, baseState.lwa);
+    const nsgCell = !nsg
+      ? `<td class="norm-na">n.v.t.</td>`
+      : `<td class="${nsg.exceeds ? 'norm-exceed' : 'norm-ok'}">${nsg.level.toFixed(1)} dB(Lin) \u2014 ${nsgVerdictLabel(nsg).replace(' volgens NSG', '')}</td>`;
+
+    const verc = vercammenWorstBand(d, x, nightState, baseState.lwa);
+    const vercCell = !verc
+      ? `<td class="norm-na">n.v.t.</td>`
+      : `<td class="${verc.exceeds ? 'norm-exceed' : 'norm-ok'}">${verc.level.toFixed(1)} dB(Lin) \u2014 ${vercammenVerdictLabel(verc).replace(' volgens Vercammen', '')}</td>`;
+
+    return `<tr><td>${d} m</td>${hoorbaarCell}${totaalCell}${nsgCell}${vercCell}</tr>`;
   }).join('');
 }
 
@@ -1105,15 +1179,16 @@ function renderNormModule() {
       normAweightNote.innerHTML = `Deze tabel toetst het geaggregeerde dB(Lin)-niveau aan de hierboven gekozen dB(A)-afgeleide Lnight-waarde — een <strong>arbitrair indicatief referentiepunt</strong>, niet de Vercammen-curve. Voor de eigenlijke per-tertsband toetsing aan de Vercammen-grenswaarden, zie het aparte "Laagfrequent geluid – Vercammen"-blok in Module 3.`;
     } else if (state.category === 'laagfrequent') {
       normAweightNote.style.display = '';
-      normAweightNote.innerHTML = `De "Toetsing"-kolommen vergelijken dit laagfrequente geluid niet meer met de dB(A)-afgeleide Lnight-norm hierboven — dat was een <strong>dimensioneel niet-kloppende vergelijking</strong> tussen dB(Lin) en dB(A). In plaats daarvan wordt hier per tertsband getoetst aan de <strong>NSG-gehoordrempelcurve</strong> (90%-gehoordrempel van oudere personen, 50–60 jaar); getoond wordt de tertsband met de grootste overschrijdingsmarge, samengevat tot één hoorbaarheidsoordeel. De dB(Lin)-waarden ernaast blijven het geaggregeerde (niet per-tertsband) niveau tonen. Bron: <a href="https://www.rivm.nl/bibliotheek/rapporten/2021-0187.pdf" target="_blank" rel="noopener">RIVM-rapport 2021-0187, Onderzoeksprogramma Laagfrequent geluid</a>.`;
+      normAweightNote.innerHTML = `Deze tabel toont per afstand (downwind, nacht) vier oordelen naast elkaar. <strong>Hoorbaar</strong> is de aparte categorie hoorbaar geluid, getoetst in dB(A) aan de Lnight-norm hierboven. <strong>Totaal LFG</strong> is het geaggregeerde, ongewogen dB(Lin)-niveau (som van alle tertsbanden) — puur informatief, hiervoor bestaat geen normwaarde. Daarnaast staan twee onafhankelijke per-tertsband toetsingen van dat laagfrequente geluid: <strong>NSG is een waarneembaarheidsnorm</strong> — kan een gemiddelde oudere (50–60 jaar) dit geluid nog hóren? — en <strong>Vercammen is een hindernorm</strong> — vanaf welk niveau geldt het geluid als hinderlijk/klachtwaardig, zoals gebruikt in de Nederlandse/Vlaamse jurisprudentie? Een band kan onder de NSG-drempel liggen (niet hoorbaar) én tegelijk boven de Vercammen-grens (wel hinderlijk), of andersom — het zijn twee verschillende vragen. Getoond wordt telkens de tertsband met de grootste overschrijdingsmarge. Bron: <a href="https://www.rivm.nl/bibliotheek/rapporten/2021-0187.pdf" target="_blank" rel="noopener">RIVM-rapport 2021-0187, Onderzoeksprogramma Laagfrequent geluid</a>.`;
     } else {
       normAweightNote.style.display = '';
       normAweightNote.innerHTML = `De wettelijke norm is gedefinieerd in <strong>dB(A)</strong> (het hoorbare, A-gewogen geluid). Voor ${cat.shortLabel.toLowerCase()} geluid vervalt de A-weging en wordt hier getoetst in <strong>${cat.unit}</strong> — er bestaat geen formeel vastgestelde, direct vergelijkbare grenswaarde in deze eenheid; de hierboven gekozen dB(A)-norm dient uitsluitend als indicatief referentiepunt.`;
     }
   }
+  if (normTableHead) normTableHead.innerHTML = m5NormTableHeadHtml(state.category);
   if (normLdenCallout) {
     normLdenCallout.innerHTML = state.category === 'laagfrequent'
-      ? `De Lden-benadering is voor nu verwijderd uit deze tabel — dat was een indicatieve schatting (dag/avond/nacht-weging met de avond benaderd op het dagniveau) en <strong>geen</strong> formele Lden-berekening volgens het Reken- en meetvoorschrift windturbines. De "Toetsing"-kolommen hieronder tonen het NSG-hoorbaarheidsoordeel voor de dB-waarde Nacht, per richting, voor het huidige scenario (Module 2) en de huidige windrichting (Module 3).`
+      ? `De Lden-benadering is voor nu verwijderd uit deze tabel — dat was een indicatieve schatting (dag/avond/nacht-weging met de avond benaderd op het dagniveau) en <strong>geen</strong> formele Lden-berekening volgens het Reken- en meetvoorschrift windturbines. De kolommen hieronder tonen het hoorbaar-, NSG- en Vercammen-oordeel voor de dB-waarde Nacht downwind, voor het huidige scenario (Module 2) en de huidige windrichting (Module 3).`
       : `De Lden-benadering is voor nu verwijderd uit deze tabel — dat was een indicatieve schatting (dag/avond/nacht-weging met de avond benaderd op het dagniveau) en <strong>geen</strong> formele Lden-berekening volgens het Reken- en meetvoorschrift windturbines. Toetsing gebeurt hier rechtstreeks op de dB-waarde Nacht t.o.v. de Lnight-norm, voor het huidige scenario (Module 2) en de huidige windrichting (Module 3).`;
   }
   if (n === 0) {
@@ -1698,15 +1773,16 @@ function renderNormTable3a() {
       normAweightNote3a.style.display = 'none';
     } else if (state.category === 'laagfrequent') {
       normAweightNote3a.style.display = '';
-      normAweightNote3a.innerHTML = `De "Toetsing"-kolommen vergelijken dit laagfrequente geluid niet meer met de dB(A)-afgeleide Lnight-norm hierboven \u2014 dat was een <strong>dimensioneel niet-kloppende vergelijking</strong> tussen dB(Lin) en dB(A). In plaats daarvan wordt hier per tertsband getoetst aan de <strong>NSG-gehoordrempelcurve</strong> (90%-gehoordrempel van oudere personen, 50\u201360 jaar); getoond wordt de tertsband met de grootste overschrijdingsmarge, samengevat tot \u00e9\u00e9n hoorbaarheidsoordeel per afstand en richting. De dB(Lin)-waarden ernaast blijven het geaggregeerde (niet per-tertsband) niveau tonen. Bron: <a href="https://www.rivm.nl/bibliotheek/rapporten/2021-0187.pdf" target="_blank" rel="noopener">RIVM-rapport 2021-0187, Onderzoeksprogramma Laagfrequent geluid</a>.`;
+      normAweightNote3a.innerHTML = `Deze tabel toont per afstand (downwind, nacht) vier oordelen naast elkaar. <strong>Hoorbaar</strong> is de aparte categorie hoorbaar geluid, getoetst in dB(A) aan de Lnight-norm hierboven. <strong>Totaal LFG</strong> is het geaggregeerde, ongewogen dB(Lin)-niveau (som van alle tertsbanden) \u2014 puur informatief, hiervoor bestaat geen normwaarde. Daarnaast staan twee onafhankelijke per-tertsband toetsingen van dat laagfrequente geluid: <strong>NSG is een waarneembaarheidsnorm</strong> \u2014 kan een gemiddelde oudere (50\u201360 jaar) dit geluid nog h\u00f3ren? \u2014 en <strong>Vercammen is een hindernorm</strong> \u2014 vanaf welk niveau geldt het geluid als hinderlijk/klachtwaardig, zoals gebruikt in de Nederlandse/Vlaamse jurisprudentie? Een band kan onder de NSG-drempel liggen (niet hoorbaar) \u00e9n tegelijk boven de Vercammen-grens (wel hinderlijk) liggen, of andersom \u2014 het zijn twee verschillende vragen. Getoond wordt telkens de tertsband met de grootste overschrijdingsmarge. Bron: <a href="https://www.rivm.nl/bibliotheek/rapporten/2021-0187.pdf" target="_blank" rel="noopener">RIVM-rapport 2021-0187, Onderzoeksprogramma Laagfrequent geluid</a>.`;
     } else {
       normAweightNote3a.style.display = '';
       normAweightNote3a.innerHTML = `De wettelijke norm is gedefinieerd in <strong>dB(A)</strong> (het hoorbare, A-gewogen geluid). Voor ${cat.shortLabel.toLowerCase()} geluid vervalt de A-weging en wordt hier getoetst in <strong>${cat.unit}</strong> \u2014 er bestaat geen formeel vastgestelde, direct vergelijkbare grenswaarde in deze eenheid; de hierboven gekozen dB(A)-norm dient uitsluitend als indicatief referentiepunt.`;
     }
   }
+  if (normTableHead3a) normTableHead3a.innerHTML = m5NormTableHeadHtml(state.category);
   if (normLdenCallout3a) {
     normLdenCallout3a.innerHTML = state.category === 'laagfrequent'
-      ? `De Lden-benadering is voor nu verwijderd uit deze tabel \u2014 toetsing gebeurt hier rechtstreeks op het NSG-hoorbaarheidsoordeel voor de dB-waarde Nacht, per richting.`
+      ? `De Lden-benadering is voor nu verwijderd uit deze tabel \u2014 toetsing gebeurt hier rechtstreeks op het hoorbaar-, NSG- en Vercammen-oordeel voor de dB-waarde Nacht downwind.`
       : `De Lden-benadering is voor nu verwijderd uit deze tabel \u2014 toetsing gebeurt hier rechtstreeks op de dB-waarde Nacht t.o.v. de Lnight-norm.`;
   }
   if (m3aContextCallout) {

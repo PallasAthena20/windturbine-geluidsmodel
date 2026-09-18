@@ -469,6 +469,7 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .norm-table td.norm-exceed { color: var(--color-error); font-weight: 700; background: var(--color-error-highlight); font-family: var(--font-body); font-size: var(--text-xs); white-space: nowrap; }
 .norm-table td.norm-ok { color: var(--color-success); font-weight: 700; background: var(--color-success-highlight); font-family: var(--font-body); font-size: var(--text-xs); white-space: nowrap; }
 .norm-table td.norm-na { color: var(--color-text-faint); font-family: var(--font-body); font-style: italic; font-size: var(--text-xs); }
+.norm-table th .th-sub { display: block; text-transform: none; font-weight: 400; letter-spacing: 0; font-size: 0.62rem; color: var(--color-text-muted); margin-top: 2px; }
 #norm-context-callout:empty { display: none; }
 @media (max-width: 640px) {
   .norm-table { font-size: var(--text-xs); min-width: 560px; }
