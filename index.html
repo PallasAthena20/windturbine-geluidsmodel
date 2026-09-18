@@ -121,7 +121,7 @@
         <input type="number" id="m1-custom-lnight" value="41" step="0.5" min="25" max="55">
       </div>
     </div>
-    <span class="hint">Vul hier je eigen Lden- en L<sub>night</sub>-norm in dB(A) in &mdash; bijvoorbeeld de norm die jouw gemeente hanteert. Deze waarden worden overal in het model gebruikt zodra je bij Module 5 &ldquo;Eigen/lokale norm&rdquo; kiest als te toetsen norm (o.a. voor de Lden-toetsing in Module 14).</span>
+    <span class="hint">Vul hier je eigen Lden- en L<sub>night</sub>-norm in dB(A) in &mdash; bijvoorbeeld de norm die jouw gemeente hanteert. Deze waarden worden standaard overal in het model gebruikt (Module 3, 5 en 14), zolang bij de normkeuze &ldquo;Eigen/lokale norm&rdquo; is geselecteerd (standaard actief) &mdash; kies je daar een andere norm, dan geldt die keuze i.p.v. deze waarden.</span>
   </section>
 
   <!-- MODULE 2 -->
@@ -239,14 +239,11 @@
         <select id="norm-preset-select-3a">
           <option value="oud">Oude landelijke norm — 41 dB Lnight</option>
           <option value="who">WHO-advieswaarde — geen Lnight-waarde</option>
-          <option value="eigen">Eigen/lokale norm — zelf invullen</option>
+          <option value="eigen" selected>Eigen/lokale norm — zelf invullen</option>
         </select>
       </div>
-      <div class="cum-field" id="norm-custom-lnight-field-3a" style="display:none;">
-        <label for="norm-custom-lnight-3a">Eigen Lnight-norm (dB)</label>
-        <input type="number" id="norm-custom-lnight-3a" value="41" step="0.5" min="25" max="55">
-      </div>
     </div>
+    <p class="callout" id="norm-custom-values-note-3a" style="display:none;"></p>
 
     <div class="m3-layout">
       <div class="map-wrap">

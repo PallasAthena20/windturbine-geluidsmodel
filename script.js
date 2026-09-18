@@ -708,7 +708,7 @@ const state = {
   // Module 3a: volledig eigen turbine-invoer en dag/nacht — onafhankelijk van Module 2/5 hierboven.
   // state.category is BEWUST gedeeld met Module 3 (zie category-tabs-3a), net als scenario/curtailment/windBearing/lwa.
   turbines3a: [], selectedTurbineId3a: null, daynight3a: 'dag',
-  normPreset3a: 'oud', normCustomLnight3a: 41,
+  normPreset3a: 'eigen',
   // Module 7: shear-capacity-verkenner (Van Hooijdonk e.a. 2015 / Bosveld e.a. 2020) — zie script.js §M7.
   // De bewolkingsklasse is niet meer los instelbaar: elk scenario (best/middel/worst) heeft een vaste,
   // vastgekoppelde bewolkingsklasse (M7_SCENARIO_CLOUD) en de koppeling naar Module 6 staat permanent aan.
@@ -747,7 +747,9 @@ function getActiveNorm() {
 }
 function getActiveNorm3a() {
   if (state.normPreset3a === 'eigen') {
-    return { lnight: state.normCustomLnight3a, label: 'Eigen/lokale norm' };
+    // Gebruikt dezelfde eigen normwaarde als Module 1/5 (state.normCustomLnight) — geen apart
+    // los invoerveld meer, zodat de Module 1-invoer overal consistent wordt doorgevoerd.
+    return { lnight: state.normCustomLnight, label: 'Eigen/lokale norm' };
   }
   return NORM_PRESETS[state.normPreset3a];
 }
@@ -840,8 +842,7 @@ const m3aContextCallout = document.getElementById('m3a-context-callout');
 const categoryTabs3a = document.getElementById('category-tabs-3a');
 const daynightToggle3a = document.getElementById('daynight-toggle-3a');
 const normPresetSelect3a = document.getElementById('norm-preset-select-3a');
-const normCustomLnightField3a = document.getElementById('norm-custom-lnight-field-3a');
-const normCustomLnightInput3a = document.getElementById('norm-custom-lnight-3a');
+const normCustomValuesNote3a = document.getElementById('norm-custom-values-note-3a');
 const normTableTitle3a = document.getElementById('norm-table-title-3a');
 const normTableHead3a = document.getElementById('norm-table-head-3a');
 const normAweightNote3a = document.getElementById('norm-aweight-note-3a');
@@ -1779,6 +1780,7 @@ function renderVercammenTable3a() {
 
 function renderNormTable3a() {
   if (!normTableBody3a) return;
+  updateNormCustomValuesNote3a();
 
   if (state.category === 'laagfrequent-vercammen') {
     if (genericNormCard3a) genericNormCard3a.style.display = 'none';
@@ -1868,16 +1870,19 @@ daynightToggle3a.querySelectorAll('button').forEach(btn => {
 });
 
 // ---------- Module 3a: normselectie ----------
+function updateNormCustomValuesNote3a() {
+  if (!normCustomValuesNote3a) return;
+  const isCustom = state.normPreset3a === 'eigen';
+  normCustomValuesNote3a.style.display = isCustom ? '' : 'none';
+  if (isCustom) {
+    normCustomValuesNote3a.innerHTML = `Eigen normwaarde (ingesteld bij <strong>Module 1</strong>): L<sub>night</sub> <strong>${state.normCustomLnight.toFixed(1)} dB(A)</strong> \u2014 wijzig deze waarde bij Module 1.`;
+  }
+}
 if (normPresetSelect3a) {
+  normPresetSelect3a.value = state.normPreset3a;
   normPresetSelect3a.addEventListener('change', () => {
     state.normPreset3a = normPresetSelect3a.value;
-    const isCustom = state.normPreset3a === 'eigen';
-    normCustomLnightField3a.style.display = isCustom ? '' : 'none';
-    render();
-  });
-  normCustomLnightInput3a.addEventListener('input', () => {
-    state.normCustomLnight3a = parseFloat(normCustomLnightInput3a.value);
-    if (Number.isNaN(state.normCustomLnight3a)) state.normCustomLnight3a = 41;
+    updateNormCustomValuesNote3a();
     render();
   });
 }
