@@ -701,7 +701,7 @@ const state = {
   lwa: 106.0, windBearing: 0, daynight: 'dag', scenario: 'best', curtailment: false,
   category: 'hoorbaar', turbines: [], selectedTurbineId: null,
   cumDistance: 500, cumShowReceptors: false,
-  normPreset: 'oud', normCustomLnight: 41, normCustomLden: 47,
+  normPreset: 'eigen', normCustomLnight: 41, normCustomLden: 47,
   // Module 1: minimale afstand turbine-woning (knop met vaste keuzes) — getoetst in Module 3
   // via een live BAG-check (dichtstbijzijnde woning per geplaatste turbine, zie script.js §M1min.
   m1MinAfstandHuis: null, m1MinAfstandResults: null, m1MinAfstandFetching: false, m1MinAfstandError: null,
@@ -803,6 +803,7 @@ function updateNormCustomValuesNote() {
   }
 }
 if (normPresetSelect) {
+  normPresetSelect.value = state.normPreset;
   normPresetSelect.addEventListener('change', () => {
     state.normPreset = normPresetSelect.value;
     updateNormCustomValuesNote();
