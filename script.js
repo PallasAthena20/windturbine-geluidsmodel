@@ -5546,28 +5546,21 @@ function m13MapImagesHtml(mapViews, turbineListStr) {
 async function m13OpenReport() {
   const btn = document.getElementById('m13-generate-btn');
   const originalBtnText = btn ? btn.textContent : '';
-  // Het venster meteen synchroon openen, binnen dezelfde click-gebeurtenis, zodat de browser
-  // dit niet als pop-up blokkeert (dat gebeurt zodra window.open() pas na een 'await' — en dus
-  // buiten de directe user-gesture — wordt aangeroepen, zoals nodig is voor de kaartcapture).
-  const win = window.open('', '_blank');
-  if (win) {
-    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rapport wordt opgebouwd…</title></head><body style="font-family:sans-serif;padding:40px;color:#333;">Rapport wordt opgebouwd, inclusief kaartafbeelding van de geplaatste turbine(s)…</body></html>');
-    // KRITIEK voor de kaartcapture hieronder: window.open() geeft in de meeste browsers
-    // meteen de focus aan het NIEUWE (lege) tabblad, waardoor dit tabblad -- waar de eigenlijke
-    // asynchrone kaartcapture draait -- op de achtergrond komt. MapLibre GL tekent zijn WebGL-
-    // canvas via requestAnimationFrame, en Chromium vertraagt/bevriest rAF-callbacks zeer sterk
-    // in achtergrondtabbladen: tegels worden dan wel gedownload, maar niet (of veel te laat) naar
-    // de canvas geschilderd, ongeacht hoe lang of hoe vaak m13CaptureSingleView opnieuw probeert.
-    // Dit is de daadwerkelijke oorzaak gebleken van het aanhoudende 'lege achtergrond'-defect
-    // (bevestigd via handmatige test: de later vastgelegde regionale kaart faalde veel minder
-    // vaak dan de eerder vastgelegde closeup-kaart -- precies zoals verwacht als er meer
-    // verstreken tijd meer kans geeft op een enkele doorgelaten rAF-tick). We claimen de focus
-    // daarom meteen terug op DIT aanroepende venster, zodat het gedurende de hele capture in de
-    // voorgrond blijft -- pas als de rapport-URL klaarstaat (win.location.href verderop) mag de
-    // gebruiker weer naar het rapporttabblad wisselen.
-    try { win.blur(); } catch (e) { /* negeren */ }
-    try { window.focus(); } catch (e) { /* negeren */ }
-  }
+  // BELANGRIJK: we openen hier bewust GEEN nieuw tabblad/venster voordat de kaartcapture klaar is.
+  // Eerdere versies deden dat wel (meteen een leeg venster openen om pop-upblokkering te
+  // vermijden), maar zodra dat nieuwe tabblad de browserfocus krijgt, wordt DIT tabblad door
+  // Chromium als 'hidden' gemarkeerd (Page Visibility API) -- en dat is een browser-tabblad-
+  // status die met geen enkele JavaScript-truc (window.focus()/blur()) valt te overrulen zodra
+  // een echt nieuw tabblad is aangemaakt. MapLibre GL tekent zijn WebGL-canvas via
+  // requestAnimationFrame, en Chromium bevriest/vertraagt rAF-callbacks in 'hidden' tabbladen
+  // vrijwel volledig: tegels worden dan wel gedownload, maar nooit naar de canvas geschilderd,
+  // ongeacht hoe lang of hoe vaak m13CaptureSingleView opnieuw probeert. Dit bleek de
+  // daadwerkelijke oorzaak van het aanhoudende 'lege achtergrond'-defect in de kaartafbeeldingen
+  // van het rapport. Oplossing: de volledige capture + rapportopbouw gebeurt terwijl DIT
+  // tabblad gewoon zichtbaar/actief blijft (geen nieuw venster geopend), en pas als het
+  // rapport helemaal klaar is, proberen we het te openen. Als de browser dat als pop-up
+  // blokkeert (mogelijk na een lange asynchrone bewerking), tonen we een knop die de
+  // gebruiker met een gewone klik alsnog kan gebruiken.
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Kaart wordt vastgelegd…';
@@ -5582,10 +5575,23 @@ async function m13OpenReport() {
   const html = m13BuildReportHtml(mapViews);
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
-  if (win) {
-    win.location.href = url;
-  } else {
-    alert('De pop-up werd geblokkeerd door de browser — sta pop-ups toe voor deze pagina en klik opnieuw op "Rapport genereren (PDF)".');
+  const win = window.open(url, '_blank');
+  const fallbackId = 'm13-report-fallback-link';
+  let fallback = document.getElementById(fallbackId);
+  if (!win) {
+    if (!fallback) {
+      fallback = document.createElement('a');
+      fallback.id = fallbackId;
+      fallback.target = '_blank';
+      fallback.rel = 'noopener';
+      fallback.style.cssText = 'display:inline-block;margin-left:12px;padding:8px 14px;background:#01696F;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;';
+      if (btn && btn.parentNode) btn.parentNode.insertBefore(fallback, btn.nextSibling);
+    }
+    fallback.href = url;
+    fallback.textContent = 'Rapport is klaar — klik hier om te openen';
+    fallback.style.display = 'inline-block';
+  } else if (fallback) {
+    fallback.style.display = 'none';
   }
   if (btn) {
     btn.disabled = false;
