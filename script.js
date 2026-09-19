@@ -3621,8 +3621,14 @@ function renderModule8Jaarnorm() {
     if (stilContainer) stilContainer.innerHTML = '';
     return;
   }
+  // Alleen hoorbaar wordt hier getoetst: de Lnight-norm is een dB(A)-norm, en een dB(A)-vergelijking
+  // voor laagfrequent/infrasoon (dB(Lin)/dB(G)) gaf op alle rijen "Overschrijding" — een categoriefout
+  // die bovendien nergens onderscheid maakte, dus geen informatie toevoegde. Laagfrequent heeft wel een
+  // echte norm, maar die geldt alleen voor de nachtperiode zelf (per tertsband, geen jaargemiddelde) —
+  // zie de Vercammen-toetsing in Module 14.
+  const M8_JAARNORM_CATEGORIES_SHOWN = JAARNORM_CATEGORIES.filter((cat) => cat.key === 'hoorbaar');
   const catResults = {};
-  JAARNORM_CATEGORIES.forEach((cat) => { catResults[cat.key] = m8JaarnormRows(cat.key); });
+  M8_JAARNORM_CATEGORIES_SHOWN.forEach((cat) => { catResults[cat.key] = m8JaarnormRows(cat.key); });
   const base = catResults.hoorbaar;
   if (!base) {
     container.innerHTML = `<p class="empty-row">Geen gegevens.</p>`;
@@ -3648,8 +3654,8 @@ function renderModule8Jaarnorm() {
       </div>`;
   }
 
-  // ---- Drie categorietabellen (hoorbaar / laagfrequent / infrasoon), bewust niet samengevoegd ----
-  container.innerHTML = JAARNORM_CATEGORIES.map((cat) => {
+  // ---- Alleen de hoorbaar-tabel (zie toelichting hierboven bij M8_JAARNORM_CATEGORIES_SHOWN) ----
+  container.innerHTML = M8_JAARNORM_CATEGORIES_SHOWN.map((cat) => {
     const result = catResults[cat.key];
     const rowsHtml = result.rows.map((r) => {
       if (r.ring == null) {
@@ -3690,7 +3696,7 @@ function renderModule8Jaarnorm() {
     const verdelingHtml = stilX > 0
       ? `<p class="hint">Bij <strong>${stilX} stilstandnacht${stilX === 1 ? '' : 'en'}</strong> per jaar (eerst worst case, dan middel, dan best case stilgezet): ${nachten.nWorst} → <strong>${verdeling.nWorst}</strong> worst case, ${nachten.nMiddel} → <strong>${verdeling.nMiddel}</strong> middel, ${nachten.nBest} → <strong>${verdeling.nBest}</strong> best case, plus <strong>${verdeling.nStil}</strong> stilstandnachten (0 dB turbinebijdrage).</p>`
       : `<p class="hint">Vul hierboven een aantal stilstandnachten per jaar in om het effect op het jaargemiddelde te zien.</p>`;
-    const tablesHtml = JAARNORM_CATEGORIES.map((cat) => {
+    const tablesHtml = M8_JAARNORM_CATEGORIES_SHOWN.map((cat) => {
       const result = catResults[cat.key];
       const worstRows = result.rows.filter((r) => r.scenario === 'worst');
       const rowsHtml = worstRows.map((r) => {
