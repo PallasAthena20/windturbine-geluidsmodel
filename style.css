@@ -264,10 +264,10 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .factor-row.group-max .f-label { color: var(--color-text); }
 .factor-row.group-max .f-val { color: var(--color-primary); }
 
-/* Module 3 */
-.m3-layout { display: grid; grid-template-columns: 1fr 380px; gap: var(--space-10); align-items: start; min-width: 0; }
-.m3-layout > * { min-width: 0; }
-@media (max-width: 980px) { .m3-layout { grid-template-columns: 1fr; } }
+/* Module 3 — kaart, huidig scenario en toetsingstabellen staan na elkaar, elk over de volle breedte */
+#module-3a .readout-mini,
+#module-3a .map-wrap,
+#module-3a .data-table-card { margin-top: var(--space-6); }
 
 /* Category tabs */
 .cat-tabs { display: flex; gap: var(--space-3); margin-bottom: var(--space-6); flex-wrap: wrap; }
@@ -402,8 +402,6 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .method-callout code { font-family: var(--font-mono); background: var(--color-surface-offset-2); padding: 2px 6px; border-radius: 4px; font-size: 0.85em; color: var(--color-text); white-space: normal; word-break: break-word; line-height: 1.5; display: inline-block; }
 .method-callout .worst-case-readout { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px dashed var(--color-border); font-size: var(--text-sm); }
 
-.side-col { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
-.side-col > * { min-width: 0; }
 .data-table-card { background: var(--color-surface-offset); border-radius: var(--radius-lg); padding: var(--space-5); min-width: 0; }
 .data-table-card h3 { font-size: var(--text-sm); font-weight: 700; margin-bottom: var(--space-3); }
 .data-table { font-size: var(--text-xs); }

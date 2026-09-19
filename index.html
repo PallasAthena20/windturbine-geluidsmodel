@@ -215,7 +215,7 @@
       <span class="module-num">Module 3</span>
       <h2>Kaart — turbines plaatsen en geluid per categorie</h2>
     </div>
-    <p class="module-desc">Plaats windturbines op een lichte, neutrale <strong>MapLibre/OpenFreeMap-kaart</strong> van Nederland — door een adres/plaats te zoeken, door coördinaten in te voeren, of door een plek op de kaart aan te wijzen (max. 8). Voor elke turbine worden zes afstandsringen getekend op vaste afstand (500/900/1300/1500/2000/5000 m), elk in een vaste kleur die uitsluitend de afstand tot de turbine aangeeft — hover over een ring voor de dB-waarde in die richting, per geluidscategorie. Categorie, dag/nacht en de te toetsen norm stel je hieronder in — als één samenhangend blok, zodat kaart, ringen en normtoetsing continu consistent blijven. Module 4 en 5 gebruiken de turbines die je hier plaatst.</p>
+    <p class="module-desc">Plaats windturbines op een lichte, neutrale <strong>MapLibre/OpenFreeMap-kaart</strong> van Nederland — door een adres/plaats te zoeken, door coördinaten in te voeren, of door een plek op de kaart aan te wijzen (max. 8). Voor elke turbine worden zes afstandsringen getekend op vaste afstand (500/900/1300/1500/2000/5000 m), elk in een vaste kleur die uitsluitend de afstand tot de turbine aangeeft — hover over een ring voor de dB-waarde in die richting, per geluidscategorie. Categorie en dag/nacht stel je hieronder in; de te toetsen norm zelf stel je in bij Module 5 (die geldt overal in dit model). Module 4 en 5 gebruiken de turbines die je hier plaatst.</p>
 
     <p class="callout" id="m3a-context-callout"></p>
 
@@ -234,18 +234,15 @@
           <button data-val="nacht" aria-pressed="false" type="button"><span class="dn-icon" aria-hidden="true">☾</span>Nacht</button>
         </div>
       </div>
-      <div class="cum-field">
-        <label for="norm-preset-select-3a">Te toetsen norm (ook gebruikt in de tabel rechts)</label>
-        <select id="norm-preset-select-3a">
-          <option value="oud">Oude landelijke norm — 41 dB Lnight</option>
-          <option value="who">WHO-advieswaarde — geen Lnight-waarde</option>
-          <option value="eigen" selected>Eigen/lokale norm — zelf invullen</option>
-        </select>
-      </div>
     </div>
     <p class="callout" id="norm-custom-values-note-3a" style="display:none;"></p>
 
-    <div class="m3-layout">
+    <div class="readout-mini">
+        <span class="rm-title">Huidig scenario</span>
+        <span class="rm-val" id="mini-scenario-3a">Best case</span>
+        <span class="rm-sub" id="mini-sub-3a">Dag · Wind uit N · 0 turbines</span>
+      </div>
+
       <div class="map-wrap">
         <div class="location-panel">
           <div class="loc-tabs" role="tablist" aria-label="Locatie invoermethode">
@@ -289,14 +286,7 @@
         </div>
       </div>
 
-      <div class="side-col">
-        <div class="readout-mini">
-          <span class="rm-title">Huidig scenario</span>
-          <span class="rm-val" id="mini-scenario-3a">Best case</span>
-          <span class="rm-sub" id="mini-sub-3a">Dag · Wind uit N · 0 turbines</span>
-        </div>
-
-        <div class="data-table-card" id="generic-norm-card-3a">
+      <div class="data-table-card" id="generic-norm-card-3a">
           <h3 id="norm-table-title-3a">Toetsing geselecteerde turbine (hoorbaar geluid, dB(A))</h3>
           <div class="cum-result-wrap">
             <table class="data-table norm-table">
@@ -322,8 +312,6 @@
           </div>
           <p class="callout" id="vercammen-caveat-3a">Wat je hier ziet: deze tabel laat per lage toon zien hoe hard die is op verschillende afstanden van de turbine, en vergelijkt dat met de Vercammen-lijn — de lijn die de <a href="https://www.commissiemer.nl/english/jurisprudence/ECLI:NL:RVS:2021:1681" target="_blank" rel="noopener">Raad van State</a> gebruikt om te beoordelen of laagfrequent geluid van windturbines aanvaardbaar is. Komt een toon boven de lijn uit, dan is de kans groter dat mensen er hinder van ondervinden. Let op: (1) de verdeling van het geluid over deze tonen is gekalibreerd op daadwerkelijk gemeten turbinespectra uit het <a href="https://pas.commissiemer.nl/files/nl/3615/012687-3615-6-onderzoek-naar-laagfrequent-geluid-ten-gevolge-van-windturbines.pdf" target="_blank" rel="noopener">Commissie m.e.r.-onderzoek</a> (tabel 3.2, 8 van de 9 tonen); voor 31,5 Hz is een tussenwaarde geïnterpoleerd tussen de gemeten 25 en 40 Hz-waarden (geen directe meting), en voor 20 Hz ontbreekt in die tabel elke meetbasis — die toon staat daarom nog op de oorspronkelijke aanname van een vlak verdeeld spectrum; (2) het extra geluid 's nachts (windschering) is ook een wetenschappelijk onderbouwde aanname, geen meting; (3) de Vercammen-lijn zegt iets over hinder, niet rechtstreeks over zorgkosten — daarvoor is een aparte rekenstap nodig. Bronnen: <a href="https://pas.commissiemer.nl/files/nl/3615/012687-3615-6-onderzoek-naar-laagfrequent-geluid-ten-gevolge-van-windturbines.pdf" target="_blank" rel="noopener">Commissie m.e.r.-onderzoeksrapport (tabel 3.2)</a>, <a href="https://nsg.nl/nl/nsg-richtlijn_laagfrequent_geluid.html" target="_blank" rel="noopener">NSG-richtlijn laagfrequent geluid</a>. De tertsband van 20 Hz leent zijn geschatte niveau van de octaafband rond 16 Hz — dezelfde band die dit model elders als "infrasoon" classificeert; dat is een methodologische grens van de indeling, geen fout.</p>
         </div>
-      </div>
-    </div>
   </section>
 
   <!-- MODULE 4 -->
