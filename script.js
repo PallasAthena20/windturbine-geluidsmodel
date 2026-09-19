@@ -2752,14 +2752,19 @@ function renderModule7() {
 // ============================================================
 
 // Hinderpercentages per scenario — zie module-callout in index.html voor bronnen:
-// best = RIVM-basisscenario (47 dB Lden, ~8-9% ernstige hinder binnenshuis),
-// middel = illustratieve tussenwaarde, worst = Pawlaczyk-Łuszczyńska e.a. (2018).
+// best = RIVM-basisscenario (47 dB Lden, ~8-9% ernstige hinder binnenshuis).
+// middel/worst = Pawlaczyk-Łuszczyńska e.a. (2018), beide binnenshuis, uit dezelfde Poolse
+// veldstudie/populatie: middel = "zeer hinderlijk" (18,4%, smalle/strenge definitie, vergelijkbaar
+// met RIVM's %HA-conventie voor "ernstige hinder"), worst = "hinderlijk of erger" (33,7%, bredere
+// definitie). Let op: 18,4% zit als deelverzameling al volledig IN de 33,7% (geneste antwoordschaal,
+// net als RIVM's eigen %A/%HA-conventie) — dit zijn dus geen twee losse groepen en mogen nooit bij
+// elkaar worden opgeteld.
 // De hinderpercentages zijn ONAFHANKELIJK van het ring/woningen-scenario (best/middel/worst) —
 // elk ring-scenario wordt getoetst tegen alle drie de hinderpercentages, resulterend in een 3x3-matrix.
 const M8_HINDER_SCENARIOS = [
   { key: 'best', pct: 9, label: 'RIVM-basisscenario' },
-  { key: 'middel', pct: 30, label: 'Tussenscenario (illustratief)' },
-  { key: 'worst', pct: 46, label: 'Pawlaczyk-Łuszczyńska e.a. (2018)' },
+  { key: 'middel', pct: 18.4, label: 'Pawlaczyk e.a. (2018), zeer hinderlijk binnenshuis' },
+  { key: 'worst', pct: 33.7, label: 'Pawlaczyk e.a. (2018), hinderlijk binnenshuis' },
 ];
 const M8_SCENARIO_LABEL = { best: 'Best case', middel: 'Middel', worst: 'Worst case' };
 const M8_FETCH_RADIUS = 5000; // = grootste vaste ring uit Module 3; dekt alle scenario/categorie-combinaties
@@ -4590,7 +4595,7 @@ function m13BuildReportHtml(mapImages) {
 
   // Maatschappelijke kosten-totaal, PER GELUIDSCATEGORIE (niet meer geblend tot één ontdubbeld cijfer):
   // voor elke categorie het jaargewogen gemiddelde (gewicht = aandeel nachten per scenario, m6.pct) over
-  // de drie hinderpercentages. De 9/30/46%-hinderstudies (RIVM/Pawlaczyk) betreffen bewoners die
+  // de drie hinderpercentages. De 9/18,4/33,7%-hinderstudies (RIVM/Pawlaczyk) betreffen bewoners die
   // aangeven hoorbaar turbinegeluid waar te nemen — de hoorbaar-rij is daarom de wetenschappelijk
   // best onderbouwde vergelijking; laagfrequent/infrasoon passen dezelfde percentages illustratief toe
   // op hun eigen (grotere) ringbevolking, bij gebrek aan aparte hinderstudies voor die frequentiebanden.
@@ -4673,7 +4678,7 @@ function m13BuildReportHtml(mapImages) {
         <tr><td>5</td><td>Toetsing van het berekende geluidsniveau aan een wettelijke/advies-norm (Lnight).</td><td>Actieve norm: ${escapeHtml(norm.label)}${norm.lnight != null ? ` (Lnight ≤ ${norm.lnight} dB)` : ' (geen Lnight-waarde)'}</td></tr>
         <tr><td>6</td><td>Hoe vaak de nachtelijke best/middel/worst-omstandigheden voorkomen, op basis van klimatologie.</td><td>${m6 ? `Best ${m13Pct(m6.pct.best)} (${m6.days.best} nachten/jr), middel ${m13Pct(m6.pct.middel)} (${m6.days.middel} nachten/jr), worst ${m13Pct(m6.pct.worst)} (${m6.days.worst} nachten/jr)` : '— (geen turbine geplaatst)'}</td></tr>
         <tr><td>7</td><td>Wetenschappelijke onderbouwing (shear-capacity, Bosveld/Abraham &amp; Monahan) van de middel/worst-splitsing in Module 6.</td><td>Geostrofische wind (ERA5) ter plaatse: U<sub>geo</sub> ≈ ${state.m7Ugeo} m/s</td></tr>
-        <tr><td>8</td><td>Aantal woningen (BAG) en bewoners binnen de overschrijdingsring per scenario/categorie, met hinderpercentage 9/30/46%.</td><td>${hasBag ? `Zie §4 (ring/woningen) en §5 (hinderpercentages) hieronder` : '— (nog geen BAG-gegevens opgehaald)'}</td></tr>
+        <tr><td>8</td><td>Aantal woningen (BAG) en bewoners binnen de overschrijdingsring per scenario/categorie, met hinderpercentage 9/18,4/33,7%.</td><td>${hasBag ? `Zie §4 (ring/woningen) en §5 (hinderpercentages) hieronder` : '— (nog geen BAG-gegevens opgehaald)'}</td></tr>
         <tr><td>9</td><td>Geschatte jaarlijkse zorgkosten per gehinderde bewoner (Godono e.a. 2023).</td><td>€${costPerPerson.toFixed(2)}/bewoner/jaar, horizon ${horizon} jaar — zie §6</td></tr>
         <tr><td>10</td><td>DALY-verlies (disability-adjusted life years) door slaapverstoring + hinder, in drie monetaire waarderingen.</td><td>${dwTotal.toFixed(3)} DALY/bewoner/jaar × €50.000/€70.000/€80.000 per DALY — zie §7</td></tr>
         <tr><td>11</td><td>Waardedaling van woningen (Droës &amp; Koster 2021), naar tiphoogte-categorie.</td><td>${m11.hasData ? `${m11.totals.woningen.toLocaleString('nl-NL')} woningen, €${Math.round(m11.totals.waarde).toLocaleString('nl-NL')} totale waardedaling` : '— (geen BAG-gegevens of geen turbine geplaatst)'}</td></tr>
@@ -4743,15 +4748,15 @@ function m13BuildReportHtml(mapImages) {
   </tr>`).join('')).join('');
   const hinderSection = `
   <section class="rp-section rp-avoid-break">
-    <h2>5. Hindercijfers: RIVM, illustratief en kritisch scenario</h2>
+    <h2>5. Hindercijfers: RIVM-basisscenario en Pawlaczyk (zeer hinderlijk / hinderlijk)</h2>
     <p>Het aantal ernstig gehinderde bewoners hangt sterk af van welk hinderpercentage wordt toegepast — en, cruciaal, op <strong>welke bewonerspopulatie</strong>: elke geluidscategorie heeft een eigen overschrijdingsring en dus een eigen bewonersaantal (§4). Bij best case hoorbaar geluid vallen bijvoorbeeld maar enkele woningen binnen de norm-overschrijding — het hinderpercentage wordt daarom hier toegepast op die enkele woningen, niet op de veel grotere (en qua geluidstype andere) laagfrequent- of infrasoonpopulatie. Dit model toetst drie hinderpercentages naast elkaar, in plaats van er één als "de" uitkomst te presenteren:</p>
     <ul class="rp-list">
-      <li><strong>9% — RIVM-basisscenario:</strong> ernstige hinder binnenshuis bij de oude 47 dB Lden-norm, uit de <a href="https://www.rivm.nl/sites/default/files/2026-02/Factsheet-gezondheidseffecten-van-windturbinegeluid.pdf" target="_blank" rel="noopener">RIVM-factsheet gezondheidseffecten van windturbinegeluid</a>.</li>
-      <li><strong>30% — illustratief tussenscenario:</strong> geen uitkomst van één specifiek onderzoek, maar een tussenwaarde om de gevoeligheid van de uitkomst voor deze aanname te tonen.</li>
-      <li><strong>46% — kritisch scenario:</strong> uit <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC6121431/" target="_blank" rel="noopener">Pawlaczyk-Łuszczyńska e.a. (2018)</a>, gerapporteerd voor bewoners die aangeven windturbinegeluid 's nachts te horen — deze en de RIVM-9% zijn onderzoek naar <strong>hoorbaar</strong> geluid; toepassing op laagfrequent/infrasoon in de tabel hieronder is een illustratieve extrapolatie, omdat er geen aparte hinderpercentage-studies voor die frequentiebanden bestaan.</li>
+      <li><strong>9% — RIVM-basisscenario:</strong> ernstige hinder binnenshuis bij de oude 47 dB Lden-norm, uit de <a href="https://www.rivm.nl/sites/default/files/2026-02/Factsheet-gezondheidseffecten-van-windturbinegeluid.pdf" target="_blank" rel="noopener">RIVM-factsheet gezondheidseffecten van windturbinegeluid</a>. Dit is een %HA-achtige ("highly annoyed"), strenge definitie.</li>
+      <li><strong>18,4% — "zeer hinderlijk" binnenshuis:</strong> uit <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC6121431/" target="_blank" rel="noopener">Pawlaczyk-Łuszczyńska e.a. (2018)</a>, 517 respondenten op 204–1.726 m van de dichtstbijzijnde turbine (33–50 dB(A)) — het aandeel dat het geluid binnenshuis "hinderlijk" of "uiterst hinderlijk" vond. Dit is de smalste/strengste categorie van deze studie, en daarmee de beste binnenshuis-tegenhanger van RIVM's %HA-conventie.</li>
+      <li><strong>33,7% — "hinderlijk of erger" binnenshuis:</strong> uit dezelfde <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC6121431/" target="_blank" rel="noopener">Pawlaczyk-Łuszczyńska e.a. (2018)</a>-studie, de bredere categorie "tamelijk hinderlijk, hinderlijk of uiterst hinderlijk" binnenshuis. <strong>Let op:</strong> de 18,4% hierboven zit als antwoordcategorie al volledig in deze 33,7% — het zijn geneste percentages uit dezelfde populatie, geen twee onafhankelijke schattingen, en dus nooit bij elkaar op te tellen. Deze en de RIVM-9% zijn onderzoek naar <strong>hoorbaar</strong> geluid; toepassing op laagfrequent/infrasoon in de tabel hieronder is een illustratieve extrapolatie, omdat er geen aparte hinderpercentage-studies voor die frequentiebanden bestaan.</li>
     </ul>
     <table class="rp-table rp-table-compact">
-      <thead><tr><th>Scenario</th><th>Categorie</th><th>Overschrijdingsring</th><th>Woningen</th><th>Bewoners (ring)</th><th>9% gehinderd</th><th>30% gehinderd</th><th>46% gehinderd</th></tr></thead>
+      <thead><tr><th>Scenario</th><th>Categorie</th><th>Overschrijdingsring</th><th>Woningen</th><th>Bewoners (ring)</th><th>9% gehinderd</th><th>18,4% gehinderd</th><th>33,7% gehinderd</th></tr></thead>
       <tbody>${hinderRowsHtml}</tbody>
     </table>
   </section>`;
@@ -4902,7 +4907,7 @@ function m13BuildReportHtml(mapImages) {
     <ul class="rp-list">
       ${m6 ? `<li>Zelfs in het <strong>beste geval</strong> (bewolkt) doet het gunstigste regime zich ${bestDays} van de 365 nachten voor — de overige ${365 - bestDays} nachten (${m13Pct(100 - m6.pct.best)}) vallen in het middel- of worst-case-regime.</li>
       <li>Het <strong>worst-case-scenario</strong> is met ${worstDays} nachten per jaar (${m13Pct(m6.pct.worst)}) geen zeldzame uitschieter, maar een terugkerend, voorspelbaar onderdeel van het jaar — geconcentreerd in heldere, koude en meestal winterse/vroege-voorjaarsnachten (zie de maandverdeling in Module 6).</li>` : '<li><em>Geen turbine geplaatst — de precieze verdeling kan hier niet worden getoond, maar het onderliggende principe (zie hierna) geldt onafhankelijk van de locatie.</em></li>'}
-      <li>Omdat elk jaar <em>alle drie</em> de regimes met zekerheid optreden (in wisselende verhouding), is een jaargemiddelde zorgkosten- of DALY-schatting geen overschatting gebaseerd op een hypothetisch ergst geval — het is een <strong>gewogen gemiddelde van drie regimes die elk jaar daadwerkelijk plaatsvinden</strong>. De vraag is dus niet <em>of</em> deze kosten optreden, maar uitsluitend hoe ze zich verdelen over het jaar en welk hinderpercentage (9/30/46%, zie §5) het meest representatief is voor de specifieke situatie.</li>
+      <li>Omdat elk jaar <em>alle drie</em> de regimes met zekerheid optreden (in wisselende verhouding), is een jaargemiddelde zorgkosten- of DALY-schatting geen overschatting gebaseerd op een hypothetisch ergst geval — het is een <strong>gewogen gemiddelde van drie regimes die elk jaar daadwerkelijk plaatsvinden</strong>. De vraag is dus niet <em>of</em> deze kosten optreden, maar uitsluitend hoe ze zich verdelen over het jaar en welk hinderpercentage (9/18,4/33,7%, zie §5) het meest representatief is voor de specifieke situatie.</li>
       <li>Dit maakt de maatschappelijke kosten in §9 hieronder structureel, terugkerend en niet-hypothetisch — in tegenstelling tot de investeringskosten in Module 12, die eenmalig zijn.</li>
     </ul>
 
@@ -4918,7 +4923,7 @@ function m13BuildReportHtml(mapImages) {
         return '<p class="rp-note"><em>Geen BAG-gegevens of geen turbine geplaatst — het worst-case-piekcijfer kan hier niet worden getoond.</em></p>';
       }
       return `<ul class="rp-list">
-        <li>Op een worst-case-nacht vallen <strong>${wHoorbaar.houses.toLocaleString('nl-NL')} woningen</strong> binnen de hoorbaar-overschrijdingsring, met bij het kritische 46%-hinderpercentage naar schatting <strong>${m13Int(wH46.people)} gehinderde bewoners</strong> — dit is het getal dat de daadwerkelijke ernst van een worst-case-nacht weergeeft, niet het over drie regimes uitgesmeerde jaargemiddelde uit §10 (${hoorbaarCrit && hoorbaarCrit.people != null ? m13Int(hoorbaarCrit.people) : '—'} bewoners, hoorbaar/46%).</li>
+        <li>Op een worst-case-nacht vallen <strong>${wHoorbaar.houses.toLocaleString('nl-NL')} woningen</strong> binnen de hoorbaar-overschrijdingsring, met bij het kritische 33,7%-hinderpercentage (Pawlaczyk, "hinderlijk of erger" binnenshuis) naar schatting <strong>${m13Int(wH46.people)} gehinderde bewoners</strong> — dit is het getal dat de daadwerkelijke ernst van een worst-case-nacht weergeeft, niet het over drie regimes uitgesmeerde jaargemiddelde uit §10 (${hoorbaarCrit && hoorbaarCrit.people != null ? m13Int(hoorbaarCrit.people) : '—'} bewoners, hoorbaar/33,7%).</li>
         ${wI46 && wI46.people != null ? `<li>Wordt hetzelfde kritische percentage illustratief op de (grotere) infrasoonring toegepast, loopt dit op tot <strong>${m13Int(wI46.people)} bewoners</strong> op een enkele worst-case-nacht — een cijfer dat in een jaargemiddelde volledig verdwijnt tussen de rustiger best- en middel-case-nachten.</li>` : ''}
         <li>Beleid dat uitsluitend het jaargemiddelde rapporteert (zoals de vergelijking in §10) onderschat daarmee systematisch wat er op de kritieke nachten zelf gebeurt. Voor toetsing aan een gezondheidskundige norm — in plaats van een financiële raming — is het worst-case-cijfer de relevante maatstaf, niet het gemiddelde.</li>
       </ul>`;
@@ -4971,7 +4976,7 @@ function m13BuildReportHtml(mapImages) {
       <ul class="rp-list">
         <li>De investeringskosten zijn <strong>eenmalig kapitaal</strong> van de projectontwikkelaar/investeerder, terugverdiend over de exploitatieperiode via energieverkoop (en doorgaans SDE++-subsidie) — een bedrijfseconomische kostenpost voor één partij.</li>
         <li>De maatschappelijke kosten zijn grotendeels <strong>jaarlijks terugkerende, gespreide lasten voor omwonenden</strong> — een andere partij, die geen deel heeft in de opbrengsten van de turbine.</li>
-        <li>Op basis van de wetenschappelijk best onderbouwde rij (<strong>hoorbaar geluid, kritisch hinderpercentage 46%</strong>, §5) bedraagt de geschatte maatschappelijke kostenpost over ${horizon} jaar <strong>${hoorbaarCritTotal != null ? m9FmtEuro(hoorbaarCritTotal) : '—'}</strong>, tegenover een investering van <strong>${m9FmtEuro(m12TotalInvest)}</strong> — dat is <strong>${(hoorbaarCritTotal != null && m12TotalInvest > 0) ? (hoorbaarCritTotal / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong> van de investering, puur aan externe kosten die niet in de businesscase van de ontwikkelaar zitten. Wordt hetzelfde hinderpercentage illustratief ook op de (grotere) infrasoonring toegepast, loopt dit op tot <strong>${infrasoonCritTotal != null ? m9FmtEuro(infrasoonCritTotal) : '—'}</strong> (<strong>${(infrasoonCritTotal != null && m12TotalInvest > 0) ? (infrasoonCritTotal / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong>) — dat bovenste cijfer heeft echter geen eigen hinderstudie als onderbouwing (zie §5) en dient uitsluitend als gevoeligheidsindicatie.</li>
+        <li>Op basis van de wetenschappelijk best onderbouwde rij (<strong>hoorbaar geluid, kritisch hinderpercentage 33,7%</strong>, §5) bedraagt de geschatte maatschappelijke kostenpost over ${horizon} jaar <strong>${hoorbaarCritTotal != null ? m9FmtEuro(hoorbaarCritTotal) : '—'}</strong>, tegenover een investering van <strong>${m9FmtEuro(m12TotalInvest)}</strong> — dat is <strong>${(hoorbaarCritTotal != null && m12TotalInvest > 0) ? (hoorbaarCritTotal / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong> van de investering, puur aan externe kosten die niet in de businesscase van de ontwikkelaar zitten. Wordt hetzelfde hinderpercentage illustratief ook op de (grotere) infrasoonring toegepast, loopt dit op tot <strong>${infrasoonCritTotal != null ? m9FmtEuro(infrasoonCritTotal) : '—'}</strong> (<strong>${(infrasoonCritTotal != null && m12TotalInvest > 0) ? (infrasoonCritTotal / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong>) — dat bovenste cijfer heeft echter geen eigen hinderstudie als onderbouwing (zie §5) en dient uitsluitend als gevoeligheidsindicatie.</li>
         <li>Deze externe kosten worden in de huidige vergunningverlening <strong>niet gecompenseerd of geïnternaliseerd</strong> (behalve, deels, via planschadevergoeding bij waardedaling boven de 4% NMR-drempel, §9) — ze blijven bij de omwonenden liggen, wat de aanleiding is voor het advies in §11.</li>
       </ul>
     </div>` : m12Banner}
@@ -4998,7 +5003,7 @@ function m13BuildReportHtml(mapImages) {
       <li><strong>Koppel operationele maatregelen aan de scenario-detectie van Module 6/7:</strong> verplicht een noise-reduced-operation-modus (vermogensreductie) op nachten waarin de klimatologische/shear-capacity-indicatoren een worst-case (vSBL-)regime voorspellen, naar het Duitse precedent van een weersafhankelijke nachtmodus — in plaats van het hele jaar een vaste, permanente afregeling die op de meeste nachten onnodig is en op de kritieke nachten mogelijk nog steeds ontoereikend.</li>
       <li><strong>Houd cumulatie in de gaten (Module 4):</strong> bij meerdere turbines of naburige windparken moet de geluidsbijdrage energetisch worden opgeteld op het rekenpunt, niet per turbine afzonderlijk getoetst — een op zichzelf toelaatbare turbine kan gecombineerd met naburige turbines de norm alsnog doen overschrijden. Dit rapport rekent per turbinepositie; bij meerdere naburige projecten dient een gezamenlijke cumulatietoets te worden uitgevoerd.</li>
       <li><strong>Onafhankelijke verificatie na realisatie:</strong> vul de vooraf berekende prognose (zoals in dit model) aan met verplichte post-constructiemeting, zoals in de Duitse praktijk gebruikelijk is bij een schallreduzierter Betrieb — een berekende prognose is per definitie een model, geen meting van de werkelijke situatie.</li>
-      <li><strong>Verplicht het worst-case-cijfer naast het jaargemiddelde te rapporteren, niet in plaats daarvan:</strong> zie §8.3 — een jaargemiddelde maatschappelijke-kostenraming (§10) is toelaatbaar voor een financiële afweging, maar ontoereikend als gezondheidskundige toets. Vergunningverlening moet dwingend het piekcijfer op een worst-case-nacht (§5, 46%-scenario) laten zien, anders wordt de daadwerkelijke beperking van omwonenden weggemiddeld tot een cijfer dat niemand op de kritieke nachten zelf ervaart.</li>
+      <li><strong>Verplicht het worst-case-cijfer naast het jaargemiddelde te rapporteren, niet in plaats daarvan:</strong> zie §8.3 — een jaargemiddelde maatschappelijke-kostenraming (§10) is toelaatbaar voor een financiële afweging, maar ontoereikend als gezondheidskundige toets. Vergunningverlening moet dwingend het piekcijfer op een worst-case-nacht (§5, 33,7%-scenario) laten zien, anders wordt de daadwerkelijke beperking van omwonenden weggemiddeld tot een cijfer dat niemand op de kritieke nachten zelf ervaart.</li>
     </ol>
   </section>`;
 
