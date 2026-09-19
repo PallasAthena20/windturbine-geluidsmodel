@@ -733,11 +733,11 @@ function renderModule14() {
   m14RenderTable('m14-night-table-body', 'm14-night-result-callout', ['best', 'middel', 'worst'], 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode)', pct, 'hoorbaar', false);
   m14RenderDayInfoTable('m14-day-table-body', 'm14-day-result-callout', 'hoorbaar');
 
-  // Laagfrequent geluid (dB(Lin), ongewogen) \u2014 zelfde 3-tabelstructuur, norm alleen indicatief
-  // (er bestaat geen wettelijke Lden/Lnight-norm in dB(Lin); zie Module 8/8a-conventie).
-  m14RenderTable('m14-lf-lden-table-body', 'm14-lf-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld, laagfrequent)', pct, 'laagfrequent', true);
+  // Laagfrequent geluid (dB(Lin), ongewogen) \u2014 alleen de nachtperiode heeft een tabel: dat is de
+  // enige periode waarvoor een erkende norm bestaat (Vercammen-hindernorm, per tertsband). Voor Lden
+  // en de dagperiode bestaat geen (bruikbaar om te rekenen) toetsingskader in dB(Lin); die tabellen
+  // zijn daarom bewust niet opgenomen (zie m14-lf-intro-callout in index.html).
   m14RenderVercammenNachtTable('m14-lf-night-table-body', 'm14-lf-night-result-callout');
-  m14RenderDayInfoTable('m14-lf-day-table-body', 'm14-lf-day-result-callout', 'laagfrequent');
 
   // Infrasoon geluid (dB(G)) \u2014 zelfde 3-tabelstructuur, norm alleen indicatief.
   m14RenderTable('m14-inf-lden-table-body', 'm14-inf-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld, infrasoon)', pct, 'infrasoon', true);
