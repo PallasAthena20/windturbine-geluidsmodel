@@ -1191,19 +1191,6 @@ if (m8HouseholdInput) {
 const m8FetchBtnEl = document.getElementById('m8-fetch-btn');
 if (m8FetchBtnEl) m8FetchBtnEl.addEventListener('click', () => { m8RunFetch(); });
 
-// Stilstandnachten-invoer (jaargemiddelde-sectie, Module 8) — los van state.curtailment (dat is de
-// bestaande "stalgeluid"-functionaliteit die dB toevoegt, geen gerelateerd concept).
-const m8StilstandInputEl = document.getElementById('m8-stilstand-input');
-if (m8StilstandInputEl) {
-  m8StilstandInputEl.addEventListener('input', () => {
-    let v = parseInt(m8StilstandInputEl.value, 10);
-    if (Number.isNaN(v)) v = 0;
-    v = Math.max(0, Math.min(365, v));
-    state.m8StilstandNachten = v;
-    renderModule8Jaarnorm();
-  });
-}
-
 const m9CostInput = document.getElementById('m9-cost-per-person');
 if (m9CostInput) {
   m9CostInput.addEventListener('input', () => {
@@ -3592,157 +3579,10 @@ function renderModule8() {
     }
   }
 
-  renderModule8Jaarnorm();
   renderModule9();
   renderModule10();
   renderModule11();
   renderModule13();
-}
-
-// Weergave van m8JaarnormRows() (3 categorieën apart) + de stilstandnachten-simulatie eronder.
-// Zie functiecommentaar bij m8JaarnormRows()/m8JaargemiddeldeMetStilstand() hierboven voor de rekenmethode.
-function renderModule8Jaarnorm() {
-  const nachtenEl = document.getElementById('m8-jaarnorm-nachtenverdeling');
-  const container = document.getElementById('m8-jaarnorm-container');
-  const stilInput = document.getElementById('m8-stilstand-input');
-  const stilContainer = document.getElementById('m8-stilstand-container');
-  if (!container) return;
-  const n = state.turbines3a.length;
-  const norm = getActiveNorm();
-  if (n === 0) {
-    if (nachtenEl) nachtenEl.innerHTML = '';
-    container.innerHTML = `<p class="empty-row">Plaats minstens één turbine op de kaart in Module 3.</p>`;
-    if (stilContainer) stilContainer.innerHTML = '';
-    return;
-  }
-  if (norm.lnight == null) {
-    if (nachtenEl) nachtenEl.innerHTML = '';
-    container.innerHTML = `<p class="empty-row">De geselecteerde norm (${escapeHtml(norm.label)}) heeft geen Lnight-waarde — jaargemiddelde toetsing is hiermee niet mogelijk.</p>`;
-    if (stilContainer) stilContainer.innerHTML = '';
-    return;
-  }
-  // Alleen hoorbaar wordt hier getoetst: de Lnight-norm is een dB(A)-norm, en een dB(A)-vergelijking
-  // voor laagfrequent/infrasoon (dB(Lin)/dB(G)) gaf op alle rijen "Overschrijding" — een categoriefout
-  // die bovendien nergens onderscheid maakte, dus geen informatie toevoegde. Laagfrequent heeft wel een
-  // echte norm, maar die geldt alleen voor de nachtperiode zelf (per tertsband, geen jaargemiddelde) —
-  // zie de Vercammen-toetsing in Module 14.
-  const M8_JAARNORM_CATEGORIES_SHOWN = JAARNORM_CATEGORIES.filter((cat) => cat.key === 'hoorbaar');
-  const catResults = {};
-  M8_JAARNORM_CATEGORIES_SHOWN.forEach((cat) => { catResults[cat.key] = m8JaarnormRows(cat.key); });
-  const base = catResults.hoorbaar;
-  if (!base) {
-    container.innerHTML = `<p class="empty-row">Geen gegevens.</p>`;
-    if (stilContainer) stilContainer.innerHTML = '';
-    return;
-  }
-  const { pct, anchor } = base;
-  const nachten = m8NachtenVanPct(pct);
-
-  // ---- Nachtenverdeling: hoe de 365 nachten per jaar over de drie scenario's verdeeld zijn ----
-  if (nachtenEl) {
-    nachtenEl.innerHTML = `
-      <p class="hint">Voor deze turbinepositie (${anchor.isDefault ? 'standaardlocatie' : `${pct.distKm.toFixed(0)} km landinwaarts`}, Module 6): van de ${M8_JAAR_NACHTEN} nachten per jaar zijn er naar schatting <strong>${nachten.nBest} best case</strong> (${pct.best.toFixed(1)}%), <strong>${nachten.nMiddel} middel</strong> (${pct.middel.toFixed(1)}%) en <strong>${nachten.nWorst} worst case</strong> (${pct.worst.toFixed(1)}%).</p>
-      <div class="m8-nachten-bar" role="img" aria-label="Nachtenverdeling per jaar: ${pct.best.toFixed(1)}% best case, ${pct.middel.toFixed(1)}% middel, ${pct.worst.toFixed(1)}% worst case">
-        <span class="m8-nachten-seg m8-nachten-best" style="width:${pct.best}%" title="Best case: ${nachten.nBest} nachten"></span>
-        <span class="m8-nachten-seg m8-nachten-middel" style="width:${pct.middel}%" title="Middel: ${nachten.nMiddel} nachten"></span>
-        <span class="m8-nachten-seg m8-nachten-worst" style="width:${pct.worst}%" title="Worst case: ${nachten.nWorst} nachten"></span>
-      </div>
-      <div class="m8-nachten-legend">
-        <span><i class="m8-nachten-dot m8-nachten-best"></i>Best case</span>
-        <span><i class="m8-nachten-dot m8-nachten-middel"></i>Middel</span>
-        <span><i class="m8-nachten-dot m8-nachten-worst"></i>Worst case</span>
-      </div>`;
-  }
-
-  // ---- Alleen de hoorbaar-tabel (zie toelichting hierboven bij M8_JAARNORM_CATEGORIES_SHOWN) ----
-  container.innerHTML = M8_JAARNORM_CATEGORIES_SHOWN.map((cat) => {
-    const result = catResults[cat.key];
-    const rowsHtml = result.rows.map((r) => {
-      if (r.ring == null) {
-        return `<tr><td>${M8_SCENARIO_LABEL[r.scenario]}-ring</td><td>${r.directionLabel}</td><td colspan="4" class="empty-row">Geen overschrijding op de vaste ringen.</td></tr>`;
-      }
-      return `<tr class="${r.exceeds ? 'm8-jaarnorm-exceeds' : 'm8-jaarnorm-ok'}">
-        <td>${M8_SCENARIO_LABEL[r.scenario]}-ring</td>
-        <td>${r.directionLabel}</td>
-        <td>${m8RingLabel(r.ring)}</td>
-        <td>${r.levels.best.toFixed(1)} / ${r.levels.middel.toFixed(1)} / ${r.levels.worst.toFixed(1)} ${cat.unit}</td>
-        <td><strong>${r.jaargemiddelde.toFixed(1)} ${cat.unit}</strong></td>
-        <td>${r.exceeds ? 'Overschrijding' : 'Binnen de norm'}</td>
-      </tr>`;
-    }).join('');
-    return `<div class="data-table-card m8-jaarnorm-cat-card">
-      <h3>${cat.label} (${cat.unit})${cat.indicatief ? ' <span class="m8a-subhead">— indicatief referentiepunt, geen wettelijke norm</span>' : ''}</h3>
-      <div class="cum-result-wrap">
-        <table class="data-table m8-jaarnorm-table">
-          <thead>
-            <tr><th>Ring (bepaald door)</th><th>Richting</th><th>Afstand</th><th>L best / middel / worst</th><th>Jaargemiddelde</th><th>Toetsing jaargemiddelde</th></tr>
-          </thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
-      </div>
-    </div>`;
-  }).join('');
-
-  // ---- Stilstandnachten: invoer + effect op het jaargemiddelde, per categorie op de worst-case-ring ----
-  // Beperkt tot de worst-case-ring (× 3 richtingen × 3 categorieën = 9 vergelijkingsrijen) — dit is de
-  // ring die eerder in dit model als de beleidsmatig relevante (conservatieve) ring is toegelicht;
-  // alle drie scenario's per richting laten zien zou het jaargemiddelde nodeloos negen keer herhalen.
-  if (stilInput && document.activeElement !== stilInput) {
-    stilInput.value = String(state.m8StilstandNachten);
-  }
-  if (stilContainer) {
-    const stilX = state.m8StilstandNachten;
-    const verdeling = m8VerdeelStilstand(nachten, stilX);
-    const verdelingHtml = stilX > 0
-      ? `<p class="hint">Bij <strong>${stilX} stilstandnacht${stilX === 1 ? '' : 'en'}</strong> per jaar (eerst worst case, dan middel, dan best case stilgezet): ${nachten.nWorst} → <strong>${verdeling.nWorst}</strong> worst case, ${nachten.nMiddel} → <strong>${verdeling.nMiddel}</strong> middel, ${nachten.nBest} → <strong>${verdeling.nBest}</strong> best case, plus <strong>${verdeling.nStil}</strong> stilstandnachten (0 dB turbinebijdrage).</p>`
-      : `<p class="hint">Vul hierboven een aantal stilstandnachten per jaar in om het effect op het jaargemiddelde te zien.</p>`;
-    const tablesHtml = M8_JAARNORM_CATEGORIES_SHOWN.map((cat) => {
-      const result = catResults[cat.key];
-      const worstRows = result.rows.filter((r) => r.scenario === 'worst');
-      const rowsHtml = worstRows.map((r) => {
-        if (r.ring == null || r.levels == null) {
-          return `<tr><td>${r.directionLabel}</td><td colspan="3" class="empty-row">Geen overschrijding op de vaste ringen.</td></tr>`;
-        }
-        const na = m8JaargemiddeldeMetStilstand(r.levels, pct, stilX);
-        const verschil = r.jaargemiddelde - na.jaargemiddelde;
-        const verbeterd = verschil > 0.05;
-        return `<tr>
-          <td>${r.directionLabel}</td>
-          <td>${r.jaargemiddelde.toFixed(1)} ${cat.unit}</td>
-          <td><strong>${na.jaargemiddelde.toFixed(1)} ${cat.unit}</strong></td>
-          <td class="${verbeterd ? 'm8-stil-verbetering' : ''}">${verbeterd ? '−' + verschil.toFixed(1) : '0,0'} ${cat.unit}</td>
-        </tr>`;
-      }).join('');
-      const chartSeries = worstRows
-        .filter((r) => r.ring != null && r.levels != null)
-        .map((r) => ({
-          label: r.directionLabel,
-          color: M8_CHART_COLORS[r.direction],
-          points: m8StilstandCurvePoints(r.levels, pct, nachten),
-        }));
-      const chartHtml = chartSeries.length > 0
-        ? `<div class="m8-chart-wrap">
-            ${m8StilstandChartSvg(chartSeries, norm.lnight, cat.indicatief, cat.unit, stilX)}
-            <div class="m8-chart-legend">
-              ${chartSeries.map((s) => `<span><i class="m8-chart-dot" style="background:${s.color}"></i>${s.label}</span>`).join('')}
-              ${norm.lnight != null ? `<span><i class="m8-chart-dot m8-chart-dot-norm"></i>Norm${cat.indicatief ? ' (indicatief)' : ''}</span>` : ''}
-            </div>
-            <p class="hint m8-chart-caption">Jaargemiddelde (${cat.unit}) op de worst-case-ring, per richting, bij 0 t/m 365 stilstandnachten per jaar. De stip markeert de huidige invoer (${stilX} nacht${stilX === 1 ? '' : 'en'}).</p>
-          </div>`
-        : '';
-      return `<div class="data-table-card m8-jaarnorm-cat-card">
-        <h3>${cat.label} (${cat.unit}) — worst-case-ring${cat.indicatief ? ' <span class="m8a-subhead">— indicatief referentiepunt</span>' : ''}</h3>
-        ${chartHtml}
-        <div class="cum-result-wrap">
-          <table class="data-table m8-jaarnorm-table">
-            <thead><tr><th>Richting</th><th>Jaargemiddelde (huidig)</th><th>Jaargemiddelde (met stilstand)</th><th>Verschil</th></tr></thead>
-            <tbody>${rowsHtml}</tbody>
-          </table>
-        </div>
-      </div>`;
-    }).join('');
-    stilContainer.innerHTML = verdelingHtml + tablesHtml;
-  }
 }
 
 // ==================== MODULE 9: geschatte zorgkosten ====================
