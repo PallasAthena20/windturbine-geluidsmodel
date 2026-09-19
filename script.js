@@ -5565,6 +5565,7 @@ async function m13OpenReport() {
     // daarom meteen terug op DIT aanroepende venster, zodat het gedurende de hele capture in de
     // voorgrond blijft -- pas als de rapport-URL klaarstaat (win.location.href verderop) mag de
     // gebruiker weer naar het rapporttabblad wisselen.
+    try { win.blur(); } catch (e) { /* negeren */ }
     try { window.focus(); } catch (e) { /* negeren */ }
   }
   if (btn) {
