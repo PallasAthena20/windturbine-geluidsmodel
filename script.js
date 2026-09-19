@@ -98,8 +98,8 @@ const CATEGORY = {
 
 // Defensieve fallback-entry: 'laagfrequent-vercammen' is GEEN vierde, onafhankelijke fysieke
 // geluidscategorie (zie de tertsband-toetsing hieronder voor de eigenlijke berekening) — dit is
-// uitsluitend een vangnet zodat generieke code die CATEGORY[state.category] opzoekt (bv. Module 5's
-// ringlegenda-tekst) niet crasht wanneer deze tab actief is. Domain/mFunc zijn gelijk aan 'laagfrequent'.
+// uitsluitend een vangnet zodat generieke code die CATEGORY[state.category] opzoekt (bv. de kaart-ringlegenda-tekst)
+// niet crasht wanneer deze tab actief is. Domain/mFunc zijn gelijk aan 'laagfrequent'.
 CATEGORY['laagfrequent-vercammen'] = {
   key: 'laagfrequent-vercammen', label: 'Laagfrequent geluid – Vercammen', shortLabel: 'Vercammen', unit: 'dB(Lin)',
   range: '20–200 Hz · per tertsband', domainMin: 25, domainMax: 85, mFunc: mLaagfrequent,
@@ -148,7 +148,7 @@ function addonAt(d, state) {
 
 function lpAt(d, x, categoryKey, lwCat, state) {
   // Laagfrequent-Vercammen is een per-tertsband toetsing, niet één scalair geluidsniveau — generieke
-  // aanroepers (kaart-tooltip, Module 5) krijgen hier het niveau van de band met de grootste
+  // aanroepers (kaart-tooltip) krijgen hier het niveau van de band met de grootste
   // overschrijdingsmarge t.o.v. zijn eigen Vercammen-grenswaarde; de echte 9-bands tabel in Module 3
   // (renderVercammenTable3a) is het eigenlijke resultaat van deze tab.
   if (categoryKey === 'laagfrequent-vercammen') {
@@ -257,7 +257,7 @@ function tertsbandExceedsAt(d, x, testState, lwaInput) {
 }
 
 // De tertsband met de grootste (positieve) overschrijdingsmarge — gebruikt als representatief
-// "koptekst"-getal voor generieke, één-scalair-per-punt weergaves (kaart-tooltip, Module 5).
+// "koptekst"-getal voor generieke, één-scalair-per-punt weergaves (kaart-tooltip).
 function vercammenWorstBand(d, x, testState, lwaInput) {
   const bands = vercammenBandsAt(d, x, testState, lwaInput);
   return bands.reduce((worst, b) => (worst == null || b.margin > worst.margin ? b : worst), null);
@@ -266,7 +266,7 @@ function vercammenWorstBand(d, x, testState, lwaInput) {
 // ---------- NSG-gehoordrempelcurve (los van Vercammen; ANDERE toetsingsmethode, zelfde 9-tertsband-
 // pijplijn hierboven) ----------
 // De "Laagfrequent"-tab vergeleek voorheen het totale, ongewogen dB(Lin)-niveau met een dB(A)-afgeleide
-// Lnight-norm — dimensioneel niet kloppend (zie toelichting in Module 5). In plaats daarvan toetst deze
+// Lnight-norm — dimensioneel niet kloppend (zie toelichting in Module 13). In plaats daarvan toetst deze
 // tab nu per tertsband aan de NSG-referentiecurve (90%-gehoordrempel van oudere personen, 50–60 jaar),
 // exact zoals hierboven al gebeurt voor de Vercammen-curve. Bron: RIVM-rapport 2021-0187,
 // "Onderzoeksprogramma Laagfrequent geluid (LFG)": https://www.rivm.nl/bibliotheek/rapporten/2021-0187.pdf
@@ -299,7 +299,7 @@ function nsgWorstBand(d, x, testState, lwaInput) {
 
 // Overschrijdt minstens één van de (tot 8) tertsbanden zijn eigen NSG-gehoordrempel op dit punt?
 // Analoog aan tertsbandExceedsAt() hierboven (Vercammen), maar dan getoetst aan de NSG-curve —
-// gebruikt door Module 8/9/10/13's NSG-ring/woningtelling hieronder.
+// gebruikt door Module 7/8/9/14's NSG-ring/woningtelling hieronder.
 function nsgExceedsAt(d, x, testState, lwaInput) {
   return nsgBandsAt(d, x, testState, lwaInput).some((b) => b.exceeds);
 }
@@ -327,7 +327,7 @@ function vercammenVerdictLabel(band) {
   return `${verdict} (marge ${sign}${band.margin.toFixed(1)} dB)`;
 }
 
-// ---------- Module 14: formele Lden-schatting (uitbreidingsoptie) ----------
+// ---------- Module 13: formele Lden-schatting (uitbreidingsoptie) ----------
 // Windroos: KNMI-klimaatnormaal 1991-2020, station 260 (De Bilt), 12 sectoren van 30 graden.
 // Cumulatieve frequenties per Beaufort-drempel (%) omgezet naar 4 windsnelheidsklassen per sector.
 // Bron: https://cdn.knmi.nl/knmi/asc/normalen2021/windroos/WindRoos_260_H_pct.csv
@@ -407,7 +407,7 @@ function m14BearingLabel(bearing) {
   return map[bearing] || `${bearing}\u00b0`;
 }
 
-// ---------- Module 14: Lden per scenario (best/middel/worst) + eigen norm ----------
+// ---------- Module 13: Lden per scenario (best/middel/worst) + eigen norm ----------
 // Hergebruikt m14PeriodLevel() voor het windroos/snelheids-gewogen jaargemiddelde, met de vaste
 // scenario-toeslagen die de rest van dit model al gebruikt (SCENARIO_FACTORS/combinedFactors, Module 2).
 // Wiskundig geldig omdat een constante dB-toeslag, toegepast op elke van de 48 windroos-
@@ -421,14 +421,14 @@ const M14_SCENARIOS = [
 ];
 
 // Richting komt uit de select in deze module, norm rechtstreeks uit
-// Module 5 (getActiveNorm()) \u2014 zie renderModule14().
+// Module 1 (getActiveNorm()) \u2014 zie renderModule14().
 function m14ScenarioLevels(d, bearingToReceiver, lwaBase, scenarioKey, categoryKey) {
   const base = m14PeriodLevel(d, bearingToReceiver, lwaBase, 0, 0, categoryKey);
   if (base == null) return null;
   const addonDag = combinedFactors(d, scenarioKey, 'dag', false).total;
   const addonNacht = combinedFactors(d, scenarioKey, 'nacht', false).total;
   const Ldag = base + addonDag;
-  const Lavond = Ldag; // zie Module 14: bewuste modelkeuze, geen aparte avondstatistiek
+  const Lavond = Ldag; // zie Module 13: bewuste modelkeuze, geen aparte avondstatistiek
   const Lnacht = base + addonNacht;
   const lden = 10 * Math.log10(
     (12 / 24) * Math.pow(10, Ldag / 10) +
@@ -438,7 +438,7 @@ function m14ScenarioLevels(d, bearingToReceiver, lwaBase, scenarioKey, categoryK
   return { Ldag, Lavond, Lnacht, Lden: lden, Lnight: Lnacht };
 }
 
-// Kans (%) per scenario dat dit weertype zich voordoet, hergebruikt uit Module 6/7: het percentage
+// Kans (%) per scenario dat dit weertype zich voordoet, hergebruikt uit Module 5/6: het percentage
 // stabiele nachten volgt uit de afstand van de (gemiddelde) turbinelocatie tot de kust, en de
 // verdeling daarbinnen tussen middenscenario/worst case volgt uit de shear-capacity-verhouding bij
 // de ingestelde geostrofische wind (state.m7Ugeo). Bij geen turbines op de kaart (Module 3) wordt
@@ -508,7 +508,7 @@ function m14RenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm, 
   }).join('');
 
   if (!hasNorm) {
-    resultCallout.innerHTML = 'Bij de huidige normkeuze in Module 5 is er geen geldige norm van dit type (dB(A)) \u2014 hierboven staan daarom alleen de berekende waarden, zonder toetsing. Wijzig de normkeuze in Module 5 om hier wel een toetsing te zien.';
+    resultCallout.innerHTML = 'Bij de huidige eigen norm uit Module 1 is er geen geldige norm van dit type (dB(A)) \u2014 hierboven staan daarom alleen de berekende waarden, zonder toetsing. Vul een geldige waarde in bij Module 1 om hier wel een toetsing te zien.';
     return;
   }
 
@@ -539,9 +539,9 @@ function m14RenderTable(bodyId, resultCalloutId, scenarioKeys, metricKey, norm, 
   )).join(' \u2014 ');
 
   const normLabel = indicative
-    ? `indicatief getoetst aan de in Module 5 gekozen norm van ${norm.toFixed(1)} dB(A) (er bestaat geen wettelijke jaargemiddelde-norm in ${unit})`
-    : `norm ${norm.toFixed(1)} dB(A) (Module 5: ${escapeHtml(getActiveNorm().label)})`;
-  resultCallout.innerHTML = `<strong>${metricLabelForSummary}, ${normLabel}:</strong> ${summaryText}. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14Bearing)} (Module 14).`;
+    ? `indicatief getoetst aan de in Module 1 ingevulde norm van ${norm.toFixed(1)} dB(A) (er bestaat geen wettelijke jaargemiddelde-norm in ${unit})`
+    : `norm ${norm.toFixed(1)} dB(A) (Module 1: ${escapeHtml(getActiveNorm().label)})`;
+  resultCallout.innerHTML = `<strong>${metricLabelForSummary}, ${normLabel}:</strong> ${summaryText}. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14Bearing)} (Module 13).`;
 }
 
 // Louter informatieve dagperiode-uitsplitsing (best case + middenscenario): er bestaat geen
@@ -568,10 +568,10 @@ function m14RenderDayInfoTable(bodyId, resultCalloutId, categoryKey) {
     return `<tr><td>${d} m</td>${cells}</tr>`;
   }).join('');
 
-  resultCallout.innerHTML = `<strong>L<sub>dag</sub> (jaargemiddeld, dagperiode):</strong> louter informatief \u2014 er geldt geen zelfstandige dagnorm; de dagperiode telt uitsluitend mee binnen de Lden-jaargemiddelde toetsing hierboven. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14Bearing)} (Module 14).`;
+  resultCallout.innerHTML = `<strong>L<sub>dag</sub> (jaargemiddeld, dagperiode):</strong> louter informatief \u2014 er geldt geen zelfstandige dagnorm; de dagperiode telt uitsluitend mee binnen de Lden-jaargemiddelde toetsing hierboven. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14Bearing)} (Module 13).`;
 }
 
-// ---------- Module 14: Vercammen-hindernorm i.p.v. placeholder-toetsing voor laagfrequent Lnacht ----------
+// ---------- Module 13: Vercammen-hindernorm i.p.v. placeholder-toetsing voor laagfrequent Lnacht ----------
 // Op verzoek van gebruiker vervangt dit tabel 5 (Lnacht, laagfrequent): niet langer een indicatieve
 // toetsing van het ongewogen dB(Lin)-niveau aan de dB(A)-Lnight-norm (dimensioneel niet kloppend),
 // maar de daadwerkelijke Vercammen-hindernorm per tertsband \u2014 dezelfde grenswaarden
@@ -619,7 +619,7 @@ function m14VercammenScenarioBandLevel(d, bearingToReceiver, lwaBase, scenarioKe
 
 // Beoordeelt \u00e9\u00e9n scenario op afstand d: retourneert de tertsband met de grootste
 // overschrijdingsmarge t.o.v. zijn eigen Vercammen-grenswaarde \u2014 zelfde "koptekst"-conventie als
-// vercammenWorstBand() in Module 3/8 (\u00e9\u00e9n representatief scalair per punt).
+// vercammenWorstBand() in Module 3/7 (\u00e9\u00e9n representatief scalair per punt).
 function m14VercammenWorstBandForScenario(d, bearingToReceiver, lwaBase, scenarioKey) {
   let worst = null;
   TERTSBAND_FREQS.forEach((freq) => {
@@ -633,7 +633,7 @@ function m14VercammenWorstBandForScenario(d, bearingToReceiver, lwaBase, scenari
 }
 
 // Kansgewogen jaargemiddelde per tertsband op afstand d, met `stilNachten` stilstandnachten per jaar
-// \u2014 hergebruikt uitsluitend m8JaargemiddeldeMetStilstand() (Module 8) per tertsband, geen nieuwe
+// \u2014 hergebruikt uitsluitend m8JaargemiddeldeMetStilstand() (Module 7) per tertsband, geen nieuwe
 // stilstand- of dB-rekenlogica. Retourneert de tertsband met de grootste overschrijdingsmarge, plus
 // de volledige per-band-uitkomst voor eventuele detailweergave.
 function m14VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, lwaBase, pct, stilNachten) {
@@ -709,12 +709,12 @@ function m14RenderVercammenNachtTable(bodyId, resultCalloutId) {
       : `${escapeHtml(s.label)}: op geen van de getoonde afstanden voldoen alle 9 tertsbanden aan de Vercammen-curve`
   )).join(' \u2014 ');
 
-  resultCallout.innerHTML = `<strong>Nachtperiode, per tertsband getoetst aan de Vercammen-hindernorm</strong> (per cel: de tertsband met de grootste overschrijdingsmarge van de 9): ${summaryText}. Bron grenswaarden: <a href="https://pas.commissiemer.nl/files/nl/3615/012687-3615-6-onderzoek-naar-laagfrequent-geluid-ten-gevolge-van-windturbines.pdf" target="_blank" rel="noopener">NSG-onderzoeksrapport (Peutz)</a>, toegepast in o.a. <a href="https://www.commissiemer.nl/english/jurisprudence/ECLI:NL:RVS:2021:1681" target="_blank" rel="noopener">ECLI:NL:RVS:2021:1681</a>. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14Bearing)} (Module 14).`;
+  resultCallout.innerHTML = `<strong>Nachtperiode, per tertsband getoetst aan de Vercammen-hindernorm</strong> (per cel: de tertsband met de grootste overschrijdingsmarge van de 9): ${summaryText}. Bron grenswaarden: <a href="https://pas.commissiemer.nl/files/nl/3615/012687-3615-6-onderzoek-naar-laagfrequent-geluid-ten-gevolge-van-windturbines.pdf" target="_blank" rel="noopener">NSG-onderzoeksrapport (Peutz)</a>, toegepast in o.a. <a href="https://www.commissiemer.nl/english/jurisprudence/ECLI:NL:RVS:2021:1681" target="_blank" rel="noopener">ECLI:NL:RVS:2021:1681</a>. Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14Bearing)} (Module 13).`;
 }
 
 function renderModule14() {
   // Richting komt uit de select hierboven in deze module (state.m14Bearing), norm uit
-  // Module 5 (getActiveNorm()). Bij de 'eigen/lokale norm'-preset komen de Lden- en
+  // Module 1 (getActiveNorm()). Bij de 'eigen/lokale norm'-preset komen de Lden- en
   // Lnight-waarden uit Module 1 (state.normCustomLden/state.normCustomLnight, zie getActiveNorm()).
   const norm = getActiveNorm();
   const ldenNorm = Number(norm.lden);
@@ -725,7 +725,7 @@ function renderModule14() {
   if (contextCallout) {
     const ldenNormText = Number.isFinite(ldenNorm) ? `${ldenNorm.toFixed(1)} dB(A)` : 'geen Lden-norm bij deze normkeuze';
     const nightNormText = Number.isFinite(nightNorm) ? `${nightNorm.toFixed(1)} dB(A)` : 'geen Lnight-norm bij deze normkeuze';
-    const normSourceHint = state.normPreset === 'eigen' ? '(waarden ingesteld bij Module 1, normkeuze bij Module 5)' : '(wijzig in Module 5)';
+    const normSourceHint = state.normPreset === 'eigen' ? '(waarden ingesteld bij Module 1)' : '(wijzig in Module 1)';
     contextCallout.innerHTML = `<strong>Gebruikte instellingen:</strong> bronvermogen L<sub>WA</sub> = <strong>${state.lwa.toFixed(1)} dB(A)</strong> (Module 1 &mdash; alle tabellen en de windsnelheidsafhankelijke L<sub>WA</sub>(v)-curve hieronder zijn hierop geschaald) &mdash; richting van de woning t.o.v. de turbine = <strong>${m14BearingLabel(state.m14Bearing)}</strong> (wijzig hierboven) &mdash; normkeuze = <strong>${escapeHtml(norm.label)}</strong> ${normSourceHint}: Lden ${ldenNormText}, L<sub>night</sub> ${nightNormText}.`;
   }
 
@@ -749,7 +749,7 @@ function renderModule14() {
     const locLabel = pct.anchor.isDefault
       ? 'geen turbine geplaatst op de kaart (Module 3), dus is De Bilt als standaard inland-referentie gebruikt'
       : `de turbinelocatie(s) uit Module 3, ${pct.distKm.toFixed(0)} km tot de kust`;
-    pctCallout.innerHTML = `<strong>Kansgewogen jaargemiddelde \u2014 gebruikte kansen:</strong> best case ${pct.best.toFixed(0)}%, middenscenario ${pct.middel.toFixed(0)}%, worst case ${pct.worst.toFixed(0)}% van de nachten per jaar. Gebaseerd op ${locLabel}, en op de ingestelde geostrofische wind in Module 7 (U<sub>geo</sub> = ${state.m7Ugeo} m/s). Wijzig je de turbinelocatie (Module 3) of U<sub>geo</sub> (Module 7), dan werkt deze weging hier automatisch mee door.`;
+    pctCallout.innerHTML = `<strong>Kansgewogen jaargemiddelde \u2014 gebruikte kansen:</strong> best case ${pct.best.toFixed(0)}%, middenscenario ${pct.middel.toFixed(0)}%, worst case ${pct.worst.toFixed(0)}% van de nachten per jaar. Gebaseerd op ${locLabel}, en op de ingestelde geostrofische wind in Module 6 (U<sub>geo</sub> = ${state.m7Ugeo} m/s). Wijzig je de turbinelocatie (Module 3) of U<sub>geo</sub> (Module 6), dan werkt deze weging hier automatisch mee door.`;
   }
 
   m14RenderStilstand();
@@ -759,7 +759,7 @@ function renderModule14() {
 
 // Minimum aantal stilstandnachten/-dagen per jaar dat nodig is om het kansgewogen jaargemiddelde
 // (hoorbaar, eerste ring) binnen `norm` te krijgen. Loopt n = 0..365 op en hergebruikt
-// uitsluitend m8JaargemiddeldeMetStilstand() (Module 8) \u2014 raakt de hoorbaar/Lden/Lnacht dB-berekening
+// uitsluitend m8JaargemiddeldeMetStilstand() (Module 7) \u2014 raakt de hoorbaar/Lden/Lnacht dB-berekening
 // zelf niet aan. Geeft null als de norm ook bij volledige stilstand (365) niet gehaald wordt.
 function m14StilstandMinNachten(levels, pct, norm) {
   if (!Number.isFinite(norm)) return null;
@@ -773,7 +773,7 @@ function m14StilstandMinNachten(levels, pct, norm) {
 // Interactieve stilstand-vraag bij de nachtperiode-tabel (hoorbaar, eerste ring = DISTANCES[0] =
 // 500 m): "hoeveel nachten moet de turbine stilstaan om het kansgewogen jaargemiddelde Lnacht
 // binnen de norm te krijgen?". Bouwt uitsluitend voort op reeds bestaande resultaten
-// (m14ScenarioLevels/m14ScenarioPercentages) en de generieke Module 8-stilstandfuncties \u2014 dit is
+// (m14ScenarioLevels/m14ScenarioPercentages) en de generieke Module 7-stilstandfuncties \u2014 dit is
 // een post-processing schaling op de bestaande hoorbaar-uitkomst, geen nieuwe dB-rekenlogica.
 function m14RenderStilstand() {
   const container = document.getElementById('m14-stilstand-container');
@@ -793,7 +793,7 @@ function m14RenderStilstand() {
   const norm = getActiveNorm();
   const nightNorm = Number(norm?.lnight);
   if (!Number.isFinite(nightNorm)) {
-    container.innerHTML = '<p>Er is geen L<sub>night</sub>-norm geselecteerd (zie Module 5) \u2014 deze vraag kan niet worden getoetst.</p>';
+    container.innerHTML = '<p>Er is geen L<sub>night</sub>-norm geselecteerd (zie Module 1) \u2014 deze vraag kan niet worden getoetst.</p>';
     return;
   }
 
@@ -813,7 +813,7 @@ function m14RenderStilstand() {
   }
 
   const exceeds = huidigeStand.jaargemiddelde > nightNorm;
-  const currentText = `Bij <strong>${stilNachten} stilstandnacht${stilNachten === 1 ? '' : 'en'}</strong> per jaar komt het kansgewogen jaargemiddelde L<sub>night</sub> op ${d0} m uit op <strong>${huidigeStand.jaargemiddelde.toFixed(1)} dB(A)</strong> (was ${zonderStilstand.jaargemiddelde.toFixed(1)} dB(A) zonder stilstand) \u2014 dat ${exceeds ? 'overschrijdt' : 'blijft binnen'} de norm van ${nightNorm.toFixed(1)} dB(A). Verdeling van de ${M8_JAAR_NACHTEN} nachten: ${huidigeStand.nBest} best case, ${huidigeStand.nMiddel} middenscenario, ${huidigeStand.nWorst} worst case en ${huidigeStand.nStil} stilstand (bij voorrang worden de zwaarste nachten \u2014 eerst worst case, dan middenscenario, dan best case \u2014 stilgezet, dezelfde aanpak als Module 8).`;
+  const currentText = `Bij <strong>${stilNachten} stilstandnacht${stilNachten === 1 ? '' : 'en'}</strong> per jaar komt het kansgewogen jaargemiddelde L<sub>night</sub> op ${d0} m uit op <strong>${huidigeStand.jaargemiddelde.toFixed(1)} dB(A)</strong> (was ${zonderStilstand.jaargemiddelde.toFixed(1)} dB(A) zonder stilstand) \u2014 dat ${exceeds ? 'overschrijdt' : 'blijft binnen'} de norm van ${nightNorm.toFixed(1)} dB(A). Verdeling van de ${M8_JAAR_NACHTEN} nachten: ${huidigeStand.nBest} best case, ${huidigeStand.nMiddel} middenscenario, ${huidigeStand.nWorst} worst case en ${huidigeStand.nStil} stilstand (bij voorrang worden de zwaarste nachten \u2014 eerst worst case, dan middenscenario, dan best case \u2014 stilgezet, dezelfde aanpak als Module 7).`;
 
   container.innerHTML = `<p>${minText}</p><p>${currentText}</p>`;
 }
@@ -822,7 +822,7 @@ function m14RenderStilstand() {
 // "hoeveel dagen moet de turbine stilstaan om het kansgewogen jaargemiddelde Lden binnen de norm
 // te krijgen?". Zelfde opzet als m14RenderStilstand() hierboven (Lnight/nachten), nu toegepast op
 // Lden met een volledige dag (24 u, dus dag- + avond- + nachtperiode tegelijk uit) als eenheid \u2014
-// hergebruikt uitsluitend de generieke Module 8-stilstandfuncties, geen nieuwe dB-rekenlogica.
+// hergebruikt uitsluitend de generieke Module 7-stilstandfuncties, geen nieuwe dB-rekenlogica.
 function m14RenderStilstandLden() {
   const container = document.getElementById('m14-stilstand-lden-container');
   const input = document.getElementById('m14-stilstand-lden-input');
@@ -841,7 +841,7 @@ function m14RenderStilstandLden() {
   const norm = getActiveNorm();
   const ldenNorm = Number(norm?.lden);
   if (!Number.isFinite(ldenNorm)) {
-    container.innerHTML = '<p>Er is geen Lden-norm geselecteerd (zie Module 5) \u2014 deze vraag kan niet worden getoetst.</p>';
+    container.innerHTML = '<p>Er is geen Lden-norm geselecteerd (zie Module 1) \u2014 deze vraag kan niet worden getoetst.</p>';
     return;
   }
 
@@ -861,7 +861,7 @@ function m14RenderStilstandLden() {
   }
 
   const exceeds = huidigeStand.jaargemiddelde > ldenNorm;
-  const currentText = `Bij <strong>${stilDagen} stilstanddag${stilDagen === 1 ? '' : 'en'}</strong> per jaar komt het kansgewogen jaargemiddelde Lden op ${d0} m uit op <strong>${huidigeStand.jaargemiddelde.toFixed(1)} dB(A)</strong> (was ${zonderStilstand.jaargemiddelde.toFixed(1)} dB(A) zonder stilstand) \u2014 dat ${exceeds ? 'overschrijdt' : 'blijft binnen'} de norm van ${ldenNorm.toFixed(1)} dB(A). Verdeling van de ${M8_JAAR_NACHTEN} dagen: ${huidigeStand.nBest} best case, ${huidigeStand.nMiddel} middenscenario, ${huidigeStand.nWorst} worst case en ${huidigeStand.nStil} stilstand (bij voorrang worden de zwaarste dagen \u2014 eerst worst case, dan middenscenario, dan best case \u2014 stilgezet, dezelfde aanpak als Module 8/de L<sub>night</sub>-stilstandvraag hierboven).`;
+  const currentText = `Bij <strong>${stilDagen} stilstanddag${stilDagen === 1 ? '' : 'en'}</strong> per jaar komt het kansgewogen jaargemiddelde Lden op ${d0} m uit op <strong>${huidigeStand.jaargemiddelde.toFixed(1)} dB(A)</strong> (was ${zonderStilstand.jaargemiddelde.toFixed(1)} dB(A) zonder stilstand) \u2014 dat ${exceeds ? 'overschrijdt' : 'blijft binnen'} de norm van ${ldenNorm.toFixed(1)} dB(A). Verdeling van de ${M8_JAAR_NACHTEN} dagen: ${huidigeStand.nBest} best case, ${huidigeStand.nMiddel} middenscenario, ${huidigeStand.nWorst} worst case en ${huidigeStand.nStil} stilstand (bij voorrang worden de zwaarste dagen \u2014 eerst worst case, dan middenscenario, dan best case \u2014 stilgezet, dezelfde aanpak als Module 7/de L<sub>night</sub>-stilstandvraag hierboven).`;
 
   container.innerHTML = `<p>${minText}</p><p>${currentText}</p>`;
 }
@@ -958,16 +958,16 @@ const state = {
   // state.category is BEWUST gedeeld met Module 3 (zie category-tabs-3a), net als scenario/curtailment/windBearing/lwa.
   turbines3a: [], selectedTurbineId3a: null, daynight3a: 'dag',
   normPreset3a: 'eigen',
-  // Module 7: shear-capacity-verkenner (Van Hooijdonk e.a. 2015 / Bosveld e.a. 2020) — zie script.js §M7.
+  // Module 6: shear-capacity-verkenner (Van Hooijdonk e.a. 2015 / Bosveld e.a. 2020) — zie script.js §M7.
   // De bewolkingsklasse is niet meer los instelbaar: elk scenario (best/middel/worst) heeft een vaste,
-  // vastgekoppelde bewolkingsklasse (M7_SCENARIO_CLOUD) en de koppeling naar Module 6 staat permanent aan.
+  // vastgekoppelde bewolkingsklasse (M7_SCENARIO_CLOUD) en de koppeling naar Module 5/6 staat permanent aan.
   m7Ugeo: 9,
   m7UgeoFetching: false, m7UgeoAutoInfo: null, m7UgeoAutoError: null,
-  // Module 8: woningen (BAG) → bewoners → geschatte hinder per scenario — zie script.js §M8.
+  // Module 7: woningen (BAG) → bewoners → geschatte hinder per scenario — zie script.js §M8.
   m8HouseholdSize: 2.10, m8AddressData: null, m8Fetching: false, m8Error: null,
-  // Module 9/10: kosten- en DALY-berekening op basis van Module 8's bewonersaantallen — zie script.js §M9/§M10.
+  // Module 8/9: kosten- en DALY-berekening op basis van Module 7's bewonersaantallen — zie script.js §M9/§M10.
   m9CostPerPersonYear: 609.60, m9Horizon: 25,
-  // Module 11: waardedaling woningen (Droës & Koster 2021) — zie script.js §M11. Tiphoogte-categorie
+  // Module 10: waardedaling woningen (Droës & Koster 2021) — zie script.js §M11. Tiphoogte-categorie
   // is een EIGEN categorie-as, los van state.category (hoorbaar/laagfrequent/infrasoon) van Module 3.
   m11Category: 'hoog', m11Method: 'vlak', m11Woz: 398000,
   m11CbsData: null, m11CbsFetching: false, m11CbsError: null,
@@ -975,14 +975,14 @@ const state = {
   // Module 12: bouw-/investeringskosten per turbine (PBL-eindadvies SDE++ 2026) — zie script.js §M12.
   // Volledig losstaand van de geplaatste turbine(s)/locatie(s) hierboven: vrije invoer per turbinegroep.
   m12Groups: [],
-  // Module 14: Lden/Lnight per scenario — peilrichting ontvanger t.o.v. de turbine, losstaand
+  // Module 13: Lden/Lnight per scenario — peilrichting ontvanger t.o.v. de turbine, losstaand
   // van de op de kaart geplaatste turbines. m14StilstandNachten: aantal stilstandnachten/jaar
   // ingevuld bij de interactieve stilstand-vraag (eerste ring, 500 m, hoorbaar/Lnacht).
   m14Bearing: 180, m14StilstandNachten: 0, m14StilstandDagenLden: 0, m14StilstandNachtenVercammen: 0,
 };
-// Referentiewaarden voor Module 5 (toetsing aan wettelijke normen) — zie module-desc voor bronnen.
+// Referentiewaarden voor de normtoetsing (eigen norm ingesteld bij Module 1) — zie module-desc voor bronnen.
 // 'eigen' gebruikt de zelf ingevulde Lden- en Lnight-waarden uit Module 1 (state.normCustomLden /
-// state.normCustomLnight) — die invoer is bewust in Module 1 geplaatst (niet in Module 5 zelf) zodat
+// state.normCustomLnight) — die invoer is bewust in Module 1 geplaatst zodat
 // deze in lijn is met de overige "vroege module bepaalt, latere modules lezen uit"-opzet van dit model.
 const NORM_PRESETS = {
   oud: { lden: 47, lnight: 41, label: 'Oude landelijke norm (Activiteitenbesluit/-regeling)' },
@@ -1167,8 +1167,8 @@ scenarioList.querySelectorAll('.scenario-card').forEach(card => {
 // ---------- Curtailment checkbox ----------
 curtailmentCheck.addEventListener('change', () => { state.curtailment = curtailmentCheck.checked; render(); });
 
-// ---------- Module 7: shear-capacity-verkenner ----------
-// De bewolkingsklasse per scenario ligt vast (M7_SCENARIO_CLOUD) en de koppeling naar Module 6 staat
+// ---------- Module 6: shear-capacity-verkenner ----------
+// De bewolkingsklasse per scenario ligt vast (M7_SCENARIO_CLOUD) en de koppeling naar Module 5/6 staat
 // permanent aan — er zijn dus geen cloud-tabs of een aan/uit-checkbox meer om te binden.
 const m7UgeoInput = document.getElementById('m7-ugeo-input');
 if (m7UgeoInput) m7UgeoInput.addEventListener('input', () => {
@@ -1210,7 +1210,7 @@ if (m9HorizonInput) {
   });
 }
 
-// ---------- Module 11: tiphoogte-categorie, methode en WOZ-invoer ----------
+// ---------- Module 10: tiphoogte-categorie, methode en WOZ-invoer ----------
 const m11CategoryTabsEl = document.getElementById('m11-category-tabs');
 if (m11CategoryTabsEl) {
   m11CategoryTabsEl.querySelectorAll('[data-m11-category]').forEach((btn) => {
@@ -1343,7 +1343,7 @@ function turbineIcon(selected) {
 }
 
 // Gedeelde rijbouwer voor de norm-toetsingstabel (gebruikt door zowel Module 3's ingebedde
-// toetsingswidget als Module 5): toont per vaste afstand de dagwaarde (referentie, downwind) en
+// toetsingswidget): toont per vaste afstand de dagwaarde (referentie, downwind) en
 // vervolgens DRIE aparte nachtwaarden + toetsingen — downwind (kritisch, verst dragend), upwind
 // (snelst dempend) en zijwind/crosswind (tussenliggend) — in plaats van, zoals voorheen, uitsluitend
 // downwind. Dit maakt expliciet zichtbaar dat een woning die niet exact downwind van de turbine
@@ -1399,7 +1399,7 @@ function m5NormTableHeadHtml(categoryKey) {
 //                  een band kan onder de NSG-drempel liggen (niet hoorbaar) én boven de Vercammen-grens
 //                  liggen (wel hinderlijk), of andersom.
 // Vervangt voor deze ene tab de eerdere dag/upwind/zijwind-kolommen: die voegden voor laagfrequent
-// geluid weinig toe naast de twee per-tertsband-toetsingen hieronder. Module 14 en de hoorbaar-/
+// geluid weinig toe naast de twee per-tertsband-toetsingen hieronder. Module 13 en de hoorbaar-/
 // infrasoon-rekenlogica zelf blijven volledig buiten deze functie.
 function m5LfgCombinedTableRowsHtml(baseState, norm) {
   const catLw = computeCategoryLw(baseState.lwa);
@@ -1433,50 +1433,6 @@ function m5LfgCombinedTableRowsHtml(baseState, norm) {
 
     return `<tr><td>${d} m</td>${hoorbaarCell}${totaalCell}${nsgCell}${vercCell}</tr>`;
   }).join('');
-}
-
-function renderNormModule() {
-  if (!normTableBody) return;
-  updateNormCustomValuesNote();
-  const n = state.turbines3a.length;
-  const norm = getActiveNorm();
-  const cat = CATEGORY[state.category];
-  if (normTableTitle) normTableTitle.textContent = `Toetsing geselecteerde turbine (${cat.label.toLowerCase()}, ${cat.unit})`;
-  if (normAweightNote) {
-    if (state.category === 'hoorbaar') {
-      normAweightNote.style.display = 'none';
-    } else if (state.category === 'laagfrequent-vercammen') {
-      normAweightNote.style.display = '';
-      normAweightNote.innerHTML = `Deze tabel toetst het geaggregeerde dB(Lin)-niveau aan de hierboven gekozen dB(A)-afgeleide Lnight-waarde — een <strong>arbitrair indicatief referentiepunt</strong>, niet de Vercammen-curve. Voor de eigenlijke per-tertsband toetsing aan de Vercammen-grenswaarden, zie het aparte "Laagfrequent geluid – Vercammen"-blok in Module 3.`;
-    } else if (state.category === 'laagfrequent') {
-      normAweightNote.style.display = '';
-      normAweightNote.innerHTML = `Deze tabel toont per afstand (downwind, nacht) vier oordelen naast elkaar. <strong>Hoorbaar</strong> is de aparte categorie hoorbaar geluid, getoetst in dB(A) aan de Lnight-norm hierboven. <strong>Totaal LFG</strong> is het geaggregeerde, ongewogen dB(Lin)-niveau (som van alle tertsbanden) — puur informatief, hiervoor bestaat geen normwaarde. Daarnaast staan twee onafhankelijke per-tertsband toetsingen van dat laagfrequente geluid: <strong>NSG is een waarneembaarheidsnorm</strong> — kan een gemiddelde oudere (50–60 jaar) dit geluid nog hóren? — en <strong>Vercammen is een hindernorm</strong> — vanaf welk niveau geldt het geluid als hinderlijk/klachtwaardig, zoals gebruikt in de Nederlandse/Vlaamse jurisprudentie? Een band kan onder de NSG-drempel liggen (niet hoorbaar) én tegelijk boven de Vercammen-grens (wel hinderlijk), of andersom — het zijn twee verschillende vragen. Getoond wordt telkens de tertsband met de grootste overschrijdingsmarge. Bron: <a href="https://www.rivm.nl/bibliotheek/rapporten/2021-0187.pdf" target="_blank" rel="noopener">RIVM-rapport 2021-0187, Onderzoeksprogramma Laagfrequent geluid</a>.`;
-    } else {
-      normAweightNote.style.display = '';
-      normAweightNote.innerHTML = `De wettelijke norm is gedefinieerd in <strong>dB(A)</strong> (het hoorbare, A-gewogen geluid). Voor ${cat.shortLabel.toLowerCase()} geluid vervalt de A-weging en wordt hier getoetst in <strong>${cat.unit}</strong> — er bestaat geen formeel vastgestelde, direct vergelijkbare grenswaarde in deze eenheid; de hierboven gekozen dB(A)-norm dient uitsluitend als indicatief referentiepunt.`;
-    }
-  }
-  if (normTableHead) normTableHead.innerHTML = m5NormTableHeadHtml(state.category);
-  if (normLdenCallout) {
-    normLdenCallout.innerHTML = state.category === 'laagfrequent'
-      ? `De Lden-benadering is voor nu verwijderd uit deze tabel — dat was een indicatieve schatting (dag/avond/nacht-weging met de avond benaderd op het dagniveau) en <strong>geen</strong> formele Lden-berekening volgens het Reken- en meetvoorschrift windturbines. De kolommen hieronder tonen het hoorbaar-, NSG- en Vercammen-oordeel voor de dB-waarde Nacht downwind, voor het huidige scenario (Module 2) en de huidige windrichting (Module 3).`
-      : `De Lden-benadering is voor nu verwijderd uit deze tabel — dat was een indicatieve schatting (dag/avond/nacht-weging met de avond benaderd op het dagniveau) en <strong>geen</strong> formele Lden-berekening volgens het Reken- en meetvoorschrift windturbines. Toetsing gebeurt hier rechtstreeks op de dB-waarde Nacht t.o.v. de Lnight-norm, voor het huidige scenario (Module 2) en de huidige windrichting (Module 3).`;
-  }
-  if (n === 0) {
-    normContextCallout.textContent = 'Plaats minstens één turbine in Module 3 om te toetsen.';
-  } else if (n <= 2) {
-    normContextCallout.innerHTML = `${n} turbine${n === 1 ? '' : 's'} geplaatst: bij 1–2 turbines blijft de oude landelijke norm (41 dB Lnight) <strong>formeel van toepassing</strong>.`;
-  } else {
-    normContextCallout.innerHTML = `${n} turbines geplaatst: bij 3 of meer turbines gelden sinds de Delfzijluitspraak (2021) <strong>geen landelijke normen meer</strong> — het bevoegd gezag moet zelf een norm motiveren. De hier gekozen waarde is een referentie, geen automatisch geldende wettelijke norm.`;
-  }
-
-  const selected = state.turbines3a.find(t => t.id === state.selectedTurbineId3a);
-  if (!selected) {
-    normTableBody.innerHTML = `<tr><td colspan="8" class="empty-row">Plaats een turbine op de kaart in Module 3 om te toetsen.</td></tr>`;
-    return;
-  }
-
-  normTableBody.innerHTML = m5NormTableRowsHtml(state.category, state, norm);
 }
 
 function updateWorstCaseReadout() {
@@ -1538,7 +1494,6 @@ function render() {
   updateWorstCaseReadout();
 
   renderCumulativeModule(catLw);
-  renderNormModule();
   renderModule3a();
   renderModule6();
   renderModule7();
@@ -1767,7 +1722,7 @@ function applyMapTileTheme3a() {
     tileLayer3a = L.maplibreGL({
       style: 'https://tiles.openfreemap.org/styles/positron',
       // preserveDrawingBuffer: nodig om de WebGL-kaart later als afbeelding te kunnen
-      // vastleggen voor het Module 13-rapport (zie m13CaptureSingleView) — zonder deze optie
+      // vastleggen voor het Module 14-rapport (zie m13CaptureSingleView) — zonder deze optie
       // wist de browser de canvas-buffer meteen na elke render en levert toDataURL() een
       // leeg/zwart beeld op.
       preserveDrawingBuffer: true,
@@ -1920,7 +1875,7 @@ function ringsForTurbine3a(turbine, lwCat) {
   const synthState = { scenario: state.scenario, daynight: state.daynight3a, curtailment: state.curtailment, windBearing: state.windBearing };
   const isVercammen = state.category === 'laagfrequent-vercammen';
   // Basis 'laagfrequent'-tab: zelfde onderliggende dB(Lin)-getal blijft bestaan (lpAt() hieronder,
-  // ongewijzigd t.b.v. Module 14), maar de RING-tooltip toont nu één samengevat NSG-hoorbaarheidsoordeel
+  // ongewijzigd t.b.v. Module 13), maar de RING-tooltip toont nu één samengevat NSG-hoorbaarheidsoordeel
   // per richting i.p.v. het kale dB(Lin)-getal — zie nsgWorstBand()/nsgVerdictLabel() hierboven.
   const isLaagfrequentNsg = state.category === 'laagfrequent';
   const circles = [];
@@ -2266,12 +2221,12 @@ clearTurbinesBtn3a.addEventListener('click', clearAllTurbines3a);
 
 
 // ============================================================
-// Module 6: frequentie van de nacht-scenario's (best/middel/worst)
+// Module 5: frequentie van de nacht-scenario's (best/middel/worst)
 // Toont hoe vaak (dagen/jaar, dagen/maand) elk nacht-scenario optreedt,
 // gekoppeld aan de turbineposities uit Module 3 (state.turbines3a) en
 // aan de windrichting-instelling (state.windDir/windBearing).
 // Bronnen: Van den Berg (2004, 2008), Abraham & Monahan (2019, deel I & II), Baas e.a. (2009) — zie Verantwoording §5.
-// (Module 7 voegt Bosveld e.a. (2020) / Van Hooijdonk e.a. (2015) / Van der Linden e.a. (2017) toe.)
+// (Module 6 voegt Bosveld e.a. (2020) / Van Hooijdonk e.a. (2015) / Van der Linden e.a. (2017) toe.)
 // ============================================================
 const M6_COAST_POINTS = [
   { name: 'Vlissingen', lat: 51.45, lng: 3.57 },
@@ -2319,7 +2274,7 @@ function m6ScenarioPercentages(lat, lng) {
   const stable = m6StablePct(distKm);
   // Abraham & Monahan (2019, deel II): volhardend-wSBL (middel) en volhardend-vSBL (worst) komen bij
   // Cabauw ongeveer even vaak voor — 50/50 was de oude standaard-benadering, geen exacte meting van alle
-  // nachten. Deze is permanent vervangen door de shear-capacity-gebaseerde verhouding uit Module 7
+  // nachten. Deze is permanent vervangen door de shear-capacity-gebaseerde verhouding uit Module 6
   // (Van Hooijdonk e.a. 2015 / Bosveld e.a. 2020), automatisch gekoppeld aan de vaste bewolkingsklasse per
   // scenario (half bewolkt=middel, helder=worst) — niet meer optioneel.
   const wsblShare = m7WsblShare();
@@ -2443,7 +2398,7 @@ function renderModule6() {
   `;
 
   if (explainer) {
-    const splitNote = `Verdeling middel/worst binnen "stabiel": ${(pct.wsblShare * 100).toFixed(0)}%/${(100 - pct.wsblShare * 100).toFixed(0)}%, permanent automatisch afgeleid uit de shear-capacity-schatting in Module 7 (half bewolkt=middel, helder=worst — niet meer de vaste 50/50).`;
+    const splitNote = `Verdeling middel/worst binnen "stabiel": ${(pct.wsblShare * 100).toFixed(0)}%/${(100 - pct.wsblShare * 100).toFixed(0)}%, permanent automatisch afgeleid uit de shear-capacity-schatting in Module 6 (half bewolkt=middel, helder=worst — niet meer de vaste 50/50).`;
     explainer.textContent = `Stabiele atmosfeer (middel + worst samen): ${pct.stable.toFixed(0)}% van de nachten, geïnterpoleerd tussen 15% (kust, Lutjewad) en 40% (landinwaarts, Cabauw) op basis van de afstand tot de kust — zie Verantwoording §5. ${splitNote}`;
   }
 
@@ -2485,10 +2440,10 @@ function renderModule6() {
 }
 
 // ============================================================
-// Module 7: Bosveld's eigen indeling — shear capacity (Van Hooijdonk e.a. 2015)
-// en de vertaling naar Module 6
+// Module 6: Bosveld's eigen indeling — shear capacity (Van Hooijdonk e.a. 2015)
+// en de vertaling naar Module 5
 //
-// CORRECTIE t.o.v. eerdere versie: de kwantitatieve claims die hierboven in Module 6
+// CORRECTIE t.o.v. eerdere versie: de kwantitatieve claims die hierboven in Module 5
 // stonden (expliciete verwerping van een derde regime, HMM-classificatie, ~50/50-
 // persistentie, transitiestatistieken, sturing door geostrofische wind/bewolking) zijn
 // niet van Bosveld e.a. (2020) zelf, maar van Abraham & Monahan (2019, deel I & II) —
@@ -2496,7 +2451,7 @@ function renderModule6() {
 // hun overzichtsartikel over 50 jaar Cabauw-onderzoek zelf twee andere, eigen
 // classificaties voor wSBL/vSBL: (1) de "shear capacity" SC = U/Umin van Van Hooijdonk
 // e.a. (2015, waarvan Bosveld zelf co-auteur is), en (2) de indeling van heldere nachten
-// naar geostrofische windsnelheid van Van der Linden e.a. (2017). Module 7 gebruikt (1)
+// naar geostrofische windsnelheid van Van der Linden e.a. (2017). Module 6 gebruikt (1)
 // als interactief model en herkalibreert Umin met de geostrofische-wind-drempels die
 // Abraham & Monahan (2019b) rapporteren per bewolkingsklasse — dat is een eigen synthese,
 // niet een waarde die letterlijk in een van beide papers staat (zie beperkingen).
@@ -2512,8 +2467,8 @@ const M7_UMIN_BY_CLOUD = {
 const M7_CLOUD_LABELS = { helder: 'Helder (LLCC < 5%)', half: 'Half bewolkt', bewolkt: 'Bewolkt (LLCC > 95%)' };
 const M7_LOGISTIC_K = 4; // steilheid van de soft-transition rond SC = 1 — eigen keuze, niet uit de literatuur
 
-// Vaste, niet meer los instelbare koppeling scenario ↔ bewolkingsklasse (zie Module 6-inleiding en de
-// method-callout aan het begin van Module 6/7): veel bewolking onderdrukt de nachtelijke uitstraling
+// Vaste, niet meer los instelbare koppeling scenario ↔ bewolkingsklasse (zie Module 5-inleiding en de
+// method-callout aan het begin van Module 5/6): veel bewolking onderdrukt de nachtelijke uitstraling
 // waardoor de atmosfeer nauwelijks stabiel wordt (best case, neutraal/goed gemengd); onder heldere
 // hemel is de uitstraling het sterkst en is turbulence collapse (vSBL) het waarschijnlijkst (worst case);
 // half bewolkt ligt daar tussenin (wSBL, middel case). Dit vervangt de vrij te kiezen enkele
@@ -2541,7 +2496,7 @@ function m7ScenarioSC(ugeo = state.m7Ugeo) {
 // Verdeling van de "stabiele" nachten (middel+worst) tussen wSBL (middel, met half-bewolkt-drempel) en
 // vSBL (worst, met helder-drempel): elke kant gebruikt automatisch zijn eigen vastgekoppelde
 // bewolkingsklasse, genormaliseerd zodat middelShare + worstShare = 1 (eigen normalisatie, zie
-// beperkingen Module 7). "Best" (bewolkt) telt hier niet mee — dat scenario valt buiten de wSBL/vSBL-
+// beperkingen Module 6). "Best" (bewolkt) telt hier niet mee — dat scenario valt buiten de wSBL/vSBL-
 // tweedeling; het aandeel best/stabiel wordt elders (afstand tot kust) bepaald.
 function m7WsblShare(ugeo = state.m7Ugeo) {
   const sc = m7ScenarioSC(ugeo);
@@ -2567,7 +2522,7 @@ function m7ComparisonRows() {
   };
 }
 
-// ---------- Module 7: automatische U_geo-ophaling uit ERA5-luchtdrukgradiënt ----------
+// ---------- Module 6: automatische U_geo-ophaling uit ERA5-luchtdrukgradiënt ----------
 // Fysische definitie: U_geo = |grad(p)| / (rho * f), met f = 2*Omega*sin(breedtegraad) de
 // Coriolisparameter en rho de luchtdichtheid. |grad(p)| wordt per uur geschat met een gecentreerd
 // eindige-differentieschema over vier hulppunten op ±1° breedte/lengte rond het zwaartepunt van de
@@ -2575,7 +2530,7 @@ function m7ComparisonRows() {
 // aanname van een vierkant grid). Per uur wordt eerst de snelheid berekend en pas daarna gemiddeld
 // over het jongste volledige kalenderjaar — het middelen van de druk zélf zou de gradiënt over een
 // jaar vrijwel wegmiddelen (windrichtingen wisselen), terwijl het middelen van de snelheid wél een
-// representatieve jaarklimatologie oplevert (zie beperkingen Module 7, punt 8).
+// representatieve jaarklimatologie oplevert (zie beperkingen Module 6, punt 8).
 const M7_OMEGA = 7.2921159e-5; // rad/s, hoeksnelheid van de aarde
 const M7_RHO = 1.225; // kg/m3, standaard luchtdichtheid op zeeniveau (eigen benadering)
 const M7_GRID_OFFSET_DEG = 1.0; // ±1° breedte/lengte rond het zwaartepunt
@@ -2729,12 +2684,12 @@ function renderModule7() {
   if (compareBody) {
     compareBody.innerHTML = `
       <tr>
-        <td><strong>Oude standaard Module 6 (50/50, referentie)</strong></td>
+        <td><strong>Oude standaard (50/50, referentie)</strong></td>
         <td class="m6-month-cell">${cmp.std.middelDays}</td>
         <td class="m6-month-cell">${cmp.std.worstDays}</td>
       </tr>
       <tr>
-        <td><strong>Module 7 — automatische bewolkings-koppeling (${(wsblShare * 100).toFixed(0)}/${(100 - wsblShare * 100).toFixed(0)})</strong></td>
+        <td><strong>Module 6 — automatische bewolkings-koppeling (${(wsblShare * 100).toFixed(0)}/${(100 - wsblShare * 100).toFixed(0)})</strong></td>
         <td class="m6-month-cell">${cmp.alt.middelDays}</td>
         <td class="m6-month-cell">${cmp.alt.worstDays}</td>
       </tr>
@@ -2742,13 +2697,13 @@ function renderModule7() {
   }
 
   if (applyNote) {
-    applyNote.textContent = `Module 6 gebruikt nu altijd ${(wsblShare * 100).toFixed(0)}/${(100 - wsblShare * 100).toFixed(0)} (half bewolkt/helder) in plaats van 50/50 voor de middel/worst-verdeling.`;
+    applyNote.textContent = `Dit model gebruikt nu altijd ${(wsblShare * 100).toFixed(0)}/${(100 - wsblShare * 100).toFixed(0)} (half bewolkt/helder) in plaats van 50/50 voor de middel/worst-verdeling.`;
   }
 }
 
 
 // ============================================================
-// Module 8 — woningen (BAG) → bewoners → geschatte hinder per scenario
+// Module 7 — woningen (BAG) → bewoners → geschatte hinder per scenario
 // ============================================================
 
 // Hinderpercentages per scenario — zie module-callout in index.html voor bronnen:
@@ -2780,10 +2735,10 @@ function haversineMeters(lat1, lon1, lat2, lon2) {
 }
 
 // Bepaalt, voor het gegeven scenario/categorie/richting/periode, de verste van de zes vaste ringen
-// (Module 3) waar het geluidsniveau de actieve Lnight-norm (Module 5) nog overschrijdt.
+// (Module 3) waar het geluidsniveau de actieve Lnight-norm (Module 1) nog overschrijdt.
 // x = richtingscosinus t.o.v. de downwind-as: 1 = downwind (kritisch, verst dragend), -1 = upwind
 // (snelst dempend), 0 = zijwind/crosswind (tussenliggend). Generalisatie van de vroegere, altijd-
-// downwind m8ExceedanceRadius(), zodat Module 5/8/8a/9/10 dezelfde richtingslogica delen i.p.v. elk
+// downwind m8ExceedanceRadius(), zodat Module 7/7a/8/9 dezelfde richtingslogica delen i.p.v. elk
 // impliciet aan te nemen dat een ontvangpunt binnen een ring ook daadwerkelijk downwind ligt.
 function m8ExceedanceRadiusX(scenarioKey, categoryKey, x, daynightKey, lwCatOverride) {
   const norm = getActiveNorm();
@@ -2843,8 +2798,8 @@ function m8TurbineSnapshot() {
 }
 
 // ---------- Module 1: minimale afstand turbine-woning — live BAG-toets, gebruikt/getoond in Module 3 ----------
-// Herbruikt dezelfde BAG-ophaalfunctie als Module 8 (m8FetchAddressesForTurbine), maar met de
-// gekozen minimumafstand als straal (kleiner dan de vaste 5000 m van Module 8) en zoekt per
+// Herbruikt dezelfde BAG-ophaalfunctie als Module 7 (m8FetchAddressesForTurbine), maar met de
+// gekozen minimumafstand als straal (kleiner dan de vaste 5000 m van Module 7) en zoekt per
 // turbine alleen de dichtstbijzijnde woning — geen ringen/telling, uitsluitend een ja/nee-toets.
 function m1MinAfstandSnapshot() {
   return state.turbines3a.map((t) => `${t.id}:${t.lat.toFixed(5)},${t.lng.toFixed(5)}`).join('|') + '@' + (state.m1MinAfstandHuis || 'geen');
@@ -3038,7 +2993,7 @@ function m8CountExceedingUnique(scenarioKey, categoryKey, daynightKey, lwCatOver
 }
 
 // Mirrort m8ExceedanceRadiusX/m8AddressExceeds/m8CountExceedingUnique hierboven, maar getoetst aan de
-// Vercammen-tertsbandcurve i.p.v. de (Module 5-)Lnight-norm — en dus onafhankelijk van welke Lnight-norm
+// Vercammen-tertsbandcurve i.p.v. de (Module 1-)Lnight-norm — en dus onafhankelijk van welke Lnight-norm
 // er is gekozen (de Vercammen-curve gebruikt geen Lnight-waarde). Bewust APART gehouden van
 // m8ExceedanceRadiusX/m8AddressExceeds/m8CountExceedingUnique en NIET toegevoegd aan M8_CATEGORY_META:
 // Vercammen is een andere TOETS van dezelfde laagfrequente fysieke geluidsenergie, geen vierde
@@ -3118,7 +3073,7 @@ const M8_CATEGORY_META = [
   { key: 'infrasoon', label: 'Infrasoon (dB(G), indicatief)' },
 ];
 
-// Bouwt de gedeelde 3 (scenario) × 3 (categorie) × 3 (hinderpercentage) datamatrix die Module 8, 9 en 10
+// Bouwt de gedeelde 3 (scenario) × 3 (categorie) × 3 (hinderpercentage) datamatrix die Module 7, 8 en 9
 // alle drie hergebruiken — zo wordt de overschrijdingsring/woningen/bewoners-berekening maar op één plek gedaan.
 function m8ComputeRows() {
   const norm = getActiveNorm();
@@ -3149,9 +3104,9 @@ function m8ComputeRows() {
 
 // Bouwt m8ComputeRows() (3 categorieën, ongewijzigd) en voegt er per scenario een VIERDE, apart
 // gelabeld blok aan toe voor de Vercammen-tertsbandtoetsing (m8VercammenExceedanceRadiusX/
-// m8VercammenCountExceedingUnique hierboven). Gebruikt door Module 8/9/10's kaart-/tabelweergave, die
+// m8VercammenCountExceedingUnique hierboven). Gebruikt door Module 7/8/9's kaart-/tabelweergave, die
 // generiek over r.categories itereert en dus geen verdere aanpassing nodig heeft om dit vierde blok te
-// tonen. Module 8's ontdubbelde totaal (m8ComputeTotals()) en Module 13's rapporttabellen blijven
+// tonen. Module 7's ontdubbelde totaal (m8ComputeTotals()) en Module 14's rapporttabellen blijven
 // bewust op m8ComputeRows() (3 categorieën) gebaseerd — dit voorkomt dat Vercammen meetelt in het
 // "3 categorieën, niet optellen"-totaal, en voorkomt een kapotte rowspan="3" in het PDF-rapport.
 function m8ComputeVercammenRows() {
@@ -3176,7 +3131,7 @@ function m8ComputeVercammenRows() {
 // scenario/ring/woningen-opbouw, andere onderliggende toets (m8NsgExceedanceRadiusX/
 // m8NsgCountExceedingUnique). Zie ook Module 3/3a/5's laagfrequent-tab, waar NSG en Vercammen al
 // naast elkaar per afstand worden getoond (commit 5b5b3db) — dit blok brengt diezelfde combinatie
-// naar Module 8/9/10/13.
+// naar Module 7/8/9/14.
 function m8ComputeNsgRows() {
   const hasData = !!state.m8AddressData;
   const hinderFor = (people) =>
@@ -3255,7 +3210,7 @@ function m8ComputeTotals() {
 }
 
 // ---------- Stilstandnachten: effect van X nachten volledige turbinestilstand op het jaargemiddelde ----------
-// Zet de scenario-percentages (Module 6/7) om in een concreet aantal nachten van de 365, en "verwijdert"
+// Zet de scenario-percentages (Module 5/6) om in een concreet aantal nachten van de 365, en "verwijdert"
 // daaruit het opgegeven aantal stilstandnachten — volgens de gebruikerskeuze bij voorrang uit de zwaarste
 // nachten (worst case eerst, dan middel, dan best case): dat is de realistische volgorde voor een
 // stilstandvoorziening, die zich in de praktijk juist op de zwaarste condities richt en zo het grootste
@@ -3326,7 +3281,7 @@ function renderModule8() {
     if (n === 0) {
       contextCallout.textContent = 'Plaats minstens één turbine op de kaart in Module 3 om deze module te gebruiken.';
     } else {
-      contextCallout.innerHTML = `${n} turbine${n === 1 ? '' : 's'} geplaatst. Overschrijdingsafstanden gebruiken de huidige norm van Module 5 (<strong>${getActiveNorm().label}</strong>) en het huidige bronvermogen van Module 1.`;
+      contextCallout.innerHTML = `${n} turbine${n === 1 ? '' : 's'} geplaatst. Overschrijdingsafstanden gebruiken de huidige eigen norm van Module 1 (<strong>${getActiveNorm().label}</strong>) en het huidige bronvermogen van Module 1.`;
     }
   }
 
@@ -3338,7 +3293,7 @@ function renderModule8() {
   if (fetchStatus) {
     fetchStatus.className = 'hint';
     if (!normHasLnight) {
-      fetchStatus.textContent = `De geselecteerde norm (${norm.label}) heeft geen Lnight-waarde — overschrijdingsafstand kan hiermee niet worden bepaald. Kies een andere norm bij Module 5.`;
+      fetchStatus.textContent = `De geselecteerde norm (${norm.label}) heeft geen Lnight-waarde — overschrijdingsafstand kan hiermee niet worden bepaald. Vul een geldige Lnight-waarde in bij Module 1.`;
       fetchStatus.classList.add('m8-status-error');
     } else if (state.m8Fetching) {
       fetchStatus.textContent = `Bezig met ophalen van BAG-adressen rond ${n} turbine${n === 1 ? '' : 's'} (tot ${M8_FETCH_RADIUS} m)...`;
@@ -3455,12 +3410,13 @@ function renderModule8() {
   renderModule9();
   renderModule10();
   renderModule11();
+  renderModuleSocialCosts();
   renderModule13();
 }
 
 // ==================== MODULE 9: geschatte zorgkosten ====================
 // Hergebruikt de bewonersaantallen die m8ComputeRows() per scenario/categorie/hinderpercentage
-// al berekent (zie Module 8) en past daarop het kostenkengetal toe uit de kostenmodule ("Module 2")
+// al berekent (zie Module 7) en past daarop het kostenkengetal toe uit de kostenmodule ("Module 2")
 // van het referentiemodel https://waardedaling-geluidshinder-windturbines.onrender.com/.
 const M9_DEFAULT_COST = 609.60;
 const M9_DEFAULT_HORIZON = 25;
@@ -3470,6 +3426,30 @@ function m9Fmt(n) {
 }
 function m9FmtEuro(n) {
   return n == null || Number.isNaN(n) ? '—' : '€' + Math.round(n).toLocaleString('nl-NL');
+}
+
+// ==================== MODULE 11: maatschappelijke kosten (een bedrag) ====================
+// Hergebruikt dezelfde m13ComputeSocialCosts()-functie als het rapport (Module 14) - geen
+// aparte/dubbele berekening, alleen een eigen weergave van de A/B/C-tabel als losstaande module.
+function renderModuleSocialCosts() {
+  const tableBody = document.getElementById('m11soc-table-body');
+  if (!tableBody) return;
+
+  const n = state.turbines3a.length;
+  const hasData = !!state.m8AddressData;
+  if (n === 0 || !hasData) {
+    tableBody.innerHTML = `<tr><td colspan="4" class="empty-row">${n === 0 ? 'Plaats een turbine op de kaart in Module 3.' : 'Haal eerst BAG-woninggegevens op bij Module 7.'}</td></tr>`;
+    return;
+  }
+
+  const m6 = m6ComputeAll();
+  const rows8 = m8ComputeRows();
+  const horizon = state.m9Horizon;
+  const costPerPerson = state.m9CostPerPersonYear;
+  const dwTotal = M10_DW_SLAAP + M10_DW_HINDER;
+  const m11 = m11ComputeResult();
+  const { abcRowsHtml } = m13ComputeSocialCosts(m6, rows8, horizon, costPerPerson, dwTotal, m11);
+  tableBody.innerHTML = abcRowsHtml;
 }
 
 function renderModule9() {
@@ -3503,7 +3483,7 @@ function renderModule9() {
   const totalsTextEl = document.getElementById('m9-totals-text');
   if (totalsTextEl) {
     if (n === 0 || !hasData) {
-      totalsTextEl.innerHTML = '<em>Nog geen gegevens \u2014 zie Module 8.</em>';
+      totalsTextEl.innerHTML = '<em>Nog geen gegevens \u2014 zie Module 7.</em>';
     } else {
       totalsTextEl.innerHTML = withCost
         .map((r) => {
@@ -3522,7 +3502,7 @@ function renderModule9() {
   }
 
   if (n === 0 || !hasData) {
-    grid.innerHTML = `<p class="hint">${n === 0 ? 'Plaats minstens één turbine op de kaart in Module 3.' : 'Haal eerst BAG-woninggegevens op bij Module 8 om de kosten te kunnen berekenen.'}</p>`;
+    grid.innerHTML = `<p class="hint">${n === 0 ? 'Plaats minstens één turbine op de kaart in Module 3.' : 'Haal eerst BAG-woninggegevens op bij Module 7 om de kosten te kunnen berekenen.'}</p>`;
   } else {
     grid.innerHTML = withCost
       .map((r) => {
@@ -3558,7 +3538,7 @@ function renderModule9() {
 
   if (tableBody) {
     if (n === 0 || !hasData) {
-      tableBody.innerHTML = `<tr><td colspan="6" class="empty-row">${n === 0 ? 'Plaats een turbine op de kaart in Module 3.' : 'Haal eerst BAG-gegevens op bij Module 8.'}</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="6" class="empty-row">${n === 0 ? 'Plaats een turbine op de kaart in Module 3.' : 'Haal eerst BAG-gegevens op bij Module 7.'}</td></tr>`;
     } else {
       tableBody.innerHTML = withCost
         .flatMap((r) =>
@@ -3579,7 +3559,7 @@ function renderModule9() {
 }
 
 // ==================== MODULE 10: DALY-berekening ====================
-// Zet dezelfde bewonersaantallen (Module 8) om in Disability-Adjusted Life Years, met de
+// Zet dezelfde bewonersaantallen (Module 7) om in Disability-Adjusted Life Years, met de
 // WHO Europe (2024)-disability-weights en drie Nederlandse monetaire DALY-waarden
 // (RIVM/PBL/Zorginstituut Nederland) — methodologie van de DALY-module ("Module 3") van het
 // referentiemodel https://waardedaling-geluidshinder-windturbines.onrender.com/.
@@ -3629,7 +3609,7 @@ function renderModule10() {
   const totalsTextEl = document.getElementById('m10-totals-text');
   if (totalsTextEl) {
     if (n === 0 || !hasData) {
-      totalsTextEl.innerHTML = '<em>Nog geen gegevens \u2014 zie Module 8.</em>';
+      totalsTextEl.innerHTML = '<em>Nog geen gegevens \u2014 zie Module 7.</em>';
     } else {
       totalsTextEl.innerHTML = withDaly
         .map((r) => {
@@ -3648,7 +3628,7 @@ function renderModule10() {
   }
 
   if (n === 0 || !hasData) {
-    grid.innerHTML = `<p class="hint">${n === 0 ? 'Plaats minstens één turbine op de kaart in Module 3.' : 'Haal eerst BAG-woninggegevens op bij Module 8 om de DALY-berekening te kunnen maken.'}</p>`;
+    grid.innerHTML = `<p class="hint">${n === 0 ? 'Plaats minstens één turbine op de kaart in Module 3.' : 'Haal eerst BAG-woninggegevens op bij Module 7 om de DALY-berekening te kunnen maken.'}</p>`;
   } else {
     grid.innerHTML = withDaly
       .map((r) => {
@@ -3687,7 +3667,7 @@ function renderModule10() {
 
   if (tableBody) {
     if (n === 0 || !hasData) {
-      tableBody.innerHTML = `<tr><td colspan="12" class="empty-row">${n === 0 ? 'Plaats een turbine op de kaart in Module 3.' : 'Haal eerst BAG-gegevens op bij Module 8.'}</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="12" class="empty-row">${n === 0 ? 'Plaats een turbine op de kaart in Module 3.' : 'Haal eerst BAG-gegevens op bij Module 7.'}</td></tr>`;
     } else {
       tableBody.innerHTML = withDaly
         .flatMap((r) =>
@@ -3718,9 +3698,9 @@ function renderModule10() {
 // https://waardedaling-geluidshinder-windturbines.onrender.com/ ("Module 1"), gebaseerd op
 // Droës & Koster (2021), Energy Policy 155, 112327 (https://doi.org/10.1016/j.enpol.2021.112327).
 // Anders dan dat referentiemodel (CBS-buurtoppervlakte-toerekening) gebruikt deze module de unieke
-// BAG-adressen die Module 8 hierboven al ophaalt: per adres wordt de afstand tot de dichtstbijzijnde
+// BAG-adressen die Module 7 hierboven al ophaalt: per adres wordt de afstand tot de dichtstbijzijnde
 // geplaatste turbine bepaald, zodat bij overlap van meerdere turbines automatisch het sterkste effect
-// (kortste afstand) telt, zonder dubbeltelling — zie de "Herkomst"-callout onder Module 11 in index.html.
+// (kortste afstand) telt, zonder dubbeltelling — zie de "Herkomst"-callout onder Module 10 in index.html.
 const M11_CATEGORY_META = {
   laag: { label: 'Laag (<50 m tiphoogte)', radius: 1000, flatPct: 1.0 },
   midden: { label: 'Midden (50–150 m tiphoogte)', radius: 2000, flatPct: 3.0 },
@@ -3797,7 +3777,7 @@ function m11ComputeResult() {
   };
 }
 
-// ---------- Module 11: TNO-vergelijking (CBS-vierkanten 100x100 m, live via PDOK) ----------
+// ---------- Module 10: TNO-vergelijking (CBS-vierkanten 100x100 m, live via PDOK) ----------
 // Repliceert de operationalisatie van TNO (2022), "De verwachte impact van windturbines op
 // huizenprijzen in Nederland" (p. 13, 18-19): Nederland ingedeeld in vierkanten van 100x100 m,
 // woningen per vierkant gerepresenteerd door het middelpunt, bij overlap telt de turbine met het
@@ -4140,13 +4120,13 @@ function renderModule11() {
     if (n === 0) {
       statusEl.textContent = 'Plaats minstens \u00e9\u00e9n turbine op de kaart in Module 3 om deze module te gebruiken.';
     } else if (!state.m8AddressData) {
-      statusEl.textContent = 'Haal eerst de BAG-woningen op bij Module 8 ("Woningen ophalen (BAG)") \u2014 deze module hergebruikt die adressen.';
+      statusEl.textContent = 'Haal eerst de BAG-woningen op bij Module 7 ("Woningen ophalen (BAG)") \u2014 deze module hergebruikt die adressen.';
       statusEl.classList.add('m8-status-error');
     } else {
       const stale = state.m8AddressData.turbineSnapshot !== m8TurbineSnapshot();
       statusEl.textContent = stale
-        ? 'Turbines zijn gewijzigd sinds de BAG-ophaling in Module 8 \u2014 klik daar opnieuw op "Woningen ophalen (BAG)" voor actuele aantallen.'
-        : `Berekening op basis van de ${M11_CATEGORY_META[state.m11Category].label.toLowerCase()}, ${result.method === 'band' ? 'Methode B (afstandsband)' : 'Methode A (vlak percentage)'}, en de unieke BAG-adressen uit Module 8.`;
+        ? 'Turbines zijn gewijzigd sinds de BAG-ophaling in Module 7 \u2014 klik daar opnieuw op "Woningen ophalen (BAG)" voor actuele aantallen.'
+        : `Berekening op basis van de ${M11_CATEGORY_META[state.m11Category].label.toLowerCase()}, ${result.method === 'band' ? 'Methode B (afstandsband)' : 'Methode A (vlak percentage)'}, en de unieke BAG-adressen uit Module 7.`;
       statusEl.classList.add(stale ? 'm8-status-error' : 'm8-status-ok');
     }
   }
@@ -4154,7 +4134,7 @@ function renderModule11() {
   const dash = '\u2014';
   if (totalsText) {
     if (!result.hasData) {
-      totalsText.innerHTML = '<em>Nog geen gegevens \u2014 plaats turbines, haal de BAG-woningen op in Module 8 en stel de WOZ-waarde in.</em>';
+      totalsText.innerHTML = '<em>Nog geen gegevens \u2014 plaats turbines, haal de BAG-woningen op in Module 7 en stel de WOZ-waarde in.</em>';
     } else {
       const t = result.totals;
       totalsText.innerHTML = `<div class="m11-totals-line"><strong>${t.woningen.toLocaleString('nl-NL')} geraakte woningen</strong> \u00d7 gem. WOZ \u20ac${Math.round(state.m11Woz).toLocaleString('nl-NL')} \u2192 totale waardedaling <strong>${m9FmtEuro(t.waarde)}</strong>, waarvan <strong>${m9FmtEuro(t.eigen)}</strong> eigen risico (NMR \u2264${M11_NMR_THRESHOLD}%) en <strong>${m9FmtEuro(t.compensabel)}</strong> potentieel compensabele planschade (>${M11_NMR_THRESHOLD}%).</div>`;
@@ -4185,7 +4165,7 @@ function renderModule11() {
   }
   if (tableBody) {
     if (!result.hasData) {
-      tableBody.innerHTML = `<tr><td colspan="6" class="empty-row">${n === 0 ? 'Plaats een turbine op de kaart in Module 3.' : 'Haal eerst BAG-gegevens op bij Module 8.'}</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="6" class="empty-row">${n === 0 ? 'Plaats een turbine op de kaart in Module 3.' : 'Haal eerst BAG-gegevens op bij Module 7.'}</td></tr>`;
     } else {
       const rowsHtml = result.rows
         .map((r) => `<tr>
@@ -4473,10 +4453,10 @@ function renderModule12() {
   }
 }
 
-// ---------- Module 13: kritisch PDF-rapport (synthese van Module 1-12) ----------
+// ---------- Module 14: kritisch PDF-rapport (synthese van Module 1-12) ----------
 // Dit is een pure synthese-/rapportagelaag: er wordt geen enkele formule opnieuw
 // geïmplementeerd. Alle cijfers komen rechtstreeks uit de bestaande compute-functies
-// van Module 6 (m6ComputeAll), 8 (m8ComputeRows/m8ComputeTotals), 9/10 (zelfde formules
+// van Module 5 (m6ComputeAll), 7 (m8ComputeRows/m8ComputeTotals), 8/9 (zelfde formules
 // als renderModule9/renderModule10, hier gerepliceerd op de totals8-array), 11
 // (m11ComputeResult) en 12 (m12ComputeRow), zodat het rapport per definitie consistent
 // is met wat de rest van de app op het scherm toont.
@@ -4506,9 +4486,9 @@ function m13StatusMessages() {
   const r = m13Readiness();
   const msgs = [];
   if (r.nTurbines === 0) msgs.push('Plaats minstens één turbine in Module 3 (kaart) — het rapport heeft een locatie nodig voor de scenario- en woningberekeningen.');
-  if (!r.normOk) msgs.push(`De huidige norm bij Module 5 (${r.norm.label}) heeft geen Lnight-waarde, waardoor geen overschrijdingsafstand (en dus geen woningen/bewoners) bepaald kan worden — kies een andere norm.`);
-  if (r.nTurbines > 0 && r.normOk && !r.hasBag) msgs.push('Nog geen BAG-woningen opgehaald bij Module 8 — het rapport toont zonder die stap geen woningen-, bewoners-, hinder-, zorgkosten- of DALY-cijfers.');
-  if (r.hasBag && r.bagStale) msgs.push('De turbine(s) zijn gewijzigd sinds de laatste BAG-ophaling bij Module 8 — haal opnieuw op voor cijfers die bij de huidige plaatsing passen.');
+  if (!r.normOk) msgs.push(`De huidige eigen norm bij Module 1 (${r.norm.label}) heeft geen Lnight-waarde, waardoor geen overschrijdingsafstand (en dus geen woningen/bewoners) bepaald kan worden — vul een Lnight-waarde in bij Module 1.`);
+  if (r.nTurbines > 0 && r.normOk && !r.hasBag) msgs.push('Nog geen BAG-woningen opgehaald bij Module 7 — het rapport toont zonder die stap geen woningen-, bewoners-, hinder-, zorgkosten- of DALY-cijfers.');
+  if (r.hasBag && r.bagStale) msgs.push('De turbine(s) zijn gewijzigd sinds de laatste BAG-ophaling bij Module 7 — haal opnieuw op voor cijfers die bij de huidige plaatsing passen.');
   if (!r.hasM12) msgs.push('Nog geen turbinegroep toegevoegd bij Module 12 — zonder investeringscijfers ontbreekt de vergelijking maatschappelijke kosten vs. investeringskosten in het rapport (de rest van het rapport werkt wel).');
   if (r.minAfstand && !r.minAfstandChecked) msgs.push(`In Module 1 is een minimale afstand van ${r.minAfstand} m ingesteld, maar de BAG-toets bij Module 3 loopt nog of is nog niet gestart — wacht tot die klaar is voor een betrouwbaar rapport.`);
   if (r.minAfstand && r.minAfstandChecked && r.minAfstandViolations.length > 0) msgs.push(`Let op: bij de ingestelde minimale afstand van ${r.minAfstand} m (Module 1) staat/staan ${r.minAfstandViolations.length} turbine(s) dichter bij een woning dan toegestaan — dit wordt ook als waarschuwing in het rapport getoond.`);
@@ -4544,33 +4524,10 @@ function m13Int(n) {
 
 // Bouwt de volledige rapport-HTML als losstaand document (eigen <style>, geen afhankelijkheid
 // van style.css) zodat het exact zo afdrukt/PDF't als getoond, ook nadat de tab losstaat van de app.
-function m13BuildReportHtml(mapImages) {
-  const mapViews = mapImages || { closeup: null, regional: null };
-  const now = new Date();
-  const genDate = now.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
-  const genTime = now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
-
-  const r = m13Readiness();
-  const catLw = computeCategoryLw(state.lwa);
-  const turbines = state.turbines3a;
-  const n = turbines.length;
-  const norm = r.norm;
-  const m6 = r.nTurbines > 0 ? m6ComputeAll() : null;
-  const rows8 = m8ComputeRows();
-  const totals8 = m8ComputeTotals();
-  const horizon = state.m9Horizon;
-  const costPerPerson = state.m9CostPerPersonYear;
-  const dwTotal = M10_DW_SLAAP + M10_DW_HINDER;
-  const m11 = m11ComputeResult();
-  const m12rows = state.m12Groups.map(m12ComputeRow);
-  const m12TotalInvest = m12rows.reduce((s, row) => s + row.investeringTotaal, 0);
-  const m12TotalVermogen = m12rows.reduce((s, row) => s + row.vermogenTotaalMw, 0);
-  const hasBag = r.hasBag;
-  const hasM12 = r.hasM12;
-
+function m13ComputeSocialCosts(m6, rows8, horizon, costPerPerson, dwTotal, m11) {
   // BELANGRIJK: hinder-, zorgkosten- en DALY-berekeningen moeten PER GELUIDSCATEGORIE (hoorbaar/
   // laagfrequent/infrasoon) worden toegepast op de bewoners die zich BINNEN DE RING VAN DIE CATEGORIE
-  // bevinden (rows8, exact zoals Module 8/9/10 dat al doen) — niet op het "ontdubbelde" totaal
+  // bevinden (rows8, exact zoals Module 7/8/9 dat al doen) — niet op het "ontdubbelde" totaal
   // (totals8), dat slechts de vereniging van de drie ringen is (in de praktijk gelijk aan de grootste
   // ring, doorgaans infrasoon ≤5000 m). Anders zou bijv. bij best case hoorbaar geluid, waar maar 1
   // woning/2 bewoners binnen de norm-overschrijding vallen, het hinderpercentage worden toegepast op
@@ -4634,7 +4591,7 @@ function m13BuildReportHtml(mapImages) {
   // ---- "Eén bedrag": A (officieel getolereerd niveau) / B (marginale schade boven dat niveau,
   // apart voor hinder middel case 18,4% en hinder worst case 33,7%) / C = A+B (totaal bij die hinder-
   // case). "Hinder best/middel/worst case" hier = de 9/18,4/33,7%-hinderpercentages van §5 — een
-  // andere as dan het best/middel/worst-scenario van het nachtelijke weerregime (§4, Module 6/7).
+  // andere as dan het best/middel/worst-scenario van het nachtelijke weerregime (§4, Module 5/6).
   // De 4%-NMR-drempel (eigen risico vs. compensabele planschade, §9) is een juridische
   // compensatiedrempel (vaste jurisprudentie Afdeling bestuursrechtspraak Raad van State); de
   // 9%-RIVM-hinder is GEEN vergelijkbare juridische drempel maar een andere wetenschappelijke
@@ -4675,6 +4632,36 @@ function m13BuildReportHtml(mapImages) {
     </tr>`).join('');
   }).join('');
 
+  return { catMatrix, catSocByPct, catSocFor, socTotal, hoorbaarCrit, infrasoonCrit, hoorbaarCritTotal, infrasoonCritTotal, m13Abc, m13FmtRange, abcRowsHtml };
+}
+
+function m13BuildReportHtml(mapImages) {
+  const mapViews = mapImages || { closeup: null, regional: null };
+  const now = new Date();
+  const genDate = now.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+  const genTime = now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+
+  const r = m13Readiness();
+  const catLw = computeCategoryLw(state.lwa);
+  const turbines = state.turbines3a;
+  const n = turbines.length;
+  const norm = r.norm;
+  const m6 = r.nTurbines > 0 ? m6ComputeAll() : null;
+  const rows8 = m8ComputeRows();
+  const totals8 = m8ComputeTotals();
+  const horizon = state.m9Horizon;
+  const costPerPerson = state.m9CostPerPersonYear;
+  const dwTotal = M10_DW_SLAAP + M10_DW_HINDER;
+  const m11 = m11ComputeResult();
+  const m12rows = state.m12Groups.map(m12ComputeRow);
+  const m12TotalInvest = m12rows.reduce((s, row) => s + row.investeringTotaal, 0);
+  const m12TotalVermogen = m12rows.reduce((s, row) => s + row.vermogenTotaalMw, 0);
+  const hasBag = r.hasBag;
+  const hasM12 = r.hasM12;
+
+  const _socCosts = m13ComputeSocialCosts(m6, rows8, horizon, costPerPerson, dwTotal, m11);
+  const { catMatrix, catSocByPct, catSocFor, socTotal, hoorbaarCrit, infrasoonCrit, hoorbaarCritTotal, infrasoonCritTotal, m13Abc, m13FmtRange, abcRowsHtml } = _socCosts;
+
   const warningBanner = (!r.normOk || r.nTurbines === 0)
     ? `<div class="rp-callout rp-warn"><strong>Let op — onvolledige basis:</strong> ${
         r.nTurbines === 0
@@ -4682,8 +4669,8 @@ function m13BuildReportHtml(mapImages) {
           : `de geselecteerde norm (${escapeHtml(norm.label)}) heeft geen Lnight-waarde, waardoor geen overschrijdingsafstanden bepaald konden worden.`
       }</div>`
     : (!hasBag
-        ? `<div class="rp-callout rp-warn"><strong>Let op — geen BAG-gegevens:</strong> bij Module 8 zijn nog geen woningen opgehaald voor deze turbinepositie(s). Woningen-, bewoners-, hinder-, zorgkosten- en DALY-cijfers hieronder staan op "—" totdat dat is gedaan.</div>`
-        : (r.bagStale ? `<div class="rp-callout rp-warn"><strong>Let op — mogelijk verouderd:</strong> de turbinepositie(s) zijn gewijzigd sinds de laatste BAG-ophaling bij Module 8; de cijfers hieronder kunnen niet meer bij de huidige plaatsing passen.</div>` : ''));
+        ? `<div class="rp-callout rp-warn"><strong>Let op — geen BAG-gegevens:</strong> bij Module 7 zijn nog geen woningen opgehaald voor deze turbinepositie(s). Woningen-, bewoners-, hinder-, zorgkosten- en DALY-cijfers hieronder staan op "—" totdat dat is gedaan.</div>`
+        : (r.bagStale ? `<div class="rp-callout rp-warn"><strong>Let op — mogelijk verouderd:</strong> de turbinepositie(s) zijn gewijzigd sinds de laatste BAG-ophaling bij Module 7; de cijfers hieronder kunnen niet meer bij de huidige plaatsing passen.</div>` : ''));
 
   const m12Banner = !hasM12
     ? `<div class="rp-callout rp-warn"><strong>Let op — geen investeringscijfers:</strong> bij Module 12 is nog geen turbinegroep toegevoegd. De vergelijking maatschappelijke kosten vs. investeringskosten in dit rapport kan daardoor niet worden gemaakt.</div>`
@@ -4713,22 +4700,24 @@ function m13BuildReportHtml(mapImages) {
   const summarySection = `
   <section class="rp-section">
     <h2>1. Samenvatting — wat berekent elke module</h2>
-    <p>Dit rapport is een synthese van de twaalf rekenmodules van het model; de onderstaande tabel geeft per module een korte uitleg en, waar van toepassing, de actuele uitkomst voor de hierboven vermelde turbinepositie(s).</p>
+    <p>Dit rapport is een synthese van alle rekenmodules van het model; de onderstaande tabel geeft per module een korte uitleg en, waar van toepassing, de actuele uitkomst voor de hierboven vermelde turbinepositie(s).</p>
     <table class="rp-table">
       <thead><tr><th style="width:8%">Module</th><th style="width:32%">Wat het berekent</th><th>Actuele uitkomst voor deze locatie</th></tr></thead>
       <tbody>
         <tr><td>1</td><td>Bronvermogen (L<sub>WA</sub>) van de turbine, opgesplitst in drie categorieën met eigen weging.</td><td>L<sub>WA</sub> = ${state.lwa.toFixed(1)} dB(A) → hoorbaar ${catLw.hoorbaar.toFixed(1)} dB(A), laagfrequent ${catLw.laagfrequent.toFixed(1)} dB(Lin), infrasoon ${catLw.infrasoon.toFixed(1)} dB(G)</td></tr>
-        <tr><td>2</td><td>Omstandighedenfactoren (windschering/inversie, torenzog, amplitudemodulatie, curtailment) die 's nachts geluid kunnen versterken.</td><td>Bepaalt samen met Module 6/7 het onderscheid tussen best/middel/worst case hieronder.</td></tr>
+        <tr><td>2</td><td>Omstandighedenfactoren (windschering/inversie, torenzog, amplitudemodulatie, curtailment) die 's nachts geluid kunnen versterken.</td><td>Bepaalt samen met Module 5/6 het onderscheid tussen best/middel/worst case hieronder.</td></tr>
         <tr><td>3</td><td>Plaatsing van turbine(s) op kaart en live geluidsniveau per categorie/afstand/richting.</td><td>${n} turbine(s) geplaatst — ${escapeHtml(turbineList)}</td></tr>
         <tr><td>4</td><td>Cumulatie: energetische optelling van meerdere turbines op een rekenpunt.</td><td>Zie Module 4 in de app voor het live cumulatie-resultaat op een zelf te kiezen punt.</td></tr>
-        <tr><td>5</td><td>Toetsing van het berekende geluidsniveau aan een wettelijke/advies-norm (Lnight).</td><td>Actieve norm: ${escapeHtml(norm.label)}${norm.lnight != null ? ` (Lnight ≤ ${norm.lnight} dB)` : ' (geen Lnight-waarde)'}</td></tr>
-        <tr><td>6</td><td>Hoe vaak de nachtelijke best/middel/worst-omstandigheden voorkomen, op basis van klimatologie.</td><td>${m6 ? `Best ${m13Pct(m6.pct.best)} (${m6.days.best} nachten/jr), middel ${m13Pct(m6.pct.middel)} (${m6.days.middel} nachten/jr), worst ${m13Pct(m6.pct.worst)} (${m6.days.worst} nachten/jr)` : '— (geen turbine geplaatst)'}</td></tr>
-        <tr><td>7</td><td>Wetenschappelijke onderbouwing (shear-capacity, Bosveld/Abraham &amp; Monahan) van de middel/worst-splitsing in Module 6.</td><td>Geostrofische wind (ERA5) ter plaatse: U<sub>geo</sub> ≈ ${state.m7Ugeo} m/s</td></tr>
-        <tr><td>8</td><td>Aantal woningen (BAG) en bewoners binnen de overschrijdingsring per scenario/categorie, met hinderpercentage 9/18,4/33,7%.</td><td>${hasBag ? `Zie §4 (ring/woningen) en §5 (hinderpercentages) hieronder` : '— (nog geen BAG-gegevens opgehaald)'}</td></tr>
-        <tr><td>9</td><td>Geschatte jaarlijkse zorgkosten per gehinderde bewoner (Godono e.a. 2023).</td><td>€${costPerPerson.toFixed(2)}/bewoner/jaar, horizon ${horizon} jaar — zie §6</td></tr>
-        <tr><td>10</td><td>DALY-verlies (disability-adjusted life years) door slaapverstoring + hinder, in drie monetaire waarderingen.</td><td>${dwTotal.toFixed(3)} DALY/bewoner/jaar × €50.000/€70.000/€80.000 per DALY — zie §7</td></tr>
-        <tr><td>11</td><td>Waardedaling van woningen (Droës &amp; Koster 2021), naar tiphoogte-categorie.</td><td>${m11.hasData ? `${m11.totals.woningen.toLocaleString('nl-NL')} woningen, €${Math.round(m11.totals.waarde).toLocaleString('nl-NL')} totale waardedaling` : '— (geen BAG-gegevens of geen turbine geplaatst)'}</td></tr>
+        <tr><td>5</td><td>Hoe vaak de nachtelijke best/middel/worst-omstandigheden voorkomen, op basis van klimatologie.</td><td>${m6 ? `Best ${m13Pct(m6.pct.best)} (${m6.days.best} nachten/jr), middel ${m13Pct(m6.pct.middel)} (${m6.days.middel} nachten/jr), worst ${m13Pct(m6.pct.worst)} (${m6.days.worst} nachten/jr)` : '— (geen turbine geplaatst)'}</td></tr>
+        <tr><td>6</td><td>Wetenschappelijke onderbouwing (shear-capacity, Bosveld/Abraham &amp; Monahan) van de middel/worst-splitsing in Module 5.</td><td>Geostrofische wind (ERA5) ter plaatse: U<sub>geo</sub> ≈ ${state.m7Ugeo} m/s</td></tr>
+        <tr><td>7</td><td>Aantal woningen (BAG) en bewoners binnen de overschrijdingsring per scenario/categorie, met hinderpercentage 9/18,4/33,7%.</td><td>${hasBag ? `Zie §4 (ring/woningen) en §5 (hinderpercentages) hieronder` : '— (nog geen BAG-gegevens opgehaald)'}</td></tr>
+        <tr><td>8</td><td>Geschatte jaarlijkse zorgkosten per gehinderde bewoner (Godono e.a. 2023).</td><td>€${costPerPerson.toFixed(2)}/bewoner/jaar, horizon ${horizon} jaar — zie §6</td></tr>
+        <tr><td>9</td><td>DALY-verlies (disability-adjusted life years) door slaapverstoring + hinder, in drie monetaire waarderingen.</td><td>${dwTotal.toFixed(3)} DALY/bewoner/jaar × €50.000/€70.000/€80.000 per DALY — zie §7</td></tr>
+        <tr><td>10</td><td>Waardedaling van woningen (Droës &amp; Koster 2021), naar tiphoogte-categorie.</td><td>${m11.hasData ? `${m11.totals.woningen.toLocaleString('nl-NL')} woningen, €${Math.round(m11.totals.waarde).toLocaleString('nl-NL')} totale waardedaling` : '— (geen BAG-gegevens of geen turbine geplaatst)'}</td></tr>
+        <tr><td>11</td><td>Maatschappelijke kosten: bundelt zorgkosten (Module 8), DALY-waarde (Module 9) en waardedaling (Module 10) tot één bedrag per geluidscategorie, plus een A/B/C-uitsplitsing tussen het officieel getolereerde hinderniveau en de mogelijke overschrijding daarvan.</td><td>${hoorbaarCritTotal != null ? `Zie §10/§10.1 hieronder — bijv. hoorbaar/33,7%: ${m9FmtEuro(hoorbaarCritTotal)} totale maatschappelijke kosten over ${horizon} jaar` : '— (geen BAG-gegevens of geen turbine geplaatst)'}</td></tr>
         <tr><td>12</td><td>Bouw-/investeringskosten per turbine(groep), PBL-eindadvies SDE++ 2026.</td><td>${hasM12 ? `${m12rows.length} groep(en), ${m12TotalVermogen.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW totaal, €${Math.round(m12TotalInvest).toLocaleString('nl-NL')} investering` : '— (nog geen turbinegroep toegevoegd)'}</td></tr>
+        <tr><td>13</td><td>Jaargemiddelde Lden/L<sub>night</sub> per scenario en windrichting, getoetst aan de eigen Lden-/L<sub>night</sub>-norm uit Module 1 (experimentele uitbreiding).</td><td>Zie Module 13 in de app voor de live toetsing per windrichting.</td></tr>
+        <tr><td>14</td><td>Dit rapport: een doorlopende, citeerbare synthese van alle bovenstaande modules.</td><td>U leest het nu.</td></tr>
       </tbody>
     </table>
   </section>`;
@@ -4751,7 +4740,7 @@ function m13BuildReportHtml(mapImages) {
         <tr><td>Bronvermogen L<sub>WA</sub> (Module 1)</td><td>${state.lwa.toFixed(1)} dB(A) totaal → hoorbaar ${catLw.hoorbaar.toFixed(1)} dB(A) / laagfrequent ${catLw.laagfrequent.toFixed(1)} dB(Lin) / infrasoon ${catLw.infrasoon.toFixed(1)} dB(G)</td></tr>
         <tr><td>Aantal turbines (Module 3)</td><td>${n}</td></tr>
         <tr><td>Positie(s)</td><td>${escapeHtml(turbineList)}</td></tr>
-        <tr><td>Actieve norm (Module 5)</td><td>${escapeHtml(norm.label)}${norm.lnight != null ? `, Lnight ≤ ${norm.lnight} dB` : ''}</td></tr>
+        <tr><td>Actieve norm (Module 1)</td><td>${escapeHtml(norm.label)}${norm.lnight != null ? `, Lnight ≤ ${norm.lnight} dB` : ''}</td></tr>
       </tbody>
     </table>
     <p>Vanuit dit bronvermogen en deze positie(s) berekent het model per categorie (hoorbaar/laagfrequent/infrasoon) en per scenario (best/middel/worst) de afstand waarop het geluidsniveau de norm overschrijdt (de "overschrijdingsring"), en telt het de unieke BAG-woningen binnen die ring.</p>
@@ -4891,7 +4880,7 @@ function m13BuildReportHtml(mapImages) {
       <thead><tr><th>Scenario</th><th>Overschrijdingsring (≥ 1 tertsband boven NSG-gehoordrempel)</th><th>Woningen / bewoners</th><th>Hinderpercentage</th><th>Bewoners "met hinder" (indicatief*)</th><th>Zorgkosten (${horizon}j)</th><th>DALY (${horizon}j)</th></tr></thead>
       <tbody>${nsgRowsHtml}</tbody>
     </table>
-    <p class="rp-note"><em>* De hinderpercentages/zorgkosten/DALY's in deze tabel zijn puur rekentechnisch afgeleid (zelfde formules als §5–§7) en NIET wetenschappelijk gevalideerd voor een waarneembaarheidsnorm — waarneembaar zijn is geen synoniem voor hinder ondervinden. Er bestaat geen wettelijke, beleidsmatige of wetenschappelijke basis om aan een NSG-overschrijding een hinderpercentage, zorgkosten of DALY's te koppelen; deze kolommen zijn een rekentechnische extrapolatie van de §5–§7-methode, niet een erkende toetsingsmethode voor NSG. Ze zijn uitsluitend ter vergelijking met §7b (Vercammen) opgenomen, niet als zelfstandige, onderbouwde claim over daadwerkelijke hinder of kosten.</em></p>` : '<p class="rp-note"><em>Geen BAG-gegevens opgehaald bij Module 8 — woningen/bewoners kunnen hier niet worden getoond.</em></p>'}
+    <p class="rp-note"><em>* De hinderpercentages/zorgkosten/DALY's in deze tabel zijn puur rekentechnisch afgeleid (zelfde formules als §5–§7) en NIET wetenschappelijk gevalideerd voor een waarneembaarheidsnorm — waarneembaar zijn is geen synoniem voor hinder ondervinden. Er bestaat geen wettelijke, beleidsmatige of wetenschappelijke basis om aan een NSG-overschrijding een hinderpercentage, zorgkosten of DALY's te koppelen; deze kolommen zijn een rekentechnische extrapolatie van de §5–§7-methode, niet een erkende toetsingsmethode voor NSG. Ze zijn uitsluitend ter vergelijking met §7b (Vercammen) opgenomen, niet als zelfstandige, onderbouwde claim over daadwerkelijke hinder of kosten.</em></p>` : '<p class="rp-note"><em>Geen BAG-gegevens opgehaald bij Module 7 — woningen/bewoners kunnen hier niet worden getoond.</em></p>'}
   </section>`;
 
   // ---- Sectie 7b: Laagfrequent geluid – Vercammen (per-tertsband toetsing, AANVULLEND) ----
@@ -4928,7 +4917,7 @@ function m13BuildReportHtml(mapImages) {
       <thead><tr><th>Scenario</th><th>Overschrijdingsring (≥ 1 tertsband boven Vercammen)</th><th>Woningen / bewoners</th><th>Hinderpercentage</th><th>Bewoners "met hinder" (indicatief*)</th><th>Zorgkosten (${horizon}j)</th><th>DALY (${horizon}j)</th></tr></thead>
       <tbody>${vercammenRowsHtml}</tbody>
     </table>
-    <p class="rp-note"><em>* De hinderpercentages/zorgkosten/DALY's in deze tabel zijn puur rekentechnisch afgeleid (zelfde formules als §5–§7, oorspronkelijk gecalibreerd op het geaggregeerde dB(Lin)-getal, niet op een per-tertsband Vercammen-overschrijding). De Vercammen-curve zelf is als hindermaatstaf erkend in de jurisprudentie (<a href="https://www.commissiemer.nl/english/jurisprudence/ECLI:NL:RVS:2021:1681" target="_blank" rel="noopener">ECLI:NL:RVS:2021:1681</a>), maar er bestaat geen wettelijke, beleidsmatige of wetenschappelijke basis om aan een Vercammen-overschrijding dezelfde hinderpercentage-, zorgkosten- of DALY-formules te koppelen als aan de dB(Lin)-toetsing in §5–§7. Deze kolommen zijn een rekentechnische extrapolatie, uitsluitend ter vergelijking met §7a (NSG) opgenomen, niet als zelfstandige, onderbouwde claim over daadwerkelijke hinder of kosten.</em></p>` : '<p class="rp-note"><em>Geen BAG-gegevens opgehaald bij Module 8 — woningen/bewoners kunnen hier niet worden getoond.</em></p>'}
+    <p class="rp-note"><em>* De hinderpercentages/zorgkosten/DALY's in deze tabel zijn puur rekentechnisch afgeleid (zelfde formules als §5–§7, oorspronkelijk gecalibreerd op het geaggregeerde dB(Lin)-getal, niet op een per-tertsband Vercammen-overschrijding). De Vercammen-curve zelf is als hindermaatstaf erkend in de jurisprudentie (<a href="https://www.commissiemer.nl/english/jurisprudence/ECLI:NL:RVS:2021:1681" target="_blank" rel="noopener">ECLI:NL:RVS:2021:1681</a>), maar er bestaat geen wettelijke, beleidsmatige of wetenschappelijke basis om aan een Vercammen-overschrijding dezelfde hinderpercentage-, zorgkosten- of DALY-formules te koppelen als aan de dB(Lin)-toetsing in §5–§7. Deze kolommen zijn een rekentechnische extrapolatie, uitsluitend ter vergelijking met §7a (NSG) opgenomen, niet als zelfstandige, onderbouwde claim over daadwerkelijke hinder of kosten.</em></p>` : '<p class="rp-note"><em>Geen BAG-gegevens opgehaald bij Module 7 — woningen/bewoners kunnen hier niet worden getoond.</em></p>'}
   </section>`;
 
   // ---- Sectie: kritische analyse frequentie + jaargemiddelden ----
@@ -4946,13 +4935,13 @@ function m13BuildReportHtml(mapImages) {
         ${scenarioRow('Worst case (helder, zeer stabiele grenslaag — vSBL)', 'worst')}
       </tbody>
     </table>
-    <p>Deze verdeling is gebaseerd op de klimatologie van Cabauw en Lutjewad (Module 6/7: Van den Berg 2004/2008, Abraham &amp; Monahan 2019a/b, Baas e.a. 2009) en varieert met de afstand van de turbine tot de kust en de breedtegraad (maandverdeling). Zie de "Beperkingen"-callout bij Module 6/7 in de app voor de volledige onderbouwing.</p>` : '<p><em>Geen turbine geplaatst — deze verdeling kan niet worden getoond.</em></p>'}
+    <p>Deze verdeling is gebaseerd op de klimatologie van Cabauw en Lutjewad (Module 5/6: Van den Berg 2004/2008, Abraham &amp; Monahan 2019a/b, Baas e.a. 2009) en varieert met de afstand van de turbine tot de kust en de breedtegraad (maandverdeling). Zie de "Beperkingen"-callout bij Module 5/6 in de app voor de volledige onderbouwing.</p>` : '<p><em>Geen turbine geplaatst — deze verdeling kan niet worden getoond.</em></p>'}
 
     <h3>8.2 Waarom maatschappelijke kosten sowieso optreden</h3>
-    <p>De kern van deze analyse is dat <strong>Module 9 en 10 werken met jaargemiddelden</strong> (zorgkosten per jaar, DALY's per jaar), niet met een eenmalige worst-case-schatting. Dat heeft een directe consequentie die vaak wordt gemist in het maatschappelijke debat: het is <em>geen</em> vereiste dat een omwonende voortdurend in het worst-case-scenario zit om toch reële jaarlijkse kosten te ondervinden.</p>
+    <p>De kern van deze analyse is dat <strong>Module 8 en 9 werken met jaargemiddelden</strong> (zorgkosten per jaar, DALY's per jaar), niet met een eenmalige worst-case-schatting. Dat heeft een directe consequentie die vaak wordt gemist in het maatschappelijke debat: het is <em>geen</em> vereiste dat een omwonende voortdurend in het worst-case-scenario zit om toch reële jaarlijkse kosten te ondervinden.</p>
     <ul class="rp-list">
       ${m6 ? `<li>Zelfs in het <strong>beste geval</strong> (bewolkt) doet het gunstigste regime zich ${bestDays} van de 365 nachten voor — de overige ${365 - bestDays} nachten (${m13Pct(100 - m6.pct.best)}) vallen in het middel- of worst-case-regime.</li>
-      <li>Het <strong>worst-case-scenario</strong> is met ${worstDays} nachten per jaar (${m13Pct(m6.pct.worst)}) geen zeldzame uitschieter, maar een terugkerend, voorspelbaar onderdeel van het jaar — geconcentreerd in heldere, koude en meestal winterse/vroege-voorjaarsnachten (zie de maandverdeling in Module 6).</li>` : '<li><em>Geen turbine geplaatst — de precieze verdeling kan hier niet worden getoond, maar het onderliggende principe (zie hierna) geldt onafhankelijk van de locatie.</em></li>'}
+      <li>Het <strong>worst-case-scenario</strong> is met ${worstDays} nachten per jaar (${m13Pct(m6.pct.worst)}) geen zeldzame uitschieter, maar een terugkerend, voorspelbaar onderdeel van het jaar — geconcentreerd in heldere, koude en meestal winterse/vroege-voorjaarsnachten (zie de maandverdeling in Module 5).</li>` : '<li><em>Geen turbine geplaatst — de precieze verdeling kan hier niet worden getoond, maar het onderliggende principe (zie hierna) geldt onafhankelijk van de locatie.</em></li>'}
       <li>Omdat elk jaar <em>alle drie</em> de regimes met zekerheid optreden (in wisselende verhouding), is een jaargemiddelde zorgkosten- of DALY-schatting geen overschatting gebaseerd op een hypothetisch ergst geval — het is een <strong>gewogen gemiddelde van drie regimes die elk jaar daadwerkelijk plaatsvinden</strong>. De vraag is dus niet <em>of</em> deze kosten optreden, maar uitsluitend hoe ze zich verdelen over het jaar en welk hinderpercentage (9/18,4/33,7%, zie §5) het meest representatief is voor de specifieke situatie.</li>
       <li>Dit maakt de maatschappelijke kosten in §9 hieronder structureel, terugkerend en niet-hypothetisch — in tegenstelling tot de investeringskosten in Module 12, die eenmalig zijn.</li>
     </ul>
@@ -5016,8 +5005,8 @@ function m13BuildReportHtml(mapImages) {
     </table>
     <p class="rp-note">¹ Zorgkosten + DALY-waarde (€70k) + waardedaling (§9, eenmalig, niet scenario- of categorieafhankelijk — daarom in elke rij hetzelfde bedrag opgeteld). <strong>Hoorbaar</strong> is de wetenschappelijk best onderbouwde rij (RIVM/Pawlaczyk-onderzoek betreft hoorbaar geluid, §5); laagfrequent/infrasoon zijn illustratieve toepassingen van dezelfde hinderpercentages op hun eigen (grotere) ringpopulatie.</p>
 
-    <h3>10.1 Eén bedrag: geaccepteerd risico versus overschrijding daarvan</h3>
-    <p>Het RIVM-hinderpercentage van 9% en de NMR-drempel van ≤4% waardedaling zijn wat de huidige normstelling en jurisprudentie als &quot;normaal maatschappelijk risico&quot; beschouwt — het niveau dat omwonenden zonder compensatieroute geacht worden te dragen. De Pawlaczyk-hinderpercentages (18,4%/33,7%) beschrijven een hoger geschat hinderniveau bij dezelfde blootstelling. Onderstaande tabel splitst, per geluidscategorie, de kosten in drie bedragen: <strong>A</strong> het bedrag op het officieel getolereerde niveau, <strong>B</strong> de extra (marginale) kosten als het hogere Pawlaczyk-percentage in plaats van het RIVM-percentage klopt, en <strong>C = A+B</strong> het totaal bij dat Pawlaczyk-percentage. Dit wordt apart doorgerekend voor <strong>hinder middel case (18,4%)</strong> en <strong>hinder worst case (33,7%)</strong> — de aanduiding &quot;hinder ... case&quot; wordt hier uitsluitend gebruikt voor deze hinderpercentage-as, ter onderscheid van het eerder gebruikte best/middel/worst-scenario van het nachtelijke weerregime (§4, Module 6/7), dat een andere, onafhankelijke indeling is. DALY's zijn gewaardeerd als bandbreedte €50.000–€80.000 per DALY (RIVM–Zorginstituut NL, zie Bronnen), niet als het vaste €70.000-PBL-cijfer van de tabel hierboven.</p>
+    <h3>10.1 Eén bedrag: geaccepteerd risico versus overschrijding daarvan (zie ook Module 11 &quot;Maatschappelijke kosten&quot; in de app)</h3>
+    <p>Het RIVM-hinderpercentage van 9% en de NMR-drempel van ≤4% waardedaling zijn wat de huidige normstelling en jurisprudentie als &quot;normaal maatschappelijk risico&quot; beschouwt — het niveau dat omwonenden zonder compensatieroute geacht worden te dragen. De Pawlaczyk-hinderpercentages (18,4%/33,7%) beschrijven een hoger geschat hinderniveau bij dezelfde blootstelling. Onderstaande tabel splitst, per geluidscategorie, de kosten in drie bedragen: <strong>A</strong> het bedrag op het officieel getolereerde niveau, <strong>B</strong> de extra (marginale) kosten als het hogere Pawlaczyk-percentage in plaats van het RIVM-percentage klopt, en <strong>C = A+B</strong> het totaal bij dat Pawlaczyk-percentage. Dit wordt apart doorgerekend voor <strong>hinder middel case (18,4%)</strong> en <strong>hinder worst case (33,7%)</strong> — de aanduiding &quot;hinder ... case&quot; wordt hier uitsluitend gebruikt voor deze hinderpercentage-as, ter onderscheid van het eerder gebruikte best/middel/worst-scenario van het nachtelijke weerregime (§4, Module 5/6), dat een andere, onafhankelijke indeling is. DALY's zijn gewaardeerd als bandbreedte €50.000–€80.000 per DALY (RIVM–Zorginstituut NL, zie Bronnen), niet als het vaste €70.000-PBL-cijfer van de tabel hierboven.</p>
     <table class="rp-table rp-table-compact">
       <thead><tr><th>Categorie</th><th>Bedrag</th><th>Hinderpercentage</th><th>Waarde (bandbreedte €50k–€80k/DALY)</th></tr></thead>
       <tbody>${abcRowsHtml}</tbody>
@@ -5054,7 +5043,7 @@ function m13BuildReportHtml(mapImages) {
     <h3>11.4 Aanbeveling voor Nederland</h3>
     <ol class="rp-list">
       <li><strong>Introduceer een Nederlandse LFN-norm naar Deens voorbeeld:</strong> een berekende binnenwaarde van orde 20 dB(A) in de 10-160 Hz-band voor de avond/nacht (met een ruimere dagwaarde), als aanvulling op — niet vervanging van — de bestaande hoorbaar-geluidnorm. Dit dicht de leemte die dit rapport in §4/§5 blootlegt: laagfrequent en infrasoon geluid worden nu alleen indicatief getoond, niet getoetst.</li>
-      <li><strong>Koppel operationele maatregelen aan de scenario-detectie van Module 6/7:</strong> verplicht een noise-reduced-operation-modus (vermogensreductie) op nachten waarin de klimatologische/shear-capacity-indicatoren een worst-case (vSBL-)regime voorspellen, naar het Duitse precedent van een weersafhankelijke nachtmodus — in plaats van het hele jaar een vaste, permanente afregeling die op de meeste nachten onnodig is en op de kritieke nachten mogelijk nog steeds ontoereikend.</li>
+      <li><strong>Koppel operationele maatregelen aan de scenario-detectie van Module 5/6:</strong> verplicht een noise-reduced-operation-modus (vermogensreductie) op nachten waarin de klimatologische/shear-capacity-indicatoren een worst-case (vSBL-)regime voorspellen, naar het Duitse precedent van een weersafhankelijke nachtmodus — in plaats van het hele jaar een vaste, permanente afregeling die op de meeste nachten onnodig is en op de kritieke nachten mogelijk nog steeds ontoereikend.</li>
       <li><strong>Houd cumulatie in de gaten (Module 4):</strong> bij meerdere turbines of naburige windparken moet de geluidsbijdrage energetisch worden opgeteld op het rekenpunt, niet per turbine afzonderlijk getoetst — een op zichzelf toelaatbare turbine kan gecombineerd met naburige turbines de norm alsnog doen overschrijden. Dit rapport rekent per turbinepositie; bij meerdere naburige projecten dient een gezamenlijke cumulatietoets te worden uitgevoerd.</li>
       <li><strong>Onafhankelijke verificatie na realisatie:</strong> vul de vooraf berekende prognose (zoals in dit model) aan met verplichte post-constructiemeting, zoals in de Duitse praktijk gebruikelijk is bij een schallreduzierter Betrieb — een berekende prognose is per definitie een model, geen meting van de werkelijke situatie.</li>
       <li><strong>Verplicht het worst-case-cijfer naast het jaargemiddelde te rapporteren, niet in plaats daarvan:</strong> zie §8.3 — een jaargemiddelde maatschappelijke-kostenraming (§10) is toelaatbaar voor een financiële afweging, maar ontoereikend als gezondheidskundige toets. Vergunningverlening moet dwingend het piekcijfer op een worst-case-nacht (§5, 33,7%-scenario) laten zien, anders wordt de daadwerkelijke beperking van omwonenden weggemiddeld tot een cijfer dat niemand op de kritieke nachten zelf ervaart.</li>
@@ -5078,7 +5067,7 @@ function m13BuildReportHtml(mapImages) {
       <li>Bundesverwaltungsgericht, <a href="https://www.bverwg.de/pm/2025/4" target="_blank" rel="noopener">persbericht nr. 4/2025 (schallreduzierter Betrieb)</a></li>
       <li>WHO (2018), <a href="https://iris.who.int/bitstream/handle/10665/343936/WHO-EURO-2018-3287-43046-60243-eng.pdf" target="_blank" rel="noopener">Environmental Noise Guidelines for the European Region</a>, samengevat door <a href="https://www.wbm.co.uk/wp-content/uploads/2018/11/WBM-WHO-2018-Summary-Nov-2018.pdf" target="_blank" rel="noopener">WBM (2018)</a></li>
     </ul>
-    <p class="rp-note">Zie ook de uitgebreide methodologie- en bronnenlijst onderaan de webapplicatie (sectie "Methodologie &amp; bronnen") voor de volledige onderbouwing van Module 1-8.</p>
+    <p class="rp-note">Zie ook de uitgebreide methodologie- en bronnenlijst onderaan de webapplicatie (sectie "Methodologie &amp; bronnen") voor de volledige onderbouwing van Module 1-7.</p>
   </section>`;
 
   return `<!DOCTYPE html>
@@ -5134,7 +5123,7 @@ function m13BuildReportHtml(mapImages) {
 <div class="rp-page">
   <div class="rp-toolbar no-print"><button class="rp-print-btn" onclick="window.print()">Afdrukken / opslaan als PDF</button></div>
   <div class="rp-header">
-    <div class="rp-eyebrow">Kritisch rapport — Module 13</div>
+    <div class="rp-eyebrow">Kritisch rapport — Module 14</div>
     <h1>Windturbinegeluid 's nachts: hinder, maatschappelijke kosten en normstelling</h1>
     <div class="rp-sub">Gegenereerd op ${genDate} om ${genTime} · Bronvermogen ${state.lwa.toFixed(1)} dB(A) · ${n} turbine(s): ${escapeHtml(turbineList)}</div>
   </div>
@@ -5154,7 +5143,7 @@ function m13BuildReportHtml(mapImages) {
   ${compareSection}
   ${advisorySection}
   ${bronnenSection}
-  <div class="rp-footer">Automatisch gegenereerd door het interactieve windturbinegeluidsmodel (Module 13). Dient ter beleidsmatige illustratie — vervangt geen formeel akoestisch onderzoek, planschadetaxatie of gezondheidskundig advies. Klik linksboven op "Afdrukken / opslaan als PDF" en kies als bestemming "Opslaan als PDF" om dit rapport te downloaden.</div>
+  <div class="rp-footer">Automatisch gegenereerd door het interactieve windturbinegeluidsmodel (Module 14). Dient ter beleidsmatige illustratie — vervangt geen formeel akoestisch onderzoek, planschadetaxatie of gezondheidskundig advies. Klik linksboven op "Afdrukken / opslaan als PDF" en kies als bestemming "Opslaan als PDF" om dit rapport te downloaden.</div>
 </div>
 </body>
 </html>`;
