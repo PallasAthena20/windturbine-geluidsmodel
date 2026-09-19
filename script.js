@@ -964,7 +964,7 @@ const state = {
   m7Ugeo: 9,
   m7UgeoFetching: false, m7UgeoAutoInfo: null, m7UgeoAutoError: null,
   // Module 8: woningen (BAG) → bewoners → geschatte hinder per scenario — zie script.js §M8.
-  m8HouseholdSize: 2.10, m8AddressData: null, m8Fetching: false, m8Error: null, m8StilstandNachten: 0,
+  m8HouseholdSize: 2.10, m8AddressData: null, m8Fetching: false, m8Error: null,
   // Module 9/10: kosten- en DALY-berekening op basis van Module 8's bewonersaantallen — zie script.js §M9/§M10.
   m9CostPerPersonYear: 609.60, m9Horizon: 25,
   // Module 11: waardedaling woningen (Droës & Koster 2021) — zie script.js §M11. Tiphoogte-categorie
