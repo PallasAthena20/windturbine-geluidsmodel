@@ -5552,6 +5552,20 @@ async function m13OpenReport() {
   const win = window.open('', '_blank');
   if (win) {
     win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rapport wordt opgebouwd…</title></head><body style="font-family:sans-serif;padding:40px;color:#333;">Rapport wordt opgebouwd, inclusief kaartafbeelding van de geplaatste turbine(s)…</body></html>');
+    // KRITIEK voor de kaartcapture hieronder: window.open() geeft in de meeste browsers
+    // meteen de focus aan het NIEUWE (lege) tabblad, waardoor dit tabblad -- waar de eigenlijke
+    // asynchrone kaartcapture draait -- op de achtergrond komt. MapLibre GL tekent zijn WebGL-
+    // canvas via requestAnimationFrame, en Chromium vertraagt/bevriest rAF-callbacks zeer sterk
+    // in achtergrondtabbladen: tegels worden dan wel gedownload, maar niet (of veel te laat) naar
+    // de canvas geschilderd, ongeacht hoe lang of hoe vaak m13CaptureSingleView opnieuw probeert.
+    // Dit is de daadwerkelijke oorzaak gebleken van het aanhoudende 'lege achtergrond'-defect
+    // (bevestigd via handmatige test: de later vastgelegde regionale kaart faalde veel minder
+    // vaak dan de eerder vastgelegde closeup-kaart -- precies zoals verwacht als er meer
+    // verstreken tijd meer kans geeft op een enkele doorgelaten rAF-tick). We claimen de focus
+    // daarom meteen terug op DIT aanroepende venster, zodat het gedurende de hele capture in de
+    // voorgrond blijft -- pas als de rapport-URL klaarstaat (win.location.href verderop) mag de
+    // gebruiker weer naar het rapporttabblad wisselen.
+    try { window.focus(); } catch (e) { /* negeren */ }
   }
   if (btn) {
     btn.disabled = true;
