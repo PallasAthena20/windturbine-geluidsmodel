@@ -4618,6 +4618,8 @@ function m13BuildReportHtml(mapImages) {
         costHorizon: anyData ? costHorizonWeighted : null,
         dalyHorizon: anyData ? dalyHorizonWeighted : null,
         euro70k: anyData ? dalyHorizonWeighted * 70000 : null,
+        euro50k: anyData ? dalyHorizonWeighted * 50000 : null,
+        euro80k: anyData ? dalyHorizonWeighted * 80000 : null,
       };
     });
     return { key: meta.key, label: meta.label, byPct };
@@ -4628,6 +4630,50 @@ function m13BuildReportHtml(mapImages) {
   const infrasoonCrit = catSocFor('infrasoon').byPct[2];
   const hoorbaarCritTotal = socTotal(hoorbaarCrit);
   const infrasoonCritTotal = socTotal(infrasoonCrit);
+
+  // ---- "Eén bedrag": A (officieel getolereerd niveau) / B (marginale schade boven dat niveau,
+  // apart voor hinder middel case 18,4% en hinder worst case 33,7%) / C = A+B (totaal bij die hinder-
+  // case). "Hinder best/middel/worst case" hier = de 9/18,4/33,7%-hinderpercentages van §5 — een
+  // andere as dan het best/middel/worst-scenario van het nachtelijke weerregime (§4, Module 6/7).
+  // De 4%-NMR-drempel (eigen risico vs. compensabele planschade, §9) is een juridische
+  // compensatiedrempel (vaste jurisprudentie Afdeling bestuursrechtspraak Raad van State); de
+  // 9%-RIVM-hinder is GEEN vergelijkbare juridische drempel maar een andere wetenschappelijke
+  // schatting (Nederlandse Lden-dosis-effectrelatie) dan de Poolse Pawlaczyk-populatie achter
+  // 18,4%/33,7% — "18,4% − 9%" is dus een verschil tussen twee normstellingen/onderzoeken, geen
+  // interne subtractie binnen dezelfde onderzoekspopulatie (dat is 33,7% → 18,4% wél, want beide
+  // komen uit dezelfde Pawlaczyk-studie). DALY-waarde als bandbreedte €50.000–€80.000 (RIVM–
+  // Zorginstituut NL, zie §7/Bronnen) i.p.v. het vaste PBL-cijfer van €70.000 hierboven.
+  function m13Abc(cat) {
+    const p9 = cat.byPct[0], p184 = cat.byPct[1], p337 = cat.byPct[2];
+    if (!m11.hasData || p9.costHorizon == null || p184.costHorizon == null || p337.costHorizon == null) return null;
+    const eigen = m11.totals.eigen, compensabel = m11.totals.compensabel;
+    const A = { lo: p9.costHorizon + p9.euro50k + eigen, hi: p9.costHorizon + p9.euro80k + eigen };
+    const bFor = (p) => ({
+      lo: (p.costHorizon - p9.costHorizon) + (p.euro50k - p9.euro50k) + compensabel,
+      hi: (p.costHorizon - p9.costHorizon) + (p.euro80k - p9.euro80k) + compensabel,
+    });
+    const Bmiddel = bFor(p184), Bworst = bFor(p337);
+    const Cmiddel = { lo: A.lo + Bmiddel.lo, hi: A.hi + Bmiddel.hi };
+    const Cworst = { lo: A.lo + Bworst.lo, hi: A.hi + Bworst.hi };
+    return { A, Bmiddel, Cmiddel, Bworst, Cworst };
+  }
+  const m13FmtRange = (r) => (!r ? '—' : (Math.round(r.lo) === Math.round(r.hi) ? m9FmtEuro(r.lo) : `${m9FmtEuro(r.lo)} – ${m9FmtEuro(r.hi)}`));
+  const abcRowsHtml = catSocByPct.map((cat) => {
+    const abc = m13Abc(cat);
+    const rows = [
+      ['A — Officieel getolereerd niveau', 'hinder best case, 9% RIVM + waardedaling ≤4% (eigen risico)', abc ? abc.A : null],
+      ['B — Marginale schade boven getolereerd niveau', 'hinder middel case, 18,4% Pawlaczyk', abc ? abc.Bmiddel : null],
+      ['C — Totale maatschappelijke kosten (A+B)', 'hinder middel case, 18,4% Pawlaczyk', abc ? abc.Cmiddel : null],
+      ['B — Marginale schade boven getolereerd niveau', 'hinder worst case, 33,7% Pawlaczyk', abc ? abc.Bworst : null],
+      ['C — Totale maatschappelijke kosten (A+B)', 'hinder worst case, 33,7% Pawlaczyk', abc ? abc.Cworst : null],
+    ];
+    return rows.map((row, idx) => `<tr>
+      ${idx === 0 ? `<td rowspan="5">${cat.label}</td>` : ''}
+      <td>${row[0]}</td>
+      <td>${row[1]}</td>
+      <td>${m13FmtRange(row[2])}</td>
+    </tr>`).join('');
+  }).join('');
 
   const warningBanner = (!r.normOk || r.nTurbines === 0)
     ? `<div class="rp-callout rp-warn"><strong>Let op — onvolledige basis:</strong> ${
@@ -4969,6 +5015,14 @@ function m13BuildReportHtml(mapImages) {
       <tbody>${socRowsHtml}</tbody>
     </table>
     <p class="rp-note">¹ Zorgkosten + DALY-waarde (€70k) + waardedaling (§9, eenmalig, niet scenario- of categorieafhankelijk — daarom in elke rij hetzelfde bedrag opgeteld). <strong>Hoorbaar</strong> is de wetenschappelijk best onderbouwde rij (RIVM/Pawlaczyk-onderzoek betreft hoorbaar geluid, §5); laagfrequent/infrasoon zijn illustratieve toepassingen van dezelfde hinderpercentages op hun eigen (grotere) ringpopulatie.</p>
+
+    <h3>10.1 Eén bedrag: geaccepteerd risico versus overschrijding daarvan</h3>
+    <p>Het RIVM-hinderpercentage van 9% en de NMR-drempel van ≤4% waardedaling zijn wat de huidige normstelling en jurisprudentie als &quot;normaal maatschappelijk risico&quot; beschouwt — het niveau dat omwonenden zonder compensatieroute geacht worden te dragen. De Pawlaczyk-hinderpercentages (18,4%/33,7%) beschrijven een hoger geschat hinderniveau bij dezelfde blootstelling. Onderstaande tabel splitst, per geluidscategorie, de kosten in drie bedragen: <strong>A</strong> het bedrag op het officieel getolereerde niveau, <strong>B</strong> de extra (marginale) kosten als het hogere Pawlaczyk-percentage in plaats van het RIVM-percentage klopt, en <strong>C = A+B</strong> het totaal bij dat Pawlaczyk-percentage. Dit wordt apart doorgerekend voor <strong>hinder middel case (18,4%)</strong> en <strong>hinder worst case (33,7%)</strong> — de aanduiding &quot;hinder ... case&quot; wordt hier uitsluitend gebruikt voor deze hinderpercentage-as, ter onderscheid van het eerder gebruikte best/middel/worst-scenario van het nachtelijke weerregime (§4, Module 6/7), dat een andere, onafhankelijke indeling is. DALY's zijn gewaardeerd als bandbreedte €50.000–€80.000 per DALY (RIVM–Zorginstituut NL, zie Bronnen), niet als het vaste €70.000-PBL-cijfer van de tabel hierboven.</p>
+    <table class="rp-table rp-table-compact">
+      <thead><tr><th>Categorie</th><th>Bedrag</th><th>Hinderpercentage</th><th>Waarde (bandbreedte €50k–€80k/DALY)</th></tr></thead>
+      <tbody>${abcRowsHtml}</tbody>
+    </table>
+    <p class="rp-note"><strong>Let op — twee verschillende soorten &quot;geaccepteerd&quot;:</strong> de 4%-NMR-drempel in bedrag A is een juridische compensatiedrempel (vaste jurisprudentie Afdeling bestuursrechtspraak Raad van State) — onder 4% bestaat wettelijk geen recht op planschadevergoeding, boven 4% (bedrag B/C) potentieel wel. De 9%-RIVM-hinder heeft <strong>geen</strong> vergelijkbaar compensatiemechanisme: zorgkosten en DALY-waarde worden, ook bij het RIVM-basisscenario, in de huidige vergunningverlening volledig niet vergoed (§10 hierboven). Bedrag A is dus zelf ook al voor het overgrote deel ongecompenseerde schade — het is alleen &quot;geaccepteerd&quot; in de zin dat de huidige norm dit hinderniveau toestaat, niet in de zin dat het wordt betaald. Bedrag B is daarom de <strong>marginale</strong> ongecompenseerde schade bovenop wat al niet wordt vergoed; bedrag C is de <strong>totale</strong> ongecompenseerde schade bij het hogere Pawlaczyk-percentage, en is per definitie vele malen hoger dan B alleen omdat het ook de (zelf al ongecompenseerde) basislaag A meetelt. Welke van de twee als &quot;collateral damage&quot; geldt, hangt af van de vraag die wordt gesteld: B beantwoordt &quot;wat kost het extra als RIVM het bij het verkeerde eind heeft&quot;, C beantwoordt &quot;wat is de totale, nu bij omwonenden liggende rekening als Pawlaczyk gelijk heeft&quot;. 33,7% (hinder worst case) is, net als 18,4%, afkomstig uit dezelfde Pawlaczyk e.a. (2018)-populatie en dus als interne subtractie (33,7% t.o.v. 9%) methodologisch van hetzelfde soort als de 18,4%-rij — beide zijn hier daarom met identieke logica doorgerekend.</p>
     ${hasM12 ? `
     <p><strong>Investeringskosten (Module 12):</strong> ${m12rows.length} turbinegroep(en), totaal ${m12TotalVermogen.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW, totale investering <strong>${m9FmtEuro(m12TotalInvest)}</strong>.</p>
     <div class="rp-callout rp-warn">
