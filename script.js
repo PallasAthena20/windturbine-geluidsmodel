@@ -726,7 +726,7 @@ function renderModule14() {
     const ldenNormText = Number.isFinite(ldenNorm) ? `${ldenNorm.toFixed(1)} dB(A)` : 'geen Lden-norm bij deze normkeuze';
     const nightNormText = Number.isFinite(nightNorm) ? `${nightNorm.toFixed(1)} dB(A)` : 'geen Lnight-norm bij deze normkeuze';
     const normSourceHint = state.normPreset === 'eigen' ? '(waarden ingesteld bij Module 1, normkeuze bij Module 5)' : '(wijzig in Module 5)';
-    contextCallout.innerHTML = `<strong>Gebruikte instellingen:</strong> richting van de woning t.o.v. de turbine = <strong>${m14BearingLabel(state.m14Bearing)}</strong> (wijzig hierboven) &mdash; normkeuze = <strong>${escapeHtml(norm.label)}</strong> ${normSourceHint}: Lden ${ldenNormText}, L<sub>night</sub> ${nightNormText}.`;
+    contextCallout.innerHTML = `<strong>Gebruikte instellingen:</strong> bronvermogen L<sub>WA</sub> = <strong>${state.lwa.toFixed(1)} dB(A)</strong> (Module 1 &mdash; alle tabellen en de windsnelheidsafhankelijke L<sub>WA</sub>(v)-curve hieronder zijn hierop geschaald) &mdash; richting van de woning t.o.v. de turbine = <strong>${m14BearingLabel(state.m14Bearing)}</strong> (wijzig hierboven) &mdash; normkeuze = <strong>${escapeHtml(norm.label)}</strong> ${normSourceHint}: Lden ${ldenNormText}, L<sub>night</sub> ${nightNormText}.`;
   }
 
   m14RenderTable('m14-lden-table-body', 'm14-lden-result-callout', ['best', 'middel', 'worst'], 'Lden', ldenNorm, 'Lden (jaargemiddeld)', pct, 'hoorbaar', false);
