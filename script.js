@@ -4696,6 +4696,34 @@ function m13BuildReportHtml(mapImages) {
     return `<tr><td>${label}</td><td>${pct != null ? m13Pct(pct) : '—'}</td><td>${days != null ? days + ' nachten/jaar' : '—'}</td></tr>`;
   };
 
+  // ---- Module 13 — jaargemiddelde Lden/Lnight per windrichting (data + tabellen, gebruikt in §11 en de samenvatting) ----
+  const m14Norm = getActiveNorm();
+  const m14LdenNorm = Number(m14Norm.lden);
+  const m14NightNorm = Number(m14Norm.lnight);
+  const m14Pct = m14ScenarioPercentages();
+  const m14RowsFor = (metricKey, categoryKey) => DISTANCES.map((d) => {
+    const scenarios = M14_SCENARIOS.map((s) => ({ ...s, result: m14ScenarioLevels(d, state.m14Bearing, state.lwa, s.key, categoryKey) }));
+    return { d, scenarios, weighted: m14WeightedValue(scenarios, metricKey, m14Pct) };
+  });
+  const m14Cell = (value, norm, unit) => {
+    if (value == null) return '<td class="rp-note">—</td>';
+    if (!Number.isFinite(norm)) return `<td>${value.toFixed(1)} ${unit}</td>`;
+    const diff = value - norm;
+    return `<td class="${diff > 0 ? 'norm-exceed' : 'norm-ok'}">${value.toFixed(1)} ${unit} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)})</td>`;
+  };
+  const m14TableHtml = (metricKey, norm, categoryKey, unit) => {
+    const rows = m14RowsFor(metricKey, categoryKey);
+    const body = rows.map(({ d, scenarios, weighted }) => {
+      const cells = scenarios.map((s) => m14Cell(s.result ? s.result[metricKey] : null, norm, unit)).join('');
+      return `<tr><td>${d} m</td>${cells}${m14Cell(weighted, norm, unit)}</tr>`;
+    }).join('');
+    return `<table class="rp-table rp-table-compact"><thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th><th>Kansgewogen jaargemiddelde</th></tr></thead><tbody>${body}</tbody></table>`;
+  };
+  const m14NearestNightWeighted = m14RowsFor('Lnacht', 'hoorbaar')[0]?.weighted;
+  const m14LdenUnit = 'dB(A)';
+  const m14LinUnit = CATEGORY.laagfrequent ? CATEGORY.laagfrequent.unit : 'dB(Lin)';
+  const m14InfUnit = CATEGORY.infrasoon ? CATEGORY.infrasoon.unit : 'dB(G)';
+
   // ---- Sectie: Module 1-12 samenvatting ----
   const summarySection = `
   <section class="rp-section">
@@ -4716,7 +4744,7 @@ function m13BuildReportHtml(mapImages) {
         <tr><td>10</td><td>Waardedaling van woningen (Droës &amp; Koster 2021), naar tiphoogte-categorie.</td><td>${m11.hasData ? `${m11.totals.woningen.toLocaleString('nl-NL')} woningen, €${Math.round(m11.totals.waarde).toLocaleString('nl-NL')} totale waardedaling` : '— (geen BAG-gegevens of geen turbine geplaatst)'}</td></tr>
         <tr><td>11</td><td>Maatschappelijke kosten: bundelt zorgkosten (Module 8), DALY-waarde (Module 9) en waardedaling (Module 10) tot één bedrag per geluidscategorie, plus een A/B/C-uitsplitsing tussen het officieel getolereerde hinderniveau en de mogelijke overschrijding daarvan.</td><td>${hoorbaarCritTotal != null ? `Zie §10/§10.1 hieronder — bijv. hoorbaar/33,7%: ${m9FmtEuro(hoorbaarCritTotal)} totale maatschappelijke kosten over ${horizon} jaar` : '— (geen BAG-gegevens of geen turbine geplaatst)'}</td></tr>
         <tr><td>12</td><td>Bouw-/investeringskosten per turbine(groep), PBL-eindadvies SDE++ 2026.</td><td>${hasM12 ? `${m12rows.length} groep(en), ${m12TotalVermogen.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW totaal, €${Math.round(m12TotalInvest).toLocaleString('nl-NL')} investering` : '— (nog geen turbinegroep toegevoegd)'}</td></tr>
-        <tr><td>13</td><td>Jaargemiddelde Lden/L<sub>night</sub> per scenario en windrichting, getoetst aan de eigen Lden-/L<sub>night</sub>-norm uit Module 1 (experimentele uitbreiding).</td><td>Zie Module 13 in de app voor de live toetsing per windrichting.</td></tr>
+        <tr><td>13</td><td>Jaargemiddelde Lden/L<sub>night</sub> per scenario en windrichting, getoetst aan de eigen Lden-/L<sub>night</sub>-norm uit Module 1 (experimentele uitbreiding).</td><td>Richting ${m14BearingLabel(state.m14Bearing)}, op ${DISTANCES[0]} m: kansgewogen jaargemiddelde L<sub>night</sub> ${m14NearestNightWeighted != null ? m14NearestNightWeighted.toFixed(1) + ' dB(A)' : '—'}${Number.isFinite(m14NightNorm) ? ` (norm ${m14NightNorm.toFixed(1)} dB(A))` : ''} — zie §11</td></tr>
         <tr><td>14</td><td>Dit rapport: een doorlopende, citeerbare synthese van alle bovenstaande modules.</td><td>U leest het nu.</td></tr>
       </tbody>
     </table>
@@ -5020,29 +5048,56 @@ function m13BuildReportHtml(mapImages) {
         <li>De investeringskosten zijn <strong>eenmalig kapitaal</strong> van de projectontwikkelaar/investeerder, terugverdiend over de exploitatieperiode via energieverkoop (en doorgaans SDE++-subsidie) — een bedrijfseconomische kostenpost voor één partij.</li>
         <li>De maatschappelijke kosten zijn grotendeels <strong>jaarlijks terugkerende, gespreide lasten voor omwonenden</strong> — een andere partij, die geen deel heeft in de opbrengsten van de turbine.</li>
         <li>Op basis van de wetenschappelijk best onderbouwde rij (<strong>hoorbaar geluid, kritisch hinderpercentage 33,7%</strong>, §5) bedraagt de geschatte maatschappelijke kostenpost over ${horizon} jaar <strong>${hoorbaarCritTotal != null ? m9FmtEuro(hoorbaarCritTotal) : '—'}</strong>, tegenover een investering van <strong>${m9FmtEuro(m12TotalInvest)}</strong> — dat is <strong>${(hoorbaarCritTotal != null && m12TotalInvest > 0) ? (hoorbaarCritTotal / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong> van de investering, puur aan externe kosten die niet in de businesscase van de ontwikkelaar zitten. Wordt hetzelfde hinderpercentage illustratief ook op de (grotere) infrasoonring toegepast, loopt dit op tot <strong>${infrasoonCritTotal != null ? m9FmtEuro(infrasoonCritTotal) : '—'}</strong> (<strong>${(infrasoonCritTotal != null && m12TotalInvest > 0) ? (infrasoonCritTotal / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong>) — dat bovenste cijfer heeft echter geen eigen hinderstudie als onderbouwing (zie §5) en dient uitsluitend als gevoeligheidsindicatie.</li>
-        <li>Deze externe kosten worden in de huidige vergunningverlening <strong>niet gecompenseerd of geïnternaliseerd</strong> (behalve, deels, via planschadevergoeding bij waardedaling boven de 4% NMR-drempel, §9) — ze blijven bij de omwonenden liggen, wat de aanleiding is voor het advies in §11.</li>
+        <li>Deze externe kosten worden in de huidige vergunningverlening <strong>niet gecompenseerd of geïnternaliseerd</strong> (behalve, deels, via planschadevergoeding bij waardedaling boven de 4% NMR-drempel, §9) — ze blijven bij de omwonenden liggen, wat de aanleiding is voor het advies in §12.</li>
       </ul>
     </div>` : m12Banner}
+  </section>`;
+
+  const lden13Section = `
+  <section class="rp-section">
+    <h2>11. Jaargemiddelde Lden/L<sub>night</sub>-toetsing per windrichting (Module 13, experimentele uitbreiding)</h2>
+    <p>Waar de rest van dit rapport rekent met vaste-afstandsringen per scenario (§4-§10), rekent Module 13 een <strong>jaargemiddelde</strong> Lden/L<sub>night</sub> uit door te middelen over een echte windroos (12 sectoren van 30°, elk onderverdeeld in 4 windsnelheidsklassen — KNMI-klimaatnormaal 1991-2020, De Bilt) en een windsnelheidsafhankelijk bronvermogen, gecombineerd met de officiële Lden-formule uit het <a href="https://mp.nl/sites/default/files/2019-08/reken%20en%20meetvoorschrift%20windturbines_0.pdf" target="_blank" rel="noopener">Reken- en meetvoorschrift windturbines</a>. Hieronder de uitkomst voor de in de app ingestelde richting van de woning t.o.v. de turbine: <strong>${m14BearingLabel(state.m14Bearing)}</strong> (wijzig dit in Module 13 in de app). Getoetst aan de eigen Lden-/L<sub>night</sub>-norm uit Module 1: Lden ${Number.isFinite(m14LdenNorm) ? m14LdenNorm.toFixed(1) + ' dB(A)' : 'geen geldige norm'}, L<sub>night</sub> ${Number.isFinite(m14NightNorm) ? m14NightNorm.toFixed(1) + ' dB(A)' : 'geen geldige norm'}. Kansgewogen jaargemiddelde gebruikt dezelfde best/middel/worst-kansen als §4 (best ${m14Pct.best.toFixed(0)}%, middel ${m14Pct.middel.toFixed(0)}%, worst ${m14Pct.worst.toFixed(0)}%).</p>
+
+    <h3>11.1 Hoorbaar geluid — Lden (jaargemiddeld)</h3>
+    ${m14TableHtml('Lden', m14LdenNorm, 'hoorbaar', m14LdenUnit)}
+
+    <h3>11.2 Hoorbaar geluid — L<sub>night</sub> (jaargemiddeld, nachtperiode)</h3>
+    ${m14TableHtml('Lnacht', m14NightNorm, 'hoorbaar', m14LdenUnit)}
+    <p class="rp-note">Op de kortste getoonde afstand (${DISTANCES[0]} m) bedraagt het kansgewogen jaargemiddelde L<sub>night</sub> ${m14NearestNightWeighted != null ? m14NearestNightWeighted.toFixed(1) + ' dB(A)' : '—'}${Number.isFinite(m14NightNorm) && m14NearestNightWeighted != null ? (m14NearestNightWeighted > m14NightNorm ? ', dat is een overschrijding van de eigen norm' : ', dat blijft binnen de eigen norm') : ''}.</p>
+
+    <h3>11.3 Laagfrequent en infrasoon geluid — zelfde toetsing, indicatieve norm</h3>
+    <p>Er bestaat geen wettelijke jaargemiddelde-norm in dB(Lin) of dB(G); onderstaande tabellen passen de Module 1-norm (in dB(A), hoorbaar) daarom uitsluitend <strong>indicatief</strong> toe op de laagfrequente en infrasone rekenwaarden, als referentiepunt — niet als toetsingskader.</p>
+    <p><em>Laagfrequent, Lden:</em></p>
+    ${m14TableHtml('Lden', m14LdenNorm, 'laagfrequent', m14LinUnit)}
+    <p><em>Laagfrequent, L<sub>night</sub>:</em></p>
+    ${m14TableHtml('Lnacht', m14NightNorm, 'laagfrequent', m14LinUnit)}
+    <p><em>Infrasoon, Lden:</em></p>
+    ${m14TableHtml('Lden', m14LdenNorm, 'infrasoon', m14InfUnit)}
+    <p><em>Infrasoon, L<sub>night</sub>:</em></p>
+    ${m14TableHtml('Lnacht', m14NightNorm, 'infrasoon', m14InfUnit)}
+
+    <h3>11.4 Beperkingen</h3>
+    <p class="rp-note">(1) Dit is een <strong>experimentele uitbreiding</strong> naast het hoofdmodel: de rest van dit rapport (§2-§10) toetst per vaste scenario/afstand-combinatie, deze sectie middelt over een heel jaar windroos — de twee zijn methodologisch verschillend en niet één-op-één optelbaar. (2) De richting van de woning is een handmatige keuze in de app (hierboven vermeld) en geldt alleen voor de dichtstbijzijnde/eerst geplaatste turbine-as; bij meerdere turbines op andere onderlinge posities kan de daadwerkelijke richting per turbine afwijken. (3) Omdat dit model altijd met de eigen/lokale norm uit Module 1 rekent, kent Module 13 alleen een L<sub>night</sub>-waarde als harde norm; de Lden-toetsing hierboven staat er ter informatie bij, niet als zelfstandig toetsingscriterium.</p>
   </section>`;
 
   // ---- Sectie: advies ----
   const advisorySection = `
   <section class="rp-section">
-    <h2>11. Advies — internationale voorbeelden en normstelling</h2>
+    <h2>12. Advies — internationale voorbeelden en normstelling</h2>
     <p>Nederland toetst windturbinegeluid uitsluitend op hoorbaar geluid (dB(A), Lden/Lnight) en kent <strong>geen enkele normstelling voor laagfrequent of infrasoon geluid</strong> — een leemte die drie landen om ons heen op uiteenlopende manieren hebben ingevuld.</p>
 
-    <h3>11.1 Denemarken — expliciete LFN-norm</h3>
+    <h3>12.1 Denemarken — expliciete LFN-norm</h3>
     <p>Denemarken hanteert sinds de <a href="https://eng.mst.dk/media/urbm0xut/statutory-order-on-noise-from-wind-turbines-2019-version.pdf" target="_blank" rel="noopener">Bekendtgørelse nr. 1284 van 15 december 2011</a> een bindende, <strong>berekende</strong> (niet gemeten) binnenwaarde voor laagfrequent geluid van windturbines: <strong>20 dB(A) in de avond (19-22u) en nacht (22-07u)</strong>, en 25 dB(A) overdag, in het 10-160 Hz-gebied per 1/3-octaafband. Deze norm bestond al als algemene richtlijn voor andere geluidsbronnen (<a href="https://eng.mst.dk/industry/noise/wind-turbines" target="_blank" rel="noopener">Deense Milieuagentschap</a>), maar werd in 2011 specifiek voor windturbines tot een verplichte, bij vergunningverlening te berekenen grenswaarde gemaakt — zie ook <a href="https://journals.sagepub.com/doi/pdf/10.1260/0263-0923.31.4.239" target="_blank" rel="noopener">Jakobsen (2012)</a> voor de onderliggende motivatie.</p>
 
-    <h3>11.2 Duitsland — dynamische, weersafhankelijke nachtmodus</h3>
+    <h3>12.2 Duitsland — dynamische, weersafhankelijke nachtmodus</h3>
     <p>Duitsland heeft geen apart LFN-getal, maar kent via de <a href="https://de.wikipedia.org/wiki/Technische_Anleitung_zum_Schutz_gegen_L%C3%A4rm" target="_blank" rel="noopener">TA Lärm</a> gebiedsafhankelijke nachtnormen (35 dB(A) in reine Wohngebiete, 40 dB(A) in allgemeine Wohngebiete, 45 dB(A) in dorps-/mengbestemmingen) én de praktijk van <strong>"schallreduzierter nächtlicher Betrieb"</strong>: vergunningen kunnen een nachtelijke bedrijfsmodus voorschrijven die <em>afhankelijk van de heersende windsnelheid</em> vermogen (en daarmee geluid) terugregelt, om overschrijding te voorkomen zonder de turbine het hele jaar op verminderd vermogen te laten draaien. Deze aanpak — vermogensreductie precies op de momenten dat de omstandigheden risicovol zijn — werd nog in januari 2026 door het Bundesverwaltungsgericht bevestigd als toelaatbare vergunningsvoorwaarde (<a href="https://www.bverwg.de/pm/2025/4" target="_blank" rel="noopener">BVerwG, persbericht nr. 4/2025</a>).</p>
 
-    <h3>11.3 WHO 2018 — een expliciete leemte, juist voor de nacht</h3>
+    <h3>12.3 WHO 2018 — een expliciete leemte, juist voor de nacht</h3>
     <p>De <a href="https://iris.who.int/bitstream/handle/10665/343936/WHO-EURO-2018-3287-43046-60243-eng.pdf" target="_blank" rel="noopener">WHO Environmental Noise Guidelines (2018)</a> geven voor windturbines een voorwaardelijke aanbeveling van Lden &lt;45 dB, maar <strong>expliciet geen Lnight-aanbeveling</strong> — als enige geluidsbron in de gehele richtlijn (wegverkeer, spoor en luchtvaart krijgen alle drie wél een Lnight-waarde). De WHO motiveert dit met de te lage bewijskwaliteit van de beschikbare nachtstudies, niet met de conclusie dat nachtelijke blootstelling onbelangrijk zou zijn (<a href="https://www.wbm.co.uk/wp-content/uploads/2018/11/WBM-WHO-2018-Summary-Nov-2018.pdf" target="_blank" rel="noopener">WBM-samenvatting</a>). Dit is relevant omdat dit rapport net laat zien dat de nacht de kern van het probleem is — precies waar de WHO geen harde ondergrens durft te trekken.</p>
 
-    <h3>11.4 Aanbeveling voor Nederland</h3>
+    <h3>12.4 Aanbeveling voor Nederland</h3>
     <ol class="rp-list">
-      <li><strong>Introduceer een Nederlandse LFN-norm naar Deens voorbeeld:</strong> een berekende binnenwaarde van orde 20 dB(A) in de 10-160 Hz-band voor de avond/nacht (met een ruimere dagwaarde), als aanvulling op — niet vervanging van — de bestaande hoorbaar-geluidnorm. Dit dicht de leemte die dit rapport in §4/§5 blootlegt: laagfrequent en infrasoon geluid worden nu alleen indicatief getoond, niet getoetst.</li>
+      <li><strong>Introduceer een Nederlandse LFN-norm naar Deens voorbeeld:</strong> een berekende binnenwaarde van orde 20 dB(A) in de 10-160 Hz-band voor de avond/nacht (met een ruimere dagwaarde), als aanvulling op — niet vervanging van — de bestaande hoorbaar-geluidnorm. Dit dicht de leemte die dit rapport in §4/§5 en §11 blootlegt: laagfrequent en infrasoon geluid worden nu alleen indicatief getoond, niet getoetst.</li>
       <li><strong>Koppel operationele maatregelen aan de scenario-detectie van Module 5/6:</strong> verplicht een noise-reduced-operation-modus (vermogensreductie) op nachten waarin de klimatologische/shear-capacity-indicatoren een worst-case (vSBL-)regime voorspellen, naar het Duitse precedent van een weersafhankelijke nachtmodus — in plaats van het hele jaar een vaste, permanente afregeling die op de meeste nachten onnodig is en op de kritieke nachten mogelijk nog steeds ontoereikend.</li>
       <li><strong>Houd cumulatie in de gaten (Module 4):</strong> bij meerdere turbines of naburige windparken moet de geluidsbijdrage energetisch worden opgeteld op het rekenpunt, niet per turbine afzonderlijk getoetst — een op zichzelf toelaatbare turbine kan gecombineerd met naburige turbines de norm alsnog doen overschrijden. Dit rapport rekent per turbinepositie; bij meerdere naburige projecten dient een gezamenlijke cumulatietoets te worden uitgevoerd.</li>
       <li><strong>Onafhankelijke verificatie na realisatie:</strong> vul de vooraf berekende prognose (zoals in dit model) aan met verplichte post-constructiemeting, zoals in de Duitse praktijk gebruikelijk is bij een schallreduzierter Betrieb — een berekende prognose is per definitie een model, geen meting van de werkelijke situatie.</li>
@@ -5141,6 +5196,7 @@ function m13BuildReportHtml(mapImages) {
   ${analysisSection}
   ${valueSection}
   ${compareSection}
+  ${lden13Section}
   ${advisorySection}
   ${bronnenSection}
   <div class="rp-footer">Automatisch gegenereerd door het interactieve windturbinegeluidsmodel (Module 14). Dient ter beleidsmatige illustratie — vervangt geen formeel akoestisch onderzoek, planschadetaxatie of gezondheidskundig advies. Klik linksboven op "Afdrukken / opslaan als PDF" en kies als bestemming "Opslaan als PDF" om dit rapport te downloaden.</div>
@@ -5274,7 +5330,12 @@ function m13NonWhiteFraction(canvas) {
       worstCell: cellFracs.length ? Math.min(...cellFracs) : 0,
     };
   } catch (e) {
-    return { overall: 1, worstCell: 1 }; // kon niet samplen (bv. CORS) — niet blokkeren op deze check
+    // Kon niet samplen (bv. CORS-taint van de WebGL-canvas): dit MOET als mislukt gelden, niet
+    // als geslaagd — anders accepteert de retry-lus in m13CaptureSingleView de allereerste
+    // (mogelijk lege) poging blindelings, wat precies verklaart waarom eerdere pogingen om dit
+    // te verhelpen niet hielpen: een leesfout werd stilzwijgend als "achtergrond overal
+    // zichtbaar" beoordeeld.
+    return { overall: 0, worstCell: 0 };
   }
 }
 
@@ -5317,30 +5378,98 @@ async function m13CaptureSingleView(opts) {
     const glMap = tileLayer3a && typeof tileLayer3a.getMaplibreMap === 'function' ? tileLayer3a.getMaplibreMap() : null;
     const WORST_CELL_MIN = 0.06; // elke cel moet minstens dit aandeel niet-wit hebben
     const OVERALL_MIN = 0.5;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const canvas = await html2canvas(mapEl, {
-        useCORS: true,
-        backgroundColor: null,
-        scale: 2,
-        logging: false,
-      });
-      const { overall, worstCell } = m13NonWhiteFraction(canvas);
-      // Score gedomineerd door de zwakste cel: een beeld met één groot leeg blok mag nooit
-      // "beste poging tot nu toe" worden t.o.v. een beeld dat overal gelijkmatig gevuld is,
-      // ook al is het globale gemiddelde van het eerste toevallig hoger.
-      const score = Math.min(worstCell, overall);
-      if (score > bestScore) { bestScore = score; bestCanvas = canvas; }
-      if (worstCell >= WORST_CELL_MIN && overall >= OVERALL_MIN) break; // achtergrond overal zichtbaar — geen extra poging nodig
-      if (glMap && typeof glMap.triggerRepaint === 'function') glMap.triggerRepaint();
-      if (glMap && typeof glMap.resize === 'function') { try { glMap.resize(); } catch (e) { /* negeren */ } }
-      if (expectedCenter != null && expectedZoom != null) {
-        await m13WaitMapCameraSynced(expectedCenter, expectedZoom, 900);
-      } else {
-        await m13WaitMapIdle(900);
-      }
-      await new Promise((r) => setTimeout(r, 450 + attempt * 350));
+    // html2canvas leest een live WebGL-canvas rechtstreeks via diens EIGEN toDataURL()-aanroep —
+    // dat bleek de kern van het terugkerende "lege achtergrond"-defect: html2canvas doet dit op
+    // een onvoorspelbaar moment tijdens zijn eigen DOM-traversering (niet noodzakelijk vlak na
+    // onze eigen wacht-/repaint-logica hierboven), en een eventuele leesfout (bv. een getaint
+    // canvas door een tegel/sprite zonder correcte CORS-headers) werd door html2canvas simpelweg
+    // stil overgeslagen — resultaat: een wit vlak zonder enige foutmelding. In plaats daarvan
+    // lezen we de MapLibre-canvas HIER, op het moment dat WIJ weten dat de camera gesynchroniseerd
+    // is, en zetten het resultaat als gewone <img> (data-URL) over de canvas heen: html2canvas
+    // hoeft dan alleen nog een doodgewone <img> + de SVG-ringen/HTML-badges te lezen, iets waar
+    // het betrouwbaar in is.
+    // Forceer altijd een verse resize + herteken-cyclus, ook als setView() hierboven een no-op
+    // bleek (bv. de closeup-weergave staat vaak al op precies de gewenste center/zoom, waardoor
+    // MapLibre zelf geen echte camera-/tegellaadgebeurtenis hoeft te vuren) — zonder dit kan de
+    // WebGL-canvas een verouderde interne buffergrootte behouden na de invalidateSize() hierboven.
+    if (glMap) {
+      try { glMap.resize(); } catch (e) { /* negeren */ }
+      try { glMap.triggerRepaint(); } catch (e) { /* negeren */ }
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     }
-    return bestCanvas ? bestCanvas.toDataURL('image/png') : null;
+    let glSnapshotUrl = null;
+    let glCanvasEl = null;
+    let overlayImg = null;
+    let restoreVisibility = null;
+    if (glMap && typeof glMap.getCanvas === 'function') {
+      try {
+        glCanvasEl = glMap.getCanvas();
+        if (glCanvasEl && glCanvasEl.width > 0 && glCanvasEl.height > 0) {
+          glSnapshotUrl = glCanvasEl.toDataURL('image/png');
+        }
+      } catch (e) {
+        console.warn('Directe canvas-snapshot van de kaart mislukte (mogelijk CORS-taint):', e);
+        glSnapshotUrl = null;
+      }
+    }
+    if (glSnapshotUrl && glCanvasEl) {
+      overlayImg = document.createElement('img');
+      overlayImg.src = glSnapshotUrl;
+      overlayImg.style.position = 'absolute';
+      overlayImg.style.left = glCanvasEl.style.left || '0';
+      overlayImg.style.top = glCanvasEl.style.top || '0';
+      overlayImg.style.width = glCanvasEl.style.width || `${glCanvasEl.width}px`;
+      overlayImg.style.height = glCanvasEl.style.height || `${glCanvasEl.height}px`;
+      overlayImg.style.pointerEvents = 'none';
+      overlayImg.className = 'm13-map-snapshot-overlay';
+      glCanvasEl.parentNode.insertBefore(overlayImg, glCanvasEl.nextSibling);
+      const prevVisibility = glCanvasEl.style.visibility;
+      glCanvasEl.style.visibility = 'hidden';
+      restoreVisibility = () => {
+        glCanvasEl.style.visibility = prevVisibility;
+        if (overlayImg && overlayImg.parentNode) overlayImg.parentNode.removeChild(overlayImg);
+      };
+    }
+    try {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        // Zonder geslaagde directe snapshot valt dit terug op de oude, minder betrouwbare route
+        // (html2canvas leest de live canvas zelf) — beter dan niets, en de nu-gecorrigeerde
+        // m13NonWhiteFraction-foutafhandeling zorgt dat een leesfout hier alsnog als mislukking
+        // meetelt in plaats van als stille "pass".
+        const canvas = await html2canvas(mapEl, {
+          useCORS: true,
+          backgroundColor: null,
+          scale: 2,
+          logging: false,
+        });
+        const { overall, worstCell } = m13NonWhiteFraction(canvas);
+        // Score gedomineerd door de zwakste cel: een beeld met één groot leeg blok mag nooit
+        // "beste poging tot nu toe" worden t.o.v. een beeld dat overal gelijkmatig gevuld is,
+        // ook al is het globale gemiddelde van het eerste toevallig hoger.
+        const score = Math.min(worstCell, overall);
+        if (score > bestScore) { bestScore = score; bestCanvas = canvas; }
+        if (worstCell >= WORST_CELL_MIN && overall >= OVERALL_MIN) break; // achtergrond overal zichtbaar — geen extra poging nodig
+        if (glSnapshotUrl && glCanvasEl && overlayImg) {
+          // Ververs de snapshot-overlay met een nieuwe lees-poging van de live canvas, voor het
+          // geval de eerste snapshot vroeg was (bv. vlak na een camera-wijziging).
+          try {
+            const refreshed = glCanvasEl.toDataURL('image/png');
+            overlayImg.src = refreshed;
+          } catch (e) { /* houd de vorige overlay-afbeelding aan */ }
+        }
+        if (glMap && typeof glMap.triggerRepaint === 'function') glMap.triggerRepaint();
+        if (glMap && typeof glMap.resize === 'function') { try { glMap.resize(); } catch (e) { /* negeren */ } }
+        if (expectedCenter != null && expectedZoom != null) {
+          await m13WaitMapCameraSynced(expectedCenter, expectedZoom, 900);
+        } else {
+          await m13WaitMapIdle(900);
+        }
+        await new Promise((r) => setTimeout(r, 450 + attempt * 350));
+      }
+      return bestCanvas ? bestCanvas.toDataURL('image/png') : null;
+    } finally {
+      if (restoreVisibility) restoreVisibility();
+    }
   } catch (e) {
     console.warn('Kaartafbeelding voor rapport kon niet worden vastgelegd:', e);
     return null;
