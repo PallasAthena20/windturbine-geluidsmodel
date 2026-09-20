@@ -4720,9 +4720,35 @@ function m13BuildReportHtml(mapImages) {
     return `<table class="rp-table rp-table-compact"><thead><tr><th>Afstand</th><th>Best case</th><th>Middenscenario</th><th>Worst case</th><th>Kansgewogen jaargemiddelde</th></tr></thead><tbody>${body}</tbody></table>`;
   };
   const m14NearestNightWeighted = m14RowsFor('Lnacht', 'hoorbaar')[0]?.weighted;
+  const m14NearestLfgNightWeighted = m14RowsFor('Lnacht', 'laagfrequent')[0]?.weighted;
   const m14LdenUnit = 'dB(A)';
   const m14LinUnit = CATEGORY.laagfrequent ? CATEGORY.laagfrequent.unit : 'dB(Lin)';
   const m14InfUnit = CATEGORY.infrasoon ? CATEGORY.infrasoon.unit : 'dB(G)';
+
+  // ---- Nieuw (op verzoek): hoeveel dagen volledige stilstand per jaar zijn nodig om het hierboven
+  // al berekende kansgewogen jaargemiddelde Lnacht alsnog binnen de eigen norm te brengen? Dit is
+  // GEEN nieuwe geluidsberekening en raakt de hoorbaar-/laagfrequent-rekenlogica niet aan — het
+  // herverdeelt uitsluitend het al berekende jaargemiddelde energetisch over minder bedrijfsdagen,
+  // onder de aanname dat de turbine tijdens stilstand ~0 dB (verwaarloosbaar) bijdraagt:
+  //   10*log10((dagen_in_bedrijf/365) * 10^(jaargemiddelde/10)) = norm
+  //   => dagen_in_bedrijf/365 = 10^((norm - jaargemiddelde)/10)
+  const m14StilstandDagen = (weighted, normLevel) => {
+    if (weighted == null || !Number.isFinite(normLevel)) return null;
+    if (weighted <= normLevel) return { days: 0, alreadyOk: true };
+    const fractionOff = 1 - Math.pow(10, (normLevel - weighted) / 10);
+    return { days: Math.min(365, Math.ceil(fractionOff * 365)), alreadyOk: false };
+  };
+  const m14StilHoorbaar = m14StilstandDagen(m14NearestNightWeighted, m14NightNorm);
+  const m14StilLfg = m14StilstandDagen(m14NearestLfgNightWeighted, m14NightNorm);
+  const m14StilRow = (label, weighted, unit, res) => {
+    if (weighted == null) return `<tr><td>${label}</td><td colspan="4" class="rp-note">—</td></tr>`;
+    if (!res) return `<tr><td>${label}</td><td>${weighted.toFixed(1)} ${unit}</td><td colspan="3" class="rp-note">geen geldige norm</td></tr>`;
+    const diff = weighted - m14NightNorm;
+    if (res.alreadyOk) {
+      return `<tr><td>${label}</td><td>${weighted.toFixed(1)} ${unit}</td><td class="norm-ok">${diff.toFixed(1)} dB (binnen norm)</td><td class="norm-ok">0 dagen — al binnen norm</td><td>365 dagen</td></tr>`;
+    }
+    return `<tr><td>${label}</td><td>${weighted.toFixed(1)} ${unit}</td><td class="norm-exceed">+${diff.toFixed(1)} dB</td><td class="norm-exceed">${res.days} dagen/jaar volledige stilstand</td><td>${365 - res.days} dagen</td></tr>`;
+  };
 
   // ---- Sectie: Module 1-12 samenvatting ----
   const summarySection = `
@@ -4773,6 +4799,21 @@ function m13BuildReportHtml(mapImages) {
     </table>
     <p>Vanuit dit bronvermogen en deze positie(s) berekent het model per categorie (hoorbaar/laagfrequent/infrasoon) en per scenario (best/middel/worst) de afstand waarop het geluidsniveau de norm overschrijdt (de "overschrijdingsring"), en telt het de unieke BAG-woningen binnen die ring.</p>
     ${m13MapImagesHtml(mapViews, turbineList)}
+    ${n === 0 ? '' : `
+    <h3>3.1 Toetsing per afstand en windrichting (Module 3)</h3>
+    <p>Dezelfde toetsing als in Module 3 van de app — nu voor alle drie de geluidscategorieën naast elkaar: per vaste afstand de dagwaarde (referentie, downwind) en drie aparte nachtwaarden + toetsingen — downwind (kritisch, verst dragend), upwind (snelst dempend) en zijwind/crosswind (tussenliggend) — getoetst aan ${escapeHtml(norm.label)}${norm.lnight != null ? `, L<sub>night</sub> ≤ ${norm.lnight} dB` : ''}.</p>
+
+    <h4>3.1.1 Hoorbaar geluid (dB(A))</h4>
+    <table class="rp-table rp-table-compact"><thead>${m5NormTableHeadHtml('hoorbaar')}</thead><tbody>${m5NormTableRowsHtml('hoorbaar', state, norm)}</tbody></table>
+
+    <h4>3.1.2 Laagfrequent geluid (dB(Lin))</h4>
+    <p class="rp-note">Vier oordelen per afstand (downwind, nacht): <strong>Hoorbaar</strong> is de aparte categorie hoorbaar geluid, getoetst in dB(A); <strong>Totaal LFG</strong> is het geaggregeerde dB(Lin)-niveau, puur informatief (geen normwaarde); <strong>NSG</strong> toetst waarneembaarheid en <strong>Vercammen</strong> toetst hinder — zie §7a/§7b hieronder voor de achtergrond van deze twee laatste toetsingen.</p>
+    <table class="rp-table rp-table-compact"><thead>${m5NormTableHeadHtml('laagfrequent')}</thead><tbody>${m5NormTableRowsHtml('laagfrequent', state, norm)}</tbody></table>
+
+    <h4>3.1.3 Infrasoon geluid (dB(G))</h4>
+    <p class="rp-note">De wettelijke norm is gedefinieerd in dB(A) (hoorbaar geluid); voor infrasoon geluid vervalt de A-weging en wordt hier getoetst in dB(G) — er bestaat geen formeel vastgestelde, direct vergelijkbare grenswaarde in deze eenheid, de dB(A)-norm dient uitsluitend als indicatief referentiepunt.</p>
+    <table class="rp-table rp-table-compact"><thead>${m5NormTableHeadHtml('infrasoon')}</thead><tbody>${m5NormTableRowsHtml('infrasoon', state, norm)}</tbody></table>
+    `}
   </section>`;
 
   // ---- Sectie: scenarioberekening (hoorbaar/LF/infrasoon) ----
@@ -5078,6 +5119,17 @@ function m13BuildReportHtml(mapImages) {
 
     <h3>11.4 Beperkingen</h3>
     <p class="rp-note">(1) Dit is een <strong>experimentele uitbreiding</strong> naast het hoofdmodel: de rest van dit rapport (§2-§10) toetst per vaste scenario/afstand-combinatie, deze sectie middelt over een heel jaar windroos — de twee zijn methodologisch verschillend en niet één-op-één optelbaar. (2) De richting van de woning is een handmatige keuze in de app (hierboven vermeld) en geldt alleen voor de dichtstbijzijnde/eerst geplaatste turbine-as; bij meerdere turbines op andere onderlinge posities kan de daadwerkelijke richting per turbine afwijken. (3) Omdat dit model altijd met de eigen/lokale norm uit Module 1 rekent, kent Module 13 alleen een L<sub>night</sub>-waarde als harde norm; de Lden-toetsing hierboven staat er ter informatie bij, niet als zelfstandig toetsingscriterium.</p>
+
+    <h3>11.5 Hoeveel dagen stilstand per jaar zijn nodig om de jaargemiddelde norm te halen?</h3>
+    <p>Een aanvullende, illustratieve vraag: als de turbine een deel van het jaar volledig stilstaat (bijvoorbeeld via een stilstandvoorziening) en op die dagen nagenoeg geen geluid produceert, hoeveel dagen per jaar moet dat dan zijn om het hierboven berekende kansgewogen jaargemiddelde L<sub>night</sub> (op ${DISTANCES[0]} m, richting ${m14BearingLabel(state.m14Bearing)}) alsnog binnen de eigen norm te brengen? Dit is <strong>geen nieuwe geluidsberekening</strong>: het is een eenvoudige energetische herverdeling van het al hierboven berekende jaargemiddelde over minder bedrijfsdagen, via 10·log₁₀((dagen in bedrijf/365) × 10^(jaargemiddelde/10)) = norm.</p>
+    <table class="rp-table rp-table-compact">
+      <thead><tr><th>Categorie</th><th>Kansgewogen jaargemiddelde L<sub>night</sub></th><th>T.o.v. norm</th><th>Benodigde stilstand</th><th>Resterende bedrijfsdagen</th></tr></thead>
+      <tbody>
+        ${m14StilRow('Hoorbaar geluid', m14NearestNightWeighted, 'dB(A)', m14StilHoorbaar)}
+        ${m14StilRow('Laagfrequent geluid (indicatief — dB(A)-norm toegepast op dB(Lin), zie §11.3)', m14NearestLfgNightWeighted, m14LinUnit, m14StilLfg)}
+      </tbody>
+    </table>
+    <p class="rp-note">Dit is een <strong>vereenvoudigde, illustratieve</strong> berekening: (1) ze gaat uit van volledige stilstand (~0 dB bijdrage) op de stilstand-dagen, terwijl een stilstandvoorziening in de praktijk vaak alleen bij specifieke windrichtingen/-snelheden ingrijpt, niet op willekeurige hele dagen; (2) ze herverdeelt de al berekende jaargemiddelde blootstelling over minder dagen, in plaats van een nieuwe windroos-berekening te maken voor een deelverzameling van het jaar; (3) voor laagfrequent geluid bestaat, net als in §11.3, geen wettelijke jaargemiddelde-norm — de dB(A)-norm uit Module 1 is hier uitsluitend als indicatief referentiepunt toegepast, niet als toetsingskader.</p>
   </section>`;
 
   // ---- Sectie: advies ----
@@ -5144,6 +5196,7 @@ function m13BuildReportHtml(mapImages) {
   .rp-print-btn:hover { background: #0a3838; }
   h2 { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 13pt; color: #0e4a4a; border-bottom: 1px solid #cfc6ae; padding-bottom: 4px; margin: 26px 0 10px; }
   h3 { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11pt; color: #1c2b28; margin: 16px 0 6px; }
+  h4 { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 9.8pt; color: #0e4a4a; margin: 12px 0 4px; }
   p { margin: 0 0 10px; }
   .rp-section { margin-bottom: 6px; }
   .rp-avoid-break { break-inside: avoid; page-break-inside: avoid; }
