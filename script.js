@@ -5275,7 +5275,7 @@ function m13BuildReportHtml(mapImages) {
 // zorgt dat de WebGL-tegellaag leesbaar blijft voor html2canvas/toDataURL.
 function m13WaitMapIdle(timeout) {
   return new Promise((resolve) => {
-    if (!map3a || !tileLayer3a || typeof tileLayer3a.getMaplibreMap !== 'function') {
+    if (!map3a || !tileLayer3a || !map3a.hasLayer(tileLayer3a) || typeof tileLayer3a.getMaplibreMap !== 'function') {
       resolve();
       return;
     }
@@ -5309,7 +5309,7 @@ function m13WaitMapIdle(timeout) {
 // "rechter kaartbeeld" als een duidelijke ring/tegel-mismatch zichtbaar wordt.
 function m13WaitMapCameraSynced(expectedCenter, expectedZoom, timeout) {
   return new Promise((resolve) => {
-    if (!map3a || !tileLayer3a || typeof tileLayer3a.getMaplibreMap !== 'function') { resolve(); return; }
+    if (!map3a || !tileLayer3a || !map3a.hasLayer(tileLayer3a) || typeof tileLayer3a.getMaplibreMap !== 'function') { resolve(); return; }
     const glMap = tileLayer3a.getMaplibreMap();
     if (!glMap || expectedCenter == null || expectedZoom == null) { resolve(); return; }
     const start = Date.now();
@@ -5438,7 +5438,11 @@ async function m13CaptureSingleView(opts) {
     // de beste (meest gelijkmatig gevulde) poging teruggeven.
     let bestCanvas = null;
     let bestScore = -1;
-    const glMap = tileLayer3a && typeof tileLayer3a.getMaplibreMap === 'function' ? tileLayer3a.getMaplibreMap() : null;
+    // Alleen de GL-canvas-snapshotroute proberen wanneer de MapLibre GL-laag ECHT op de kaart
+    // staat: tijdens de rapport-capture (zie m13CaptureMapViews) is dit tijdelijk de rasterlaag,
+    // en mag deze GL-specifieke route niet worden aangesproken op een losgekoppelde/vernietigde
+    // GL-instantie (dat leverde eerder ongevangen fouten op zoals een null parentNode).
+    const glMap = (tileLayer3a && map3a.hasLayer(tileLayer3a) && typeof tileLayer3a.getMaplibreMap === 'function') ? tileLayer3a.getMaplibreMap() : null;
     const WORST_CELL_MIN = 0.06; // elke cel moet minstens dit aandeel niet-wit hebben
     const OVERALL_MIN = 0.5;
     // html2canvas leest een live WebGL-canvas rechtstreeks via diens EIGEN toDataURL()-aanroep —
@@ -5541,6 +5545,45 @@ async function m13CaptureSingleView(opts) {
   }
 }
 
+// Wacht tot een gewone Leaflet-rastertegellaag (plain <img>-tegels) klaar is met laden voor
+// de HUIDIGE weergave. In tegenstelling tot de WebGL/MapLibre-camera-sync-heuristieken hierboven
+// is dit een ondubbelzinnig signaal: Leaflet's eigen 'loading'/'load'-events vuren precies wanneer
+// de tegelqueue voor de huidige viewport leeg is -- geen giswerk over canvas-buffers of rAF-timing.
+function m13WaitRasterLayerLoaded(layer, timeout) {
+  return new Promise((resolve) => {
+    if (!layer) { resolve(); return; }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      layer.off('load', finish);
+      resolve();
+    };
+    // _loading is een intern Leaflet-veld, maar in de praktijk stabiel genoeg om te gebruiken
+    // als een snelle "zijn er nu al helemaal geen tegels meer in de wachtrij"-test.
+    if (layer._loading === false) { finish(); return; }
+    layer.once('load', finish);
+    setTimeout(finish, timeout || 4000);
+  });
+}
+
+// Bouwt de CARTO-rastertegellaag (lichte of donkere stijl, passend bij het huidige thema) die
+// TIJDENS het vastleggen van de rapportkaarten de MapLibre GL-vectortegellaag vervangt.
+function m13BuildReportRasterLayer() {
+  // Esri's 'Canvas' grijstinten-basiskaart: gratis, geen API-key nodig, en stuurt een open
+  // 'Access-Control-Allow-Origin: *'-header mee (bevestigd getest) -- in tegenstelling tot bv.
+  // CARTO's basemaps.cartocdn.com, die zonder API-key een "API KEY REQUIRED"-watermerk over de
+  // hele tegel legt sinds hun beleidswijziging, en de standaard OpenStreetMap-tegelservers, die
+  // geen CORS-headers meesturen (en zo de canvas alsnog laten "taint"-en bij het uitlezen).
+  const service = currentTheme === 'dark' ? 'World_Dark_Gray_Base' : 'World_Light_Gray_Base';
+  return L.tileLayer(`https://services.arcgisonline.com/arcgis/rest/services/Canvas/${service}/MapServer/tile/{z}/{y}/{x}`, {
+    maxZoom: 18,
+    maxNativeZoom: 16, // native resolutie van deze basiskaart; Leaflet schaalt zelf op voor verdere inzoom
+    crossOrigin: true,
+    attribution: '\u00a9 <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>',
+  });
+}
+
 async function m13CaptureMapViews() {
   if (!map3a || state.turbines3a.length === 0) return { closeup: null, regional: null };
   const originalCenter = map3a.getCenter();
@@ -5553,27 +5596,28 @@ async function m13CaptureMapViews() {
   // kaartbeelden verwijderen we de pijllaag tijdelijk van de kaart; na afloop komt hij terug.
   const arrowWasOnMap = turbineArrowLayer3a && map3a.hasLayer(turbineArrowLayer3a);
   if (arrowWasOnMap) map3a.removeLayer(turbineArrowLayer3a);
-  const mapElWarmup = document.getElementById('turbine-map-3a');
-  // Opwarmronde: de EERSTE html2canvas-aanroep op een pagina is in de praktijk minder
-  // betrouwbaar dan latere aanroepen (bleek uit rapporten waarin de closeup-kaart — altijd
-  // als eerste vastgelegd — stelselmatig blanco bleef, terwijl de daarna vastgelegde
-  // regionale kaart wel goed ging). Door hier een wegwerp-capture te doen vóór de
-  // eigenlijke closeup-capture, is die laatste effectief ook een "latere" aanroep.
-  if (mapElWarmup && typeof html2canvas === 'function') {
-    try { await html2canvas(mapElWarmup, { useCORS: true, backgroundColor: null, scale: 1, logging: false }); } catch (e) { /* negeren, dit was slechts een opwarmronde */ }
-  }
+  // KERNFIX voor het terugkerende "lege/witte achtergrond"-defect: in plaats van de LIVE
+  // WebGL/MapLibre-canvas te screenshotten (waarvan de tegel-laadstatus, camera-sync en
+  // canvas-buffer-timing nooit 100% betrouwbaar te detecteren bleken -- zie de vele eerdere
+  // pogingen hieronder in m13CaptureSingleView/m13WaitMapCameraSynced), wisselen we de tegellaag
+  // TIJDENS het vastleggen om naar een gewone rasterlaag (losse <img>-tegels). html2canvas leest
+  // gewone <img>-elementen van nature betrouwbaar uit, en Leaflet's eigen 'load'-event op zo'n
+  // laag is een ondubbelzinnig "klaar"-signaal -- in tegenstelling tot de WebGL-heuristieken
+  // (areTilesLoaded/idle/camera-sync) die dit probleem tot nu toe niet blijvend konden oplossen.
+  // Na de capture wordt de originele MapLibre GL-laag weer teruggezet; de gebruiker ziet in de
+  // live app verder niets veranderen, behalve een kort visueel "knippertje" naar de rasterstijl
+  // terwijl het rapport wordt opgebouwd.
+  const glLayer = tileLayer3a;
+  const glLayerWasOnMap = glLayer && map3a.hasLayer(glLayer);
+  const reportRasterLayer = m13BuildReportRasterLayer();
+  if (glLayerWasOnMap) map3a.removeLayer(glLayer);
+  reportRasterLayer.addTo(map3a);
   try {
-    // Regionale capture forceerde altijd al een verse setView() vóór het wachten/vastleggen
-    // (nodig omdat regioZoom afwijkt van de huidige camera) — de closeup-capture deed dat
-    // NIET, en vertrouwde puur op "de camera staat er toch al". Bij een turbine die net via
-    // coördinaten/adres is toegevoegd (of na een auto-fit-bounds bij meerdere turbines) kan de
-    // GL-laag intern nog een inconsistente/oude raster-buffer hebben t.o.v. de daadwerkelijke
-    // containermaat na invalidateSize() hierboven — zichtbaar als een scherp begrensd kwadrant
-    // met tegels en de rest blanco. Een expliciete (no-op qua positie) setView() dwingt de
-    // maplibre-gl-leaflet-brug tot exact dezelfde volledige camera-resync/herteken-cyclus als
-    // de regionale weergave al kreeg, vóórdat we op "camera synced" gaan wachten.
     map3a.setView(originalCenter, originalZoom, { animate: false });
-    closeup = await m13CaptureSingleView({ expectedCenter: originalCenter, expectedZoom: originalZoom });
+    map3a.invalidateSize();
+    await m13WaitRasterLayerLoaded(reportRasterLayer, 5000);
+    await new Promise((r) => setTimeout(r, 150));
+    closeup = await m13CaptureSingleView({});
     // Was originalZoom - 4 (16x zo veel oppervlak): op een normale plaatsingszoom (~11) kwam de
     // "regionale" kaart daardoor op een landsdekkend zicht uit, met de turbine als vrijwel
     // onzichtbare speldenprik. -2 (4x zoveel oppervlak) toont wel de bredere omgeving
@@ -5581,14 +5625,20 @@ async function m13CaptureMapViews() {
     const regioZoom = Math.max(map3a.getMinZoom ? map3a.getMinZoom() : 6, originalZoom - 2);
     if (regioZoom < originalZoom) {
       map3a.setView(originalCenter, regioZoom, { animate: false });
-      // Geeft de verwachte (nieuwe) center/zoom door aan de capture, zodat die actief wacht tot
-      // de GL-tegellaag ook echt op deze camera staat i.p.v. op een vast getal milliseconden te
-      // vertrouwen — dit is de kern van de fix voor de gerapporteerde ring/tegel-mismatch.
-      regional = await m13CaptureSingleView({ expectedCenter: originalCenter, expectedZoom: regioZoom });
+      await m13WaitRasterLayerLoaded(reportRasterLayer, 5000);
+      await new Promise((r) => setTimeout(r, 150));
+      regional = await m13CaptureSingleView({});
     }
   } finally {
+    map3a.removeLayer(reportRasterLayer);
+    if (glLayerWasOnMap) map3a.addLayer(glLayer);
     map3a.setView(originalCenter, originalZoom, { animate: false });
     if (arrowWasOnMap) map3a.addLayer(turbineArrowLayer3a);
+    map3a.invalidateSize();
+    if (glLayer && typeof glLayer.getMaplibreMap === 'function') {
+      const glMap = glLayer.getMaplibreMap();
+      if (glMap) { try { glMap.resize(); glMap.triggerRepaint(); } catch (e) { /* negeren */ } }
+    }
     await new Promise((r) => setTimeout(r, 60));
   }
   return { closeup, regional };
