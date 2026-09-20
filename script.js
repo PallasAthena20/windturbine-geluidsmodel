@@ -867,6 +867,95 @@ function renderModule15() {
 
   m15RenderTable('m15-lden-table-body', 'm15-lden-result-callout', 'Lden', ldenNorm, 'Lden (jaargemiddeld)', pct);
   m15RenderTable('m15-night-table-body', 'm15-night-result-callout', 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode)', pct);
+  m15RenderStilstandTable();
+}
+
+// ---------- Module 15 Deel D: hoeveel stilstand compenseert de onzekerheid? ----------
+// Herhaalt de al bestaande "hoeveel nachten/dagen stilstand nodig?"-vraag (Module 13,
+// m14StilstandMinNachten/m14VercammenStilstandMinNachten, beide hierboven gedefinieerd) voor elke
+// Module 15-onzekerheidsvariant, door uitsluitend m15ScenarioLevels() (hoorbaar) en
+// m14VercammenScenarioBandLevel() (laagfrequent, al geparametriseerd met lwaBase) te combineren met
+// diezelfde generieke Module 7-stilstandfuncties. GEEN nieuwe dB- of stilstandrekenlogica. Getoetst
+// op DISTANCES[0] = 500 m: de enige ring waar zowel de bronsterkte- als de overdrachtsonzekerheid
+// van Module 15 van toepassing zijn.
+function m15LevelsForVariant(d, bearingToReceiver, variant, metricKey) {
+  const out = {};
+  for (const s of M14_SCENARIOS) {
+    const r = m15ScenarioLevels(d, bearingToReceiver, s.key, variant);
+    if (!r) return null;
+    out[s.key] = r[metricKey];
+  }
+  return out;
+}
+
+// Hergebruikt m14VercammenJaargemiddeldeWorstBand() ONGEWIJZIGD (met lwaBase = Module 1-bronvermogen
+// + de Module 15-bronsterkte-onzekerheid) en telt daarna — net als m15ScenarioLevels() voor hoorbaar
+// geluid — alleen de vaste overdracht-dB-toeslag achteraf op bij het teruggegeven niveau. Dat mag: een
+// gelijke toeslag op alle tertsbanden verschuift elke margin met exact dezelfde waarde, dus de band die
+// al zonder toeslag de grootste overschrijdingsmarge had, blijft dat ook mét toeslag — de bandselectie
+// van de bestaande functie blijft dus geldig zonder deze zelf te herhalen.
+function m15VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, variant, pct, stilNachten) {
+  const lwaBase = state.lwa + variant.bronDb;
+  const { worst } = m14VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, lwaBase, pct, stilNachten);
+  if (!worst) return null;
+  const overdrachtDb = variant.overdrachtDb || 0;
+  if (!overdrachtDb) return worst;
+  const level = worst.level + overdrachtDb;
+  const margin = level - worst.threshold;
+  return { freq: worst.freq, level, threshold: worst.threshold, margin, exceeds: margin > 0 };
+}
+
+function m15VercammenStilstandMinNachten(d, bearingToReceiver, variant, pct) {
+  for (let n = 0; n <= M8_JAAR_NACHTEN; n++) {
+    const worst = m15VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, variant, pct, n);
+    if (!worst || !worst.exceeds) return n;
+  }
+  return null;
+}
+
+function m15StilstandCellHtml(minVal, singular, plural) {
+  if (minVal == null) return `<td class="norm-exceed">nooit binnen 365 ${plural}</td>`;
+  if (minVal === 0) return `<td class="norm-ok">0 ${plural} (al binnen norm)</td>`;
+  return `<td>${minVal} ${minVal === 1 ? singular : plural}</td>`;
+}
+
+// Geeft alleen de <tr>-rijen terug (zonder <thead>), zodat dezelfde rijen zowel in de live-DOM-tabel
+// (index.html, tbody-only) als in het PDF/HTML-rapport (zelfstandige tabel) gebruikt kunnen worden.
+function m15StilstandRowsHtml(pct, ldenNorm, nightNorm, d0) {
+  return M15_ALL_VARIANTS.map((v) => {
+    const nightLevels = Number.isFinite(nightNorm) ? m15LevelsForVariant(d0, state.m14Bearing, v, 'Lnight') : null;
+    const ldenLevels = Number.isFinite(ldenNorm) ? m15LevelsForVariant(d0, state.m14Bearing, v, 'Lden') : null;
+    const minNachtenNight = nightLevels ? m14StilstandMinNachten(nightLevels, pct, nightNorm) : null;
+    const minDagenLden = ldenLevels ? m14StilstandMinNachten(ldenLevels, pct, ldenNorm) : null;
+    const minNachtenVercammen = m15VercammenStilstandMinNachten(d0, state.m14Bearing, v, pct);
+    const nightCell = Number.isFinite(nightNorm) ? m15StilstandCellHtml(minNachtenNight, 'nacht', 'nachten') : '<td class="norm-na">n.v.t. (geen norm)</td>';
+    const ldenCell = Number.isFinite(ldenNorm) ? m15StilstandCellHtml(minDagenLden, 'dag', 'dagen') : '<td class="norm-na">n.v.t. (geen norm)</td>';
+    const vercammenCell = m15StilstandCellHtml(minNachtenVercammen, 'nacht', 'nachten');
+    return `<tr><td>${escapeHtml(v.label)}</td>${nightCell}${ldenCell}${vercammenCell}</tr>`;
+  }).join('');
+}
+
+function m15RenderStilstandTable() {
+  const body = document.getElementById('m15-stilstand-table-body');
+  const resultCallout = document.getElementById('m15-stilstand-result-callout');
+  if (!body) return;
+  const norm = getActiveNorm();
+  const ldenNorm = Number(norm.lden);
+  const nightNorm = Number(norm.lnight);
+  const pct = m14ScenarioPercentages();
+  const d0 = DISTANCES[0];
+  body.innerHTML = m15StilstandRowsHtml(pct, ldenNorm, nightNorm, d0);
+  if (!resultCallout) return;
+  const basis = M15_ALL_VARIANTS[0];
+  const worstVariant = M15_ALL_VARIANTS[M15_ALL_VARIANTS.length - 1];
+  const basisNightLevels = Number.isFinite(nightNorm) ? m15LevelsForVariant(d0, state.m14Bearing, basis, 'Lnight') : null;
+  const worstNightLevels = Number.isFinite(nightNorm) ? m15LevelsForVariant(d0, state.m14Bearing, worstVariant, 'Lnight') : null;
+  const basisMinNight = basisNightLevels ? m14StilstandMinNachten(basisNightLevels, pct, nightNorm) : null;
+  const worstMinNight = worstNightLevels ? m14StilstandMinNachten(worstNightLevels, pct, nightNorm) : null;
+  const diffText = (basisMinNight != null && worstMinNight != null)
+    ? `Voor L<sub>night</sub> loopt het benodigd aantal stilstandnachten op van <strong>${basisMinNight}</strong> (basis) naar <strong>${worstMinNight}</strong> (${escapeHtml(worstVariant.label)}) — een verschil van ${worstMinNight - basisMinNight} nacht${(worstMinNight - basisMinNight) === 1 ? '' : 'en'} door de onzekerheidsmarge alleen.`
+    : 'Er is geen geldige L<sub>night</sub>-norm om tegen te toetsen (zie Module 1).';
+  resultCallout.innerHTML = `Getoetst op ${d0} m, richting ${m14BearingLabel(state.m14Bearing)}, dezelfde kansgewogen weging als Module 13 (best ${pct.best.toFixed(0)}%, middel ${pct.middel.toFixed(0)}%, worst ${pct.worst.toFixed(0)}%). ${diffText}`;
 }
 
 // Minimum aantal stilstandnachten/-dagen per jaar dat nodig is om het kansgewogen jaargemiddelde
@@ -5274,6 +5363,14 @@ function m13BuildReportHtml(mapImages) {
 
     <h3>12.3 Beperkingen</h3>
     <p class="rp-note">(1) de +3,0 dB overdrachtsmarge is uitsluitend onderbouwd voor het 0–1000 m-bereik van ISO 9613-2 en wordt daarom bewust niet toegepast op de ringen boven 1000 m — dat betekent niet dat daar geen overdrachtsonzekerheid bestaat, alleen dat er voor dit model geen gelijkwaardig onderbouwd cijfer is gevonden; (2) de twee bronsterkte-marges (1,5 en 2,0 dB) zijn afkomstig van twee verschillende, niet-representatieve casus (één meetvoorbeeld, één handhavingszaak), geen gepubliceerde populatiestatistiek; (3) deze sectie telt de marges rekenkundig op (dB erbij), niet statistisch gecombineerd (bijv. wortel-kwadratensom) — een bewust conservatieve, niet de kansrekenkundig striktste keuze; (4) deze sectie raakt de onderliggende hoorbaar-/laagfrequent-/infrasoon-rekenlogica zelf niet aan en herrekent uitsluitend met een verhoogd bronvermogen en/of een vaste overdrachtstoeslag via de bestaande §11-functies.</p>
+
+    <h3>12.4 Hoeveel stilstand is nodig om de onzekerheid te compenseren?</h3>
+    <p>Dezelfde "hoeveel nachten/dagen stilstand nodig?"-vraag als §11.5, nu herhaald voor elke bronsterkte-/overdrachtsvariant hierboven — dit laat zien hoeveel extra stilstand de onzekerheidsmarge in het slechtste geval vergt bovenop de §11.5-basiswaarde. Getoetst op ${DISTANCES[0]} m, dezelfde kansgewogen weging als hierboven (best ${m14Pct.best.toFixed(0)}%, middel ${m14Pct.middel.toFixed(0)}%, worst ${m14Pct.worst.toFixed(0)}%), waarbij bij voorrang de zwaarste nachten/dagen worden stilgezet (zelfde volgorde als §11.5).</p>
+    <table class="rp-table rp-table-compact">
+      <thead><tr><th>Variant</th><th>Min. stilstandnachten<br>L<sub>night</sub>-jaargemiddelde</th><th>Min. stilstanddagen<br>Lden-jaargemiddelde</th><th>Min. stilstandnachten<br>Vercammen-curve LFG</th></tr></thead>
+      <tbody>${m15StilstandRowsHtml(m14Pct, m14LdenNorm, m14NightNorm, DISTANCES[0])}</tbody>
+    </table>
+    <p class="rp-note">Beperking: voor de laagfrequente (Vercammen) kolom is aangenomen dat de overdrachtsonzekerheid gelijk doorwerkt op alle 9 tertsbanden — voor de bronsterkte-onzekerheid (IEC 61400-11, breedbandig gemeten) is dat een redelijke aanname, maar voor de +3,0 dB overdrachtsonzekerheid (ISO 9613-2) is dat niet apart onderbouwd per frequentieband.</p>
   </section>`;
 
   // ---- Sectie: advies ----
