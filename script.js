@@ -659,12 +659,23 @@ function m14VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, lwaBase, pct,
 // Minimum aantal stilstandnachten per jaar zodat op afstand d ALLE 9 tertsbanden van het
 // kansgewogen jaargemiddelde binnen hun eigen Vercammen-grenswaarde vallen ("geen hinder" \u2014
 // zelfde exceeds-conventie als vercammenWorstBand/vercammenVerdictLabel elders in dit model).
+// Binaire zoektocht i.p.v. n = 0..365 stuk voor stuk proberen (elke stap roept
+// m14VercammenJaargemiddeldeWorstBand aan, dat zelf al 9 tertsbanden x 3 scenario's doorrekent \u2014
+// dus duur per stap). Geldig omdat worst.margin het maximum is van 9 per-band jaargemiddeldes die elk
+// afzonderlijk monotoon niet-stijgend zijn in stilNachten (zie m14StilstandMinNachten hierboven); het
+// maximum van niet-stijgende functies is zelf ook niet-stijgend. Zelfde uitkomst, ~9 i.p.v. tot 366
+// aanroepen.
 function m14VercammenStilstandMinNachten(d, bearingToReceiver, lwaBase, pct) {
-  for (let n = 0; n <= M8_JAAR_NACHTEN; n++) {
-    const { worst } = m14VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, lwaBase, pct, n);
-    if (!worst || !worst.exceeds) return n;
+  const atMax = m14VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, lwaBase, pct, M8_JAAR_NACHTEN).worst;
+  if (atMax && atMax.exceeds) return null;
+  let lo = 0, hi = M8_JAAR_NACHTEN;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    const { worst } = m14VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, lwaBase, pct, mid);
+    if (!worst || !worst.exceeds) hi = mid;
+    else lo = mid + 1;
   }
-  return null;
+  return lo;
 }
 
 // Vervangt de generieke m14RenderTable() voor tabel 5 (Lnacht, laagfrequent): toont per afstand en
@@ -905,12 +916,20 @@ function m15VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, variant, pct,
   return { freq: worst.freq, level, threshold: worst.threshold, margin, exceeds: margin > 0 };
 }
 
+// Zelfde binaire-zoektocht-optimalisatie als m14VercammenStilstandMinNachten hierboven, nu voor de
+// Module 15-variant (dezelfde monotonie-redenering geldt: een vaste dB-toeslag verschuift elke
+// per-band margin met exact dezelfde waarde en verandert dus niets aan de monotonie in stilNachten).
 function m15VercammenStilstandMinNachten(d, bearingToReceiver, variant, pct) {
-  for (let n = 0; n <= M8_JAAR_NACHTEN; n++) {
-    const worst = m15VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, variant, pct, n);
-    if (!worst || !worst.exceeds) return n;
+  const atMax = m15VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, variant, pct, M8_JAAR_NACHTEN);
+  if (atMax && atMax.exceeds) return null;
+  let lo = 0, hi = M8_JAAR_NACHTEN;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    const worst = m15VercammenJaargemiddeldeWorstBand(d, bearingToReceiver, variant, pct, mid);
+    if (!worst || !worst.exceeds) hi = mid;
+    else lo = mid + 1;
   }
-  return null;
+  return lo;
 }
 
 function m15StilstandCellHtml(minVal, singular, plural) {
@@ -959,16 +978,23 @@ function m15RenderStilstandTable() {
 }
 
 // Minimum aantal stilstandnachten/-dagen per jaar dat nodig is om het kansgewogen jaargemiddelde
-// (hoorbaar, eerste ring) binnen `norm` te krijgen. Loopt n = 0..365 op en hergebruikt
-// uitsluitend m8JaargemiddeldeMetStilstand() (Module 7) \u2014 raakt de hoorbaar/Lden/Lnacht dB-berekening
-// zelf niet aan. Geeft null als de norm ook bij volledige stilstand (365) niet gehaald wordt.
+// (hoorbaar, eerste ring) binnen `norm` te krijgen. Hergebruikt uitsluitend
+// m8JaargemiddeldeMetStilstand() (Module 7) \u2014 raakt de hoorbaar/Lden/Lnacht dB-berekening zelf
+// niet aan. Geeft null als de norm ook bij volledige stilstand (365) niet gehaald wordt.
+// Binaire zoektocht i.p.v. n = 0..365 stuk voor stuk proberen: m8VerdeelStilstand vervangt bij elke
+// extra stilstandnacht steeds de luidste resterende nacht door een stille 0 dB-emmer, dus het
+// jaargemiddelde is monotoon niet-stijgend in n \u2014 dezelfde uitkomst als de lineaire zoektocht,
+// maar in ~9 aanroepen i.p.v. tot 366.
 function m14StilstandMinNachten(levels, pct, norm) {
   if (!Number.isFinite(norm)) return null;
-  for (let n = 0; n <= M8_JAAR_NACHTEN; n++) {
-    const result = m8JaargemiddeldeMetStilstand(levels, pct, n);
-    if (result.jaargemiddelde <= norm) return n;
+  if (m8JaargemiddeldeMetStilstand(levels, pct, M8_JAAR_NACHTEN).jaargemiddelde > norm) return null;
+  let lo = 0, hi = M8_JAAR_NACHTEN;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (m8JaargemiddeldeMetStilstand(levels, pct, mid).jaargemiddelde <= norm) hi = mid;
+    else lo = mid + 1;
   }
-  return null;
+  return lo;
 }
 
 // Interactieve stilstand-vraag bij de nachtperiode-tabel (hoorbaar, eerste ring = DISTANCES[0] =
@@ -1269,7 +1295,7 @@ if (m1CustomLdenInput) {
     state.normCustomLden = parseFloat(m1CustomLdenInput.value);
     if (Number.isNaN(state.normCustomLden)) state.normCustomLden = 47;
     updateNormCustomValuesNote();
-    render();
+    scheduleRender();
   });
 }
 if (m1CustomLnightInput) {
@@ -1277,7 +1303,7 @@ if (m1CustomLnightInput) {
     state.normCustomLnight = parseFloat(m1CustomLnightInput.value);
     if (Number.isNaN(state.normCustomLnight)) state.normCustomLnight = 41;
     updateNormCustomValuesNote();
-    render();
+    scheduleRender();
   });
 }
 const categoryTabs = document.getElementById('category-tabs');
@@ -1378,7 +1404,7 @@ if (m7UgeoInput) m7UgeoInput.addEventListener('input', () => {
   state.m7Ugeo = parseFloat(m7UgeoInput.value);
   state.m7UgeoAutoInfo = null;
   state.m7UgeoAutoError = null;
-  render();
+  scheduleRender();
 });
 const m7UgeoAutoBtnEl = document.getElementById('m7-ugeo-auto-btn');
 if (m7UgeoAutoBtnEl) m7UgeoAutoBtnEl.addEventListener('click', () => { m7FetchGeostrophicWind(); });
@@ -1388,7 +1414,7 @@ if (m8HouseholdInput) {
   m8HouseholdInput.addEventListener('input', () => {
     const v = parseFloat(m8HouseholdInput.value);
     state.m8HouseholdSize = Number.isNaN(v) ? 2.10 : v;
-    render();
+    scheduleRender();
   });
 }
 const m8FetchBtnEl = document.getElementById('m8-fetch-btn');
@@ -1454,7 +1480,7 @@ const m12AddBtnEl = document.getElementById('m12-add-btn');
 if (m12AddBtnEl) m12AddBtnEl.addEventListener('click', () => { m12AddGroup(); });
 
 // ---------- Bronvermogen slider ----------
-lwaInput.addEventListener('input', () => { state.lwa = parseFloat(lwaInput.value); render(); });
+lwaInput.addEventListener('input', () => { state.lwa = parseFloat(lwaInput.value); scheduleRender(); });
 
 // ---------- Category tabs (Module 3 en Module 3a delen state.category en blijven onderling gesynchroniseerd) ----------
 function bindCategoryTabs(el) {
@@ -1652,6 +1678,21 @@ function updateWorstCaseReadout() {
 }
 
 // ---------- Rendering ----------
+// Bundelt meerdere render()-aanroepen die binnen \u00e9\u00e9n animatieframe binnenkomen (bv. tientallen
+// 'input'-events tijdens het slepen van een schuifregelaar) tot \u00e9\u00e9n render \u2014 de state (bv.
+// state.lwa) wordt bij elk event nog steeds direct bijgewerkt, dus de aflezing blijft accuraat; alleen
+// het dure herrekenen/hertekenen zelf gebeurt hooguit \u00e9\u00e9n keer per frame in plaats van bij elke
+// pixelbeweging. Verandert niets aan wat render() doet of berekent.
+let renderScheduled = false;
+function scheduleRender() {
+  if (renderScheduled) return;
+  renderScheduled = true;
+  requestAnimationFrame(() => {
+    renderScheduled = false;
+    render();
+  });
+}
+
 function render() {
   syncCategoryTabButtons();
   lwaReadout.textContent = state.lwa.toFixed(1);
