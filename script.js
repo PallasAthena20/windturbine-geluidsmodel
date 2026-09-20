@@ -4725,30 +4725,40 @@ function m13BuildReportHtml(mapImages) {
   const m14LinUnit = CATEGORY.laagfrequent ? CATEGORY.laagfrequent.unit : 'dB(Lin)';
   const m14InfUnit = CATEGORY.infrasoon ? CATEGORY.infrasoon.unit : 'dB(G)';
 
-  // ---- Nieuw (op verzoek): hoeveel dagen volledige stilstand per jaar zijn nodig om het hierboven
-  // al berekende kansgewogen jaargemiddelde Lnacht alsnog binnen de eigen norm te brengen? Dit is
-  // GEEN nieuwe geluidsberekening en raakt de hoorbaar-/laagfrequent-rekenlogica niet aan — het
-  // herverdeelt uitsluitend het al berekende jaargemiddelde energetisch over minder bedrijfsdagen,
-  // onder de aanname dat de turbine tijdens stilstand ~0 dB (verwaarloosbaar) bijdraagt:
-  //   10*log10((dagen_in_bedrijf/365) * 10^(jaargemiddelde/10)) = norm
-  //   => dagen_in_bedrijf/365 = 10^((norm - jaargemiddelde)/10)
-  const m14StilstandDagen = (weighted, normLevel) => {
-    if (weighted == null || !Number.isFinite(normLevel)) return null;
-    if (weighted <= normLevel) return { days: 0, alreadyOk: true };
-    const fractionOff = 1 - Math.pow(10, (normLevel - weighted) / 10);
-    return { days: Math.min(365, Math.ceil(fractionOff * 365)), alreadyOk: false };
+  // ---- Nieuw (op verzoek): hoeveel nachten volledige stilstand per jaar zijn nodig om de
+  // jaargemiddelde norm te halen? Dit hergebruikt UITSLUITEND de al bestaande, interactieve
+  // stilstandfuncties van Module 13 zelf (m14StilstandMinNachten/m8JaargemiddeldeMetStilstand voor
+  // hoorbaar, m14VercammenStilstandMinNachten voor laagfrequent/Vercammen-hinder) — dezelfde functies
+  // die de "Hoeveel nachten stilstand?"-vraag in de app zelf beantwoorden. Er is dus GEEN eigen/nieuwe
+  // dB- of stilstandrekenlogica: dit geeft daarom altijd exact hetzelfde getal als de interactieve
+  // module in de app (in tegenstelling tot een eerdere versie die een eigen, te grove energetische
+  // benadering gebruikte en daardoor een te hoog aantal dagen liet zien).
+  const m14StilD0 = DISTANCES[0];
+  const m14StilLevelsHoorbaar = {
+    best: m14ScenarioLevels(m14StilD0, state.m14Bearing, state.lwa, 'best', 'hoorbaar')?.Lnacht,
+    middel: m14ScenarioLevels(m14StilD0, state.m14Bearing, state.lwa, 'middel', 'hoorbaar')?.Lnacht,
+    worst: m14ScenarioLevels(m14StilD0, state.m14Bearing, state.lwa, 'worst', 'hoorbaar')?.Lnacht,
   };
-  const m14StilHoorbaar = m14StilstandDagen(m14NearestNightWeighted, m14NightNorm);
-  const m14StilLfg = m14StilstandDagen(m14NearestLfgNightWeighted, m14NightNorm);
-  const m14StilRow = (label, weighted, unit, res) => {
-    if (weighted == null) return `<tr><td>${label}</td><td colspan="4" class="rp-note">—</td></tr>`;
-    if (!res) return `<tr><td>${label}</td><td>${weighted.toFixed(1)} ${unit}</td><td colspan="3" class="rp-note">geen geldige norm</td></tr>`;
-    const diff = weighted - m14NightNorm;
-    if (res.alreadyOk) {
-      return `<tr><td>${label}</td><td>${weighted.toFixed(1)} ${unit}</td><td class="norm-ok">${diff.toFixed(1)} dB (binnen norm)</td><td class="norm-ok">0 dagen — al binnen norm</td><td>365 dagen</td></tr>`;
+  const m14StilLevelsCompleteHoorbaar = m14StilLevelsHoorbaar.best != null && m14StilLevelsHoorbaar.middel != null && m14StilLevelsHoorbaar.worst != null;
+  const m14StilZonderHoorbaar = m14StilLevelsCompleteHoorbaar ? m8JaargemiddeldeMetStilstand(m14StilLevelsHoorbaar, m14Pct, 0).jaargemiddelde : null;
+  const m14StilNachtenHoorbaar = (m14StilLevelsCompleteHoorbaar && Number.isFinite(m14NightNorm))
+    ? m14StilstandMinNachten(m14StilLevelsHoorbaar, m14Pct, m14NightNorm)
+    : null;
+  const m14StilLfgWorstZonder = m14VercammenJaargemiddeldeWorstBand(m14StilD0, state.m14Bearing, state.lwa, m14Pct, 0).worst;
+  const m14StilNachtenLfg = m14VercammenStilstandMinNachten(m14StilD0, state.m14Bearing, state.lwa, m14Pct);
+  const m14StilRow = (label, zonderValue, unit, minNachten, marginLabel, isOk) => {
+    if (zonderValue == null) return `<tr><td>${label}</td><td colspan="4" class="rp-note">—</td></tr>`;
+    if (minNachten === 0 || isOk) {
+      return `<tr><td>${label}</td><td>${zonderValue.toFixed(1)} ${unit}</td><td class="norm-ok">${marginLabel}</td><td class="norm-ok">0 nachten — al binnen norm</td><td>365 nachten</td></tr>`;
     }
-    return `<tr><td>${label}</td><td>${weighted.toFixed(1)} ${unit}</td><td class="norm-exceed">+${diff.toFixed(1)} dB</td><td class="norm-exceed">${res.days} dagen/jaar volledige stilstand</td><td>${365 - res.days} dagen</td></tr>`;
+    if (minNachten == null) {
+      return `<tr><td>${label}</td><td>${zonderValue.toFixed(1)} ${unit}</td><td class="norm-exceed">${marginLabel}</td><td class="norm-exceed">ook bij volledige stilstand (365 nachten) niet haalbaar</td><td>0 nachten</td></tr>`;
+    }
+    return `<tr><td>${label}</td><td>${zonderValue.toFixed(1)} ${unit}</td><td class="norm-exceed">${marginLabel}</td><td class="norm-exceed">${minNachten} nachten/jaar volledige stilstand</td><td>${365 - minNachten} nachten</td></tr>`;
   };
+  const m14StilHoorbaarDiff = m14StilZonderHoorbaar != null && Number.isFinite(m14NightNorm) ? m14StilZonderHoorbaar - m14NightNorm : null;
+  const m14StilHoorbaarMarginLabel = m14StilHoorbaarDiff == null ? 'geen geldige norm' : (m14StilHoorbaarDiff > 0 ? `+${m14StilHoorbaarDiff.toFixed(1)} dB` : `${m14StilHoorbaarDiff.toFixed(1)} dB (binnen norm)`);
+  const m14StilLfgMarginLabel = m14StilLfgWorstZonder ? `${m14StilLfgWorstZonder.margin >= 0 ? '+' : ''}${m14StilLfgWorstZonder.margin.toFixed(1)} dB(Lin) @ ${m14StilLfgWorstZonder.freq} Hz` : 'onbekend';
 
   // ---- Sectie: Module 1-12 samenvatting ----
   const summarySection = `
@@ -5120,16 +5130,16 @@ function m13BuildReportHtml(mapImages) {
     <h3>11.4 Beperkingen</h3>
     <p class="rp-note">(1) Dit is een <strong>experimentele uitbreiding</strong> naast het hoofdmodel: de rest van dit rapport (§2-§10) toetst per vaste scenario/afstand-combinatie, deze sectie middelt over een heel jaar windroos — de twee zijn methodologisch verschillend en niet één-op-één optelbaar. (2) De richting van de woning is een handmatige keuze in de app (hierboven vermeld) en geldt alleen voor de dichtstbijzijnde/eerst geplaatste turbine-as; bij meerdere turbines op andere onderlinge posities kan de daadwerkelijke richting per turbine afwijken. (3) Omdat dit model altijd met de eigen/lokale norm uit Module 1 rekent, kent Module 13 alleen een L<sub>night</sub>-waarde als harde norm; de Lden-toetsing hierboven staat er ter informatie bij, niet als zelfstandig toetsingscriterium.</p>
 
-    <h3>11.5 Hoeveel dagen stilstand per jaar zijn nodig om de jaargemiddelde norm te halen?</h3>
-    <p>Een aanvullende, illustratieve vraag: als de turbine een deel van het jaar volledig stilstaat (bijvoorbeeld via een stilstandvoorziening) en op die dagen nagenoeg geen geluid produceert, hoeveel dagen per jaar moet dat dan zijn om het hierboven berekende kansgewogen jaargemiddelde L<sub>night</sub> (op ${DISTANCES[0]} m, richting ${m14BearingLabel(state.m14Bearing)}) alsnog binnen de eigen norm te brengen? Dit is <strong>geen nieuwe geluidsberekening</strong>: het is een eenvoudige energetische herverdeling van het al hierboven berekende jaargemiddelde over minder bedrijfsdagen, via 10·log₁₀((dagen in bedrijf/365) × 10^(jaargemiddelde/10)) = norm.</p>
+    <h3>11.5 Hoeveel nachten stilstand per jaar zijn nodig om de norm te halen?</h3>
+    <p>Een aanvullende vraag: als de turbine een deel van het jaar volledig stilstaat (bijvoorbeeld via een stilstandvoorziening) en op die nachten nagenoeg geen geluid produceert, hoeveel nachten per jaar moet dat dan minimaal zijn om op ${DISTANCES[0]} m (richting ${m14BearingLabel(state.m14Bearing)}) alsnog aan de norm te voldoen? Dit is <strong>geen nieuwe geluidsberekening</strong> en gebruikt <strong>dezelfde functies</strong> als de interactieve "hoeveel nachten stilstand"-vraag in Module 13 van de app zelf: bij voorrang worden de zwaarste nachten stilgezet (eerst worst case, dan middenscenario, dan best case) — dat geeft een groter effect per stilgezette nacht dan een gelijkmatige verdeling, en dus doorgaans aanzienlijk minder benodigde stilstandnachten dan een eenvoudige energetische herverdeling zou suggereren. Voor hoorbaar geluid is de norm de eigen L<sub>night</sub>-norm uit Module 1; voor laagfrequent geluid is er geen wettelijke norm, dus is de Vercammen-hindercurve (§7b) als toetsingskader gebruikt — getoetst op de tertsband met de grootste overschrijding.</p>
     <table class="rp-table rp-table-compact">
-      <thead><tr><th>Categorie</th><th>Kansgewogen jaargemiddelde L<sub>night</sub></th><th>T.o.v. norm</th><th>Benodigde stilstand</th><th>Resterende bedrijfsdagen</th></tr></thead>
+      <thead><tr><th>Categorie</th><th>Kansgewogen jaargemiddelde (zonder stilstand)</th><th>T.o.v. norm</th><th>Benodigde stilstand</th><th>Resterende bedrijfsnachten</th></tr></thead>
       <tbody>
-        ${m14StilRow('Hoorbaar geluid', m14NearestNightWeighted, 'dB(A)', m14StilHoorbaar)}
-        ${m14StilRow('Laagfrequent geluid (indicatief — dB(A)-norm toegepast op dB(Lin), zie §11.3)', m14NearestLfgNightWeighted, m14LinUnit, m14StilLfg)}
+        ${m14StilRow('Hoorbaar geluid (L<sub>night</sub>, eigen norm)', m14StilZonderHoorbaar, 'dB(A)', m14StilNachtenHoorbaar, m14StilHoorbaarMarginLabel)}
+        ${m14StilRow('Laagfrequent geluid (Vercammen-hindercriterium, zie §7b)', m14StilLfgWorstZonder ? m14StilLfgWorstZonder.level : null, 'dB(Lin)', m14StilNachtenLfg, m14StilLfgMarginLabel, m14StilLfgWorstZonder ? !m14StilLfgWorstZonder.exceeds : false)}
       </tbody>
     </table>
-    <p class="rp-note">Dit is een <strong>vereenvoudigde, illustratieve</strong> berekening: (1) ze gaat uit van volledige stilstand (~0 dB bijdrage) op de stilstand-dagen, terwijl een stilstandvoorziening in de praktijk vaak alleen bij specifieke windrichtingen/-snelheden ingrijpt, niet op willekeurige hele dagen; (2) ze herverdeelt de al berekende jaargemiddelde blootstelling over minder dagen, in plaats van een nieuwe windroos-berekening te maken voor een deelverzameling van het jaar; (3) voor laagfrequent geluid bestaat, net als in §11.3, geen wettelijke jaargemiddelde-norm — de dB(A)-norm uit Module 1 is hier uitsluitend als indicatief referentiepunt toegepast, niet als toetsingskader.</p>
+    <p class="rp-note">Toelichting: (1) dit gaat uit van volledige stilstand (~0 dB bijdrage) op de stilstandnachten, terwijl een stilstandvoorziening in de praktijk vaak alleen bij specifieke windrichtingen/-snelheden ingrijpt, niet op willekeurige hele nachten; (2) de volgorde waarin nachten worden stilgezet (zwaarste eerst) is dezelfde aanname als bij de interactieve stilstandvraag in Module 13 — een andere volgorde (bijvoorbeeld willekeurig) zou meer stilstandnachten vergen; (3) voor laagfrequent geluid is de Vercammen-hindercurve gebruikt als meest onderbouwde beschikbare toetsingskader, maar dit is geen wettelijke norm.</p>
   </section>`;
 
   // ---- Sectie: advies ----
