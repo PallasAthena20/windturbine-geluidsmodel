@@ -412,6 +412,7 @@ details.calc-panel[open] summary::before { transform: rotate(90deg); }
 .data-table td.downwind { color: var(--color-error); font-weight: 700; }
 .data-table td.upwind { color: var(--color-success); font-weight: 700; }
 .data-table td.empty-row { font-family: var(--font-body); color: var(--color-text-muted); text-align: center; padding: var(--space-4); border-bottom: none; }
+.data-table tr.m5-scenario-row th { background: var(--color-surface-offset); color: var(--color-text-primary); font-family: var(--font-body); font-weight: 700; font-size: var(--text-xs); text-transform: none; letter-spacing: normal; text-align: left; padding: var(--space-2); border-top: 2px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
 
 #infrasound-callout { display: none; margin-top: var(--space-4); margin-bottom: 0; }
 #infrasound-callout.visible { display: block; }

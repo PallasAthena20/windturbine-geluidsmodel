@@ -766,6 +766,7 @@ function renderModule14() {
   m14RenderStilstand();
   m14RenderStilstandLden();
   m14RenderStilstandVercammen();
+  m14RenderStilstandTotaal();
 }
 
 // ---------- Module 15: Bronvermogen- en overdrachtsonzekerheid (IEC 61400-11 / ISO 9613-2) ----------
@@ -1130,6 +1131,69 @@ function m14RenderStilstandVercammen() {
   const currentText = `Bij <strong>${stilNachten} stilstandnacht${stilNachten === 1 ? '' : 'en'}</strong> per jaar is op ${d0} m de tertsband met de grootste overschrijdingsmarge <strong>${huidigeStand.freq} Hz</strong>, met een kansgewogen jaargemiddelde van <strong>${huidigeStand.level.toFixed(1)} dB(Lin)</strong> tegen een Vercammen-grens van ${huidigeStand.threshold.toFixed(1)} dB(Lin) (was ${zonderStilstand.level.toFixed(1)} dB(Lin) op ${zonderStilstand.freq} Hz zonder stilstand) \u2014 dat ${exceeds ? 'overschrijdt de Vercammen-curve (hinder)' : 'blijft binnen de Vercammen-curve (geen hinder)'}.`;
 
   container.innerHTML = `<p>${minText}</p><p>${currentText}</p>`;
+}
+
+// Samenvatting \u201cin totaal\u201d: combineert de drie hierboven al berekende minima (Lden-dagen,
+// L_night-nachten, Vercammen-nachten) tot \u00e9\u00e9n antwoord. Rekent zelf NIETS nieuws door \u2014 leest
+// uitsluitend m14StilstandMinNachten()/m14VercammenStilstandMinNachten() opnieuw uit (dezelfde functies
+// als de drie afzonderlijke vragen hierboven) en interpreteert de uitkomst: een stilstand\u00adDAG (Lden)
+// is een heel etmaal (dag+avond+nacht) stil, dus die nacht telt vanzelf ook mee voor de twee
+// nacht-only-normen hieronder \u2014 het totaal is daarom het MAXIMUM van de twee nachtaantallen, niet de
+// som (zie ook de toelichting die hierover in de app/chat is gegeven: de drie vragen zijn onafhankelijke
+// \u201cwat-als\u201d-berekeningen, geen optelsom).
+function m14RenderStilstandTotaal() {
+  const container = document.getElementById('m14-stilstand-totaal-container');
+  if (!container) return;
+  const d0 = DISTANCES[0];
+  const pct = m14ScenarioPercentages();
+  const norm = getActiveNorm();
+  const ldenNorm = Number(norm?.lden);
+  const nightNorm = Number(norm?.lnight);
+
+  const ldenLevels = {
+    best: m14ScenarioLevels(d0, state.m14Bearing, state.lwa, 'best', 'hoorbaar')?.Lden,
+    middel: m14ScenarioLevels(d0, state.m14Bearing, state.lwa, 'middel', 'hoorbaar')?.Lden,
+    worst: m14ScenarioLevels(d0, state.m14Bearing, state.lwa, 'worst', 'hoorbaar')?.Lden,
+  };
+  const nightLevels = {
+    best: m14ScenarioLevels(d0, state.m14Bearing, state.lwa, 'best', 'hoorbaar')?.Lnacht,
+    middel: m14ScenarioLevels(d0, state.m14Bearing, state.lwa, 'middel', 'hoorbaar')?.Lnacht,
+    worst: m14ScenarioLevels(d0, state.m14Bearing, state.lwa, 'worst', 'hoorbaar')?.Lnacht,
+  };
+  const levelsOk = (l) => l.best != null && l.middel != null && l.worst != null;
+
+  const minDagenLden = (Number.isFinite(ldenNorm) && levelsOk(ldenLevels)) ? m14StilstandMinNachten(ldenLevels, pct, ldenNorm) : undefined;
+  const minNachtenLnight = (Number.isFinite(nightNorm) && levelsOk(nightLevels)) ? m14StilstandMinNachten(nightLevels, pct, nightNorm) : undefined;
+  const minNachtenVercammen = m14VercammenStilstandMinNachten(d0, state.m14Bearing, state.lwa, pct);
+
+  const fmtCount = (n, unit) => {
+    if (n === null) return `nooit haalbaar met stilstand alleen (ook niet bij 365 ${unit} per jaar)`;
+    if (n === undefined) return 'niet te bepalen (geen geldige norm bij Module 1)';
+    return `<strong>${n} ${unit}</strong>`;
+  };
+
+  let nachtenTotaalText;
+  let nachtenTotaal = null;
+  if (minNachtenLnight === null || minNachtenVercammen === null) {
+    nachtenTotaalText = 'niet haalbaar met stilstand alleen \u2014 minstens \u00e9\u00e9n van de twee nachtnormen blijft ook bij 365 stilstandnachten per jaar overschreden';
+  } else if (!Number.isFinite(minNachtenLnight) || !Number.isFinite(minNachtenVercammen)) {
+    nachtenTotaalText = 'niet volledig te bepalen (L<sub>night</sub>-norm ontbreekt bij Module 1)';
+  } else {
+    nachtenTotaal = Math.max(minNachtenLnight, minNachtenVercammen);
+    nachtenTotaalText = `<strong>${nachtenTotaal} van de 365 nachten</strong> per jaar nodig \u2014 het maximum van de twee aparte uitkomsten hierboven, niet de som, want dezelfde stilgezette nacht helpt beide nachtnormen tegelijk`;
+  }
+
+  let combinedText = '';
+  if (Number.isFinite(minDagenLden) && nachtenTotaal !== null && Number.isFinite(nachtenTotaal)) {
+    if (minDagenLden >= nachtenTotaal) {
+      combinedText = `Omdat een stilstanddag (Lden) het hele etmaal beslaat \u2014 dus ook de nacht \u2014 dekken de ${minDagenLden} stilstanddagen voor Lden de nachtnormen automatisch mee. <strong>In totaal is dus ${minDagenLden} dag${minDagenLden === 1 ? '' : 'en'} per jaar</strong> voldoende om alle drie de normen tegelijk te halen.`;
+    } else {
+      const extraNachten = nachtenTotaal - minDagenLden;
+      combinedText = `De ${minDagenLden} stilstanddagen voor Lden dekken daarvan al ${minDagenLden} van de benodigde ${nachtenTotaal} nachten mee; daarnaast zijn nog <strong>${extraNachten} extra nachten</strong> nodig (alleen 's nachts stil, geen volledig etmaal) om ook de striktere nachtnorm te halen. <strong>In totaal dus ${minDagenLden} dagen + ${extraNachten} nachten</strong> per jaar \u2014 niet bij elkaar optellen tot \u00e9\u00e9n \u201cdagen\u201d-getal, want het zijn twee verschillende eenheden.`;
+    }
+  }
+
+  container.innerHTML = `<p><strong>In totaal, samengevat:</strong> Lden vraagt om ${fmtCount(minDagenLden, 'dagen')} volledige stilstand (dag, avond \u00e9n nacht); L<sub>night</sub> vraagt om ${fmtCount(minNachtenLnight, 'nachten')}; de Vercammen-laagfrequentnorm vraagt om ${fmtCount(minNachtenVercammen, 'nachten')}. Voor de twee nachtnormen samen is ${nachtenTotaalText}.</p>${combinedText ? `<p>${combinedText}</p>` : ''}<p class="rp-note" style="font-size:0.85em;color:var(--color-text-muted);">Let op: deze drie stilstandvragen zijn onafhankelijke \u201cwat-als\u201d-berekeningen op basis van dezelfde kansverdeling (best/middel/worst); dit vak combineert alleen hun uitkomsten \u2014 het verandert niets aan de drie tabellen/vragen hierboven.</p>`;
 }
 
 function initModule14() {
@@ -1586,10 +1650,19 @@ function turbineIcon(selected) {
 // laagfrequent-vercammen, en via CATEGORY eventuele overige) blijven ONGEWIJZIGD de dag/downwind/
 // upwind/zijwind-vorm hieronder gebruiken; met name de hoorbaar- en infrasoon-rekenlogica zelf
 // (lpAt/computeCategoryLw) wordt nergens in dit bestand opnieuw geïmplementeerd.
-function m5NormTableRowsHtml(categoryKey, baseState, norm) {
-  if (categoryKey === 'laagfrequent') {
-    return m5LfgCombinedTableRowsHtml(baseState, norm);
-  }
+//
+// Labels + volgorde voor de drie-scenario-weergave hieronder — dezelfde sleutels/labels als
+// SCENARIO_FACTORS en Module 13 (M14_SCENARIOS), zodat de terminologie overal identiek is.
+const M5_SCENARIO_ROWS = [
+  { key: 'best', label: 'Best case' },
+  { key: 'middel', label: 'Middenscenario' },
+  { key: 'worst', label: 'Worst case' },
+];
+
+// Rijen voor ÉÉN scenario (ongewijzigde dag/downwind/upwind/zijwind-rekenlogica, alleen nu expliciet
+// per scenario aangeroepen i.p.v. impliciet via baseState.scenario). Geen nieuwe geluidsrekenlogica —
+// uitsluitend lpAt()/computeCategoryLw() hergebruikt, met scenarioKey als enige toegevoegde parameter.
+function m5NormTableRowsHtmlForScenario(categoryKey, baseState, norm) {
   const lwCat = computeCategoryLw(baseState.lwa)[categoryKey];
   const dayState = Object.assign({}, baseState, { daynight: 'dag' });
   const nightState = Object.assign({}, baseState, { daynight: 'nacht' });
@@ -1605,6 +1678,21 @@ function m5NormTableRowsHtml(categoryKey, baseState, norm) {
     const lUp = lpAt(d, -1, categoryKey, lwCat, nightState);
     const lCross = lpAt(d, 0, categoryKey, lwCat, nightState);
     return `<tr><td>${d} m</td><td>${lday.toFixed(1)}</td><td>${lDown.toFixed(1)}</td>${toetsCell(lDown)}<td>${lUp.toFixed(1)}</td>${toetsCell(lUp)}<td>${lCross.toFixed(1)}</td>${toetsCell(lCross)}</tr>`;
+  }).join('');
+}
+
+// Toont, per categorie, alle drie de scenario's onder elkaar (i.p.v. slechts het scenario dat op dat
+// moment elders in de app is geselecteerd) — telkens met een scenario-kopregel (colspan) direct boven
+// het bijbehorende blok rijen. Dezelfde <thead> (m5NormTableHeadHtml) blijft ongewijzigd boven de hele
+// tabel staan; alleen de <tbody>-inhoud wordt hier in drie blokken opgesplitst.
+function m5NormTableRowsHtml(categoryKey, baseState, norm) {
+  const colspan = categoryKey === 'laagfrequent' ? 5 : 8;
+  return M5_SCENARIO_ROWS.map(({ key, label }) => {
+    const scenState = Object.assign({}, baseState, { scenario: key });
+    const rows = categoryKey === 'laagfrequent'
+      ? m5LfgCombinedTableRowsHtml(scenState, norm)
+      : m5NormTableRowsHtmlForScenario(categoryKey, scenState, norm);
+    return `<tr class="m5-scenario-row"><th colspan="${colspan}">${label}</th></tr>${rows}`;
   }).join('');
 }
 
@@ -5098,19 +5186,58 @@ function m13BuildReportHtml(mapImages) {
     : null;
   const m14StilLfgWorstZonder = m14VercammenJaargemiddeldeWorstBand(m14StilD0, state.m14Bearing, state.lwa, m14Pct, 0).worst;
   const m14StilNachtenLfg = m14VercammenStilstandMinNachten(m14StilD0, state.m14Bearing, state.lwa, m14Pct);
-  const m14StilRow = (label, zonderValue, unit, minNachten, marginLabel, isOk) => {
+  const m14StilRow = (label, zonderValue, unit, minNachten, marginLabel, isOk, eenheid) => {
+    const e = eenheid || 'nachten';
     if (zonderValue == null) return `<tr><td>${label}</td><td colspan="4" class="rp-note">—</td></tr>`;
     if (minNachten === 0 || isOk) {
-      return `<tr><td>${label}</td><td>${zonderValue.toFixed(1)} ${unit}</td><td class="norm-ok">${marginLabel}</td><td class="norm-ok">0 nachten — al binnen norm</td><td>365 nachten</td></tr>`;
+      return `<tr><td>${label}</td><td>${zonderValue.toFixed(1)} ${unit}</td><td class="norm-ok">${marginLabel}</td><td class="norm-ok">0 ${e} — al binnen norm</td><td>365 ${e}</td></tr>`;
     }
     if (minNachten == null) {
-      return `<tr><td>${label}</td><td>${zonderValue.toFixed(1)} ${unit}</td><td class="norm-exceed">${marginLabel}</td><td class="norm-exceed">ook bij volledige stilstand (365 nachten) niet haalbaar</td><td>0 nachten</td></tr>`;
+      return `<tr><td>${label}</td><td>${zonderValue.toFixed(1)} ${unit}</td><td class="norm-exceed">${marginLabel}</td><td class="norm-exceed">ook bij volledige stilstand (365 ${e}) niet haalbaar</td><td>0 ${e}</td></tr>`;
     }
-    return `<tr><td>${label}</td><td>${zonderValue.toFixed(1)} ${unit}</td><td class="norm-exceed">${marginLabel}</td><td class="norm-exceed">${minNachten} nachten/jaar volledige stilstand</td><td>${365 - minNachten} nachten</td></tr>`;
+    return `<tr><td>${label}</td><td>${zonderValue.toFixed(1)} ${unit}</td><td class="norm-exceed">${marginLabel}</td><td class="norm-exceed">${minNachten} ${e}/jaar volledige stilstand</td><td>${365 - minNachten} ${e}</td></tr>`;
   };
   const m14StilHoorbaarDiff = m14StilZonderHoorbaar != null && Number.isFinite(m14NightNorm) ? m14StilZonderHoorbaar - m14NightNorm : null;
   const m14StilHoorbaarMarginLabel = m14StilHoorbaarDiff == null ? 'geen geldige norm' : (m14StilHoorbaarDiff > 0 ? `+${m14StilHoorbaarDiff.toFixed(1)} dB` : `${m14StilHoorbaarDiff.toFixed(1)} dB (binnen norm)`);
   const m14StilLfgMarginLabel = m14StilLfgWorstZonder ? `${m14StilLfgWorstZonder.margin >= 0 ? '+' : ''}${m14StilLfgWorstZonder.margin.toFixed(1)} dB(Lin) @ ${m14StilLfgWorstZonder.freq} Hz` : 'onbekend';
+
+  // Derde rij (op verzoek): Lden-stilstand in DAGEN, naast de twee nacht-only rijen hierboven.
+  // Hergebruikt uitsluitend m14StilstandMinNachten() (dezelfde functie als de interactieve
+  // Lden-stilstandvraag in de app, m14RenderStilstandLden hierboven) \u2014 geen nieuwe rekenlogica.
+  const m14StilLevelsLden = {
+    best: m14ScenarioLevels(m14StilD0, state.m14Bearing, state.lwa, 'best', 'hoorbaar')?.Lden,
+    middel: m14ScenarioLevels(m14StilD0, state.m14Bearing, state.lwa, 'middel', 'hoorbaar')?.Lden,
+    worst: m14ScenarioLevels(m14StilD0, state.m14Bearing, state.lwa, 'worst', 'hoorbaar')?.Lden,
+  };
+  const m14StilLevelsCompleteLden = m14StilLevelsLden.best != null && m14StilLevelsLden.middel != null && m14StilLevelsLden.worst != null;
+  const m14StilZonderLden = m14StilLevelsCompleteLden ? m8JaargemiddeldeMetStilstand(m14StilLevelsLden, m14Pct, 0).jaargemiddelde : null;
+  const m14StilDagenLden = (m14StilLevelsCompleteLden && Number.isFinite(m14LdenNorm))
+    ? m14StilstandMinNachten(m14StilLevelsLden, m14Pct, m14LdenNorm)
+    : null;
+  const m14StilLdenDiff = m14StilZonderLden != null && Number.isFinite(m14LdenNorm) ? m14StilZonderLden - m14LdenNorm : null;
+  const m14StilLdenMarginLabel = m14StilLdenDiff == null ? 'geen geldige norm' : (m14StilLdenDiff > 0 ? `+${m14StilLdenDiff.toFixed(1)} dB` : `${m14StilLdenDiff.toFixed(1)} dB (binnen norm)`);
+
+  // ---- \u201cIn totaal\u201d-samenvatting van de drie stilstandvragen hierboven: zelfde combinatielogica
+  // (maximum van de twee nacht-only-eisen, niet de som) als m14RenderStilstandTotaal() in de app. ----
+  let m14StilTotaalNachtenText;
+  let m14StilTotaalNachten = null;
+  if (m14StilNachtenHoorbaar === null || m14StilNachtenLfg === null) {
+    m14StilTotaalNachtenText = 'niet haalbaar met stilstand alleen — minstens één van de twee nachtnormen blijft ook bij 365 stilstandnachten per jaar overschreden';
+  } else if (!Number.isFinite(m14StilNachtenHoorbaar) || !Number.isFinite(m14StilNachtenLfg)) {
+    m14StilTotaalNachtenText = 'niet volledig te bepalen (norm ontbreekt bij Module 1)';
+  } else {
+    m14StilTotaalNachten = Math.max(m14StilNachtenHoorbaar, m14StilNachtenLfg);
+    m14StilTotaalNachtenText = `<strong>${m14StilTotaalNachten} van de 365 nachten</strong> per jaar nodig — het maximum van de twee aparte uitkomsten hierboven, niet de som, want dezelfde stilgezette nacht helpt beide nachtnormen tegelijk`;
+  }
+  let m14StilTotaalCombinedText = '';
+  if (Number.isFinite(m14StilDagenLden) && m14StilTotaalNachten !== null && Number.isFinite(m14StilTotaalNachten)) {
+    if (m14StilDagenLden >= m14StilTotaalNachten) {
+      m14StilTotaalCombinedText = `Omdat een stilstanddag (Lden) het hele etmaal beslaat — dus ook de nacht — dekken de ${m14StilDagenLden} stilstanddagen voor Lden de nachtnormen automatisch mee. In totaal is dus <strong>${m14StilDagenLden} dag${m14StilDagenLden === 1 ? '' : 'en'} per jaar</strong> voldoende om alle drie de normen tegelijk te halen.`;
+    } else {
+      const m14StilExtraNachten = m14StilTotaalNachten - m14StilDagenLden;
+      m14StilTotaalCombinedText = `De ${m14StilDagenLden} stilstanddagen voor Lden dekken daarvan al ${m14StilDagenLden} van de benodigde ${m14StilTotaalNachten} nachten mee; daarnaast zijn nog <strong>${m14StilExtraNachten} extra nachten</strong> nodig (alleen 's nachts stil, geen volledig etmaal) om ook de striktere nachtnorm te halen. In totaal dus <strong>${m14StilDagenLden} dagen + ${m14StilExtraNachten} nachten</strong> per jaar.`;
+    }
+  }
 
   // ---- Sectie: Module 1-12 samenvatting ----
   const summarySection = `
@@ -5484,16 +5611,18 @@ function m13BuildReportHtml(mapImages) {
     <h3>11.4 Beperkingen</h3>
     <p class="rp-note">(1) Dit is een <strong>experimentele uitbreiding</strong> naast het hoofdmodel: de rest van dit rapport (§2-§10) toetst per vaste scenario/afstand-combinatie, deze sectie middelt over een heel jaar windroos — de twee zijn methodologisch verschillend en niet één-op-één optelbaar. (2) De richting van de woning is een handmatige keuze in de app (hierboven vermeld) en geldt alleen voor de dichtstbijzijnde/eerst geplaatste turbine-as; bij meerdere turbines op andere onderlinge posities kan de daadwerkelijke richting per turbine afwijken. (3) Omdat dit model altijd met de eigen/lokale norm uit Module 1 rekent, kent Module 13 alleen een L<sub>night</sub>-waarde als harde norm; de Lden-toetsing hierboven staat er ter informatie bij, niet als zelfstandig toetsingscriterium.</p>
 
-    <h3>11.5 Hoeveel nachten stilstand per jaar zijn nodig om de norm te halen?</h3>
-    <p>Een aanvullende vraag: als de turbine een deel van het jaar volledig stilstaat (bijvoorbeeld via een stilstandvoorziening) en op die nachten nagenoeg geen geluid produceert, hoeveel nachten per jaar moet dat dan minimaal zijn om op ${DISTANCES[0]} m (richting ${m14BearingLabel(state.m14Bearing)}) alsnog aan de norm te voldoen? Dit is <strong>geen nieuwe geluidsberekening</strong> en gebruikt <strong>dezelfde functies</strong> als de interactieve "hoeveel nachten stilstand"-vraag in Module 13 van de app zelf: bij voorrang worden de zwaarste nachten stilgezet (eerst worst case, dan middenscenario, dan best case) — dat geeft een groter effect per stilgezette nacht dan een gelijkmatige verdeling, en dus doorgaans aanzienlijk minder benodigde stilstandnachten dan een eenvoudige energetische herverdeling zou suggereren. Voor hoorbaar geluid is de norm de eigen L<sub>night</sub>-norm uit Module 1; voor laagfrequent geluid is er geen wettelijke norm, dus is de Vercammen-hindercurve (§7b) als toetsingskader gebruikt — getoetst op de tertsband met de grootste overschrijding.</p>
+    <h3>11.5 Hoeveel dagen en/of nachten stilstand per jaar zijn nodig om de norm te halen?</h3>
+    <p>Een aanvullende vraag: als de turbine een deel van het jaar volledig stilstaat (bijvoorbeeld via een stilstandvoorziening) en op die dagen/nachten nagenoeg geen geluid produceert, hoeveel dagen resp. nachten per jaar moet dat dan minimaal zijn om op ${DISTANCES[0]} m (richting ${m14BearingLabel(state.m14Bearing)}) alsnog aan de norm te voldoen? Dit is <strong>geen nieuwe geluidsberekening</strong> en gebruikt <strong>dezelfde functies</strong> als de drie interactieve stilstandvragen in Module 13 van de app zelf (L<sub>den</sub>-dagen, L<sub>night</sub>-nachten en Vercammen-nachten): bij voorrang worden de zwaarste dagen/nachten stilgezet (eerst worst case, dan middenscenario, dan best case) — dat geeft een groter effect per stilgezette dag/nacht dan een gelijkmatige verdeling, en dus doorgaans aanzienlijk minder benodigde stilstand dan een eenvoudige energetische herverdeling zou suggereren. Voor Lden en L<sub>night</sub> is de norm de eigen norm uit Module 1; voor laagfrequent geluid is er geen wettelijke norm, dus is de Vercammen-hindercurve (§7b) als toetsingskader gebruikt — getoetst op de tertsband met de grootste overschrijding. Let op: dit zijn drie <strong>losse, onafhankelijke</strong> "wat-als"-vragen, geen optelsom — zie de samenvatting onder de tabel voor het gecombineerde totaal.</p>
     <table class="rp-table rp-table-compact">
-      <thead><tr><th>Categorie</th><th>Kansgewogen jaargemiddelde (zonder stilstand)</th><th>T.o.v. norm</th><th>Benodigde stilstand</th><th>Resterende bedrijfsnachten</th></tr></thead>
+      <thead><tr><th>Categorie</th><th>Kansgewogen jaargemiddelde (zonder stilstand)</th><th>T.o.v. norm</th><th>Benodigde stilstand</th><th>Resterende bedrijfsdagen/-nachten</th></tr></thead>
       <tbody>
+        ${m14StilRow('Hoorbaar geluid — L<sub>den</sub> (volledig etmaal, eigen norm)', m14StilZonderLden, 'dB(A)', m14StilDagenLden, m14StilLdenMarginLabel, false, 'dagen')}
         ${m14StilRow('Hoorbaar geluid (L<sub>night</sub>, eigen norm)', m14StilZonderHoorbaar, 'dB(A)', m14StilNachtenHoorbaar, m14StilHoorbaarMarginLabel)}
         ${m14StilRow('Laagfrequent geluid (Vercammen-hindercriterium, zie §7b)', m14StilLfgWorstZonder ? m14StilLfgWorstZonder.level : null, 'dB(Lin)', m14StilNachtenLfg, m14StilLfgMarginLabel, m14StilLfgWorstZonder ? !m14StilLfgWorstZonder.exceeds : false)}
       </tbody>
     </table>
-    <p class="rp-note">Toelichting: (1) dit gaat uit van volledige stilstand (~0 dB bijdrage) op de stilstandnachten, terwijl een stilstandvoorziening in de praktijk vaak alleen bij specifieke windrichtingen/-snelheden ingrijpt, niet op willekeurige hele nachten; (2) de volgorde waarin nachten worden stilgezet (zwaarste eerst) is dezelfde aanname als bij de interactieve stilstandvraag in Module 13 — een andere volgorde (bijvoorbeeld willekeurig) zou meer stilstandnachten vergen; (3) voor laagfrequent geluid is de Vercammen-hindercurve gebruikt als meest onderbouwde beschikbare toetsingskader, maar dit is geen wettelijke norm.</p>
+    <p class="rp-note">Toelichting: (1) dit gaat uit van volledige stilstand (~0 dB bijdrage) op de stilstanddagen/-nachten, terwijl een stilstandvoorziening in de praktijk vaak alleen bij specifieke windrichtingen/-snelheden ingrijpt, niet op willekeurige hele dagen/nachten; (2) de volgorde waarin dagen/nachten worden stilgezet (zwaarste eerst) is dezelfde aanname als bij de interactieve stilstandvragen in Module 13 — een andere volgorde (bijvoorbeeld willekeurig) zou meer stilstand vergen; (3) voor laagfrequent geluid is de Vercammen-hindercurve gebruikt als meest onderbouwde beschikbare toetsingskader, maar dit is geen wettelijke norm; (4) de Lden-rij (volledig etmaal) en de twee nachtrijen zijn drie <strong>onafhankelijke</strong> berekeningen, geen optelsom — zie de samenvatting hieronder voor het gecombineerde totaal.</p>
+    <p><strong>In totaal, samengevat:</strong> voor de twee nachtnormen (L<sub>night</sub> en Vercammen) samen is ${m14StilTotaalNachtenText}.${m14StilTotaalCombinedText ? ` ${m14StilTotaalCombinedText}` : ''}</p>
   </section>`;
 
   // ---- Sectie: bronvermogen- en overdrachtsonzekerheid (Module 15) ----
@@ -5629,6 +5758,8 @@ function m13BuildReportHtml(mapImages) {
   .rp-table-compact { font-size: 8pt; }
   .rp-table-compact th, .rp-table-compact td { padding: 4px 5px; }
   .rp-table-compact .rp-src { font-size: 7.3pt; }
+  .rp-table tbody tr.m5-scenario-row { background: #bcd0cb !important; }
+  .rp-table tbody tr.m5-scenario-row th { font-family: 'Helvetica', 'Arial', sans-serif; font-weight: 700; text-align: left; color: #0e4a4a; }
   .rp-src { color: #5c6a63; font-size: 8.6pt; }
   .rp-note { font-size: 9pt; color: #5c6a63; font-style: italic; }
   .rp-list { margin: 6px 0 12px 18px; }
