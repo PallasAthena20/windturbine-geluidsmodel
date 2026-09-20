@@ -757,6 +757,118 @@ function renderModule14() {
   m14RenderStilstandVercammen();
 }
 
+// ---------- Module 15: Bronvermogen- en overdrachtsonzekerheid (IEC 61400-11 / ISO 9613-2) ----------
+// Voegt GEEN nieuwe dB-rekenlogica toe aan hoorbaar/laagfrequent/infrasoon zelf: hergebruikt
+// uitsluitend m14ScenarioLevels() (met een opgehoogde lwaBase i.p.v. state.lwa) en m14WeightedValue()
+// voor de kansgewogen weging — exact dezelfde functies als Module 13. De overdrachtsonzekerheid
+// (ISO 9613-2, NIET IEC 61400-11) wordt als vaste dB-toeslag ACHTERAF opgeteld bij de al berekende
+// Lden/Lnacht-waarde — fysisch gelijkwaardig aan een toeslag die voor alle dagdelen even groot is
+// (en dus onveranderd doorwerkt in de energetische Lden-samenstelling van dag/avond/nacht).
+const M15_BRON_VARIANTS = [
+  { key: 'basis', label: 'Basis (Module 1-ingave)', bronDb: 0 },
+  { key: 'bron15', label: '+1,5 dB bronsterkte (IEC 61400-11)', bronDb: 1.5 },
+  { key: 'bron20', label: '+2,0 dB bronsterkte (praktijkmarge)', bronDb: 2.0 },
+];
+const M15_OVERDRACHT_DELTA_DB = 3.0;
+// Alleen deze twee ringen liggen binnen het bereik waarvoor ISO 9613-2 zelf een nauwkeurigheidscijfer
+// opgeeft (0–1000 m); voor de ringen daarboven (1300/1500/2000/5000 m) bestaat geen vergelijkbaar
+// onderbouwde foutmarge — zie de voetnoot bij de tabellen hieronder en in het rapport.
+const M15_OVERDRACHT_DISTANCES = [500, 900];
+const M15_COMBI_VARIANTS = [
+  { key: 'bron15_overdracht', label: '+1,5 dB bron & +3,0 dB overdracht (500–900 m)', bronDb: 1.5, overdrachtDb: M15_OVERDRACHT_DELTA_DB },
+  { key: 'bron20_overdracht', label: '+2,0 dB bron & +3,0 dB overdracht (500–900 m)', bronDb: 2.0, overdrachtDb: M15_OVERDRACHT_DELTA_DB },
+];
+const M15_ALL_VARIANTS = [...M15_BRON_VARIANTS, ...M15_COMBI_VARIANTS];
+
+// Wrapper rond m14ScenarioLevels(): rekent exact zoals Module 13, met (a) een opgehoogde lwaBase
+// voor de bronsterkte-onzekerheid en (b) optioneel een vaste overdracht-dB-toeslag achteraf.
+function m15ScenarioLevels(d, bearingToReceiver, scenarioKey, variant) {
+  const base = m14ScenarioLevels(d, bearingToReceiver, state.lwa + variant.bronDb, scenarioKey, 'hoorbaar');
+  if (!base) return null;
+  const overdrachtDb = variant.overdrachtDb || 0;
+  if (!overdrachtDb) return base;
+  return {
+    Ldag: base.Ldag + overdrachtDb,
+    Lavond: base.Lavond + overdrachtDb,
+    Lnacht: base.Lnacht + overdrachtDb,
+    Lden: base.Lden + overdrachtDb,
+    Lnight: base.Lnight + overdrachtDb,
+  };
+}
+
+// Rijen (per DISTANCES-afstand) × kolommen (per variant) voor de Module 15-tabellen. `metricKey` is
+// 'Lden' of 'Lnacht' (zelfde keys als m14ScenarioLevels/m14WeightedValue). `pct` = m14ScenarioPercentages().
+function m15RowsFor(metricKey, pct) {
+  return DISTANCES.map((d) => {
+    const cells = M15_ALL_VARIANTS.map((v) => {
+      const outOfRange = !!v.overdrachtDb && !M15_OVERDRACHT_DISTANCES.includes(d);
+      if (outOfRange) return { variant: v, weighted: null, outOfRange: true };
+      const scenarios = M14_SCENARIOS.map((s) => ({ key: s.key, result: m15ScenarioLevels(d, state.m14Bearing, s.key, v) }));
+      const weighted = m14WeightedValue(scenarios, metricKey, pct);
+      return { variant: v, weighted, outOfRange: false };
+    });
+    return { d, cells };
+  });
+}
+
+function m15Cell(cellData, norm, unit, naClass) {
+  if (cellData.outOfRange) return `<td class="${naClass}">n.v.t. (buiten ISO 9613-2-bereik)</td>`;
+  if (cellData.weighted == null) return '<td class="empty-row">&mdash;</td>';
+  if (!Number.isFinite(norm)) return `<td>${cellData.weighted.toFixed(1)} ${unit}</td>`;
+  const diff = cellData.weighted - norm;
+  const exceed = diff > 0;
+  return `<td class="${exceed ? 'norm-exceed' : 'norm-ok'}">${cellData.weighted.toFixed(1)} ${unit} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)})</td>`;
+}
+
+function m15TableHtml(metricKey, norm, pct, unit) {
+  const rows = m15RowsFor(metricKey, pct);
+  const head = M15_ALL_VARIANTS.map((v) => `<th>${escapeHtml(v.label)}</th>`).join('');
+  const body = rows.map(({ d, cells }) => `<tr><td>${d} m</td>${cells.map((c) => m15Cell(c, norm, unit, 'rp-note')).join('')}</tr>`).join('');
+  return `<table class="rp-table rp-table-compact"><thead><tr><th>Afstand</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function m15RenderTable(bodyId, resultCalloutId, metricKey, norm, metricLabelForSummary, pct) {
+  const body = document.getElementById(bodyId);
+  const resultCallout = document.getElementById(resultCalloutId);
+  if (!body || !resultCallout) return;
+  const rows = m15RowsFor(metricKey, pct);
+  body.innerHTML = rows.map(({ d, cells }) => `<tr><td>${d} m</td>${cells.map((c) => m15Cell(c, norm, 'dB(A)', 'norm-na')).join('')}</tr>`).join('');
+
+  if (!Number.isFinite(norm)) {
+    resultCallout.innerHTML = 'Bij de huidige eigen norm uit Module 1 is er geen geldige norm van dit type (dB(A)) — vul een geldige waarde in bij Module 1 om hier een toetsing te zien.';
+    return;
+  }
+  const summary = M15_ALL_VARIANTS.map((v, i) => {
+    const okDistances = rows.filter((r) => {
+      const c = r.cells[i];
+      return c && !c.outOfRange && c.weighted != null && c.weighted <= norm;
+    }).map((r) => r.d);
+    const minOk = okDistances.length ? Math.min(...okDistances) : null;
+    return { label: v.label, minOk };
+  });
+  const summaryText = summary.map((s) => (
+    s.minOk != null
+      ? `${escapeHtml(s.label)}: vanaf ${s.minOk} m binnen norm`
+      : `${escapeHtml(s.label)}: op geen van de getoonde afstanden binnen norm`
+  )).join(' — ');
+  resultCallout.innerHTML = `<strong>${metricLabelForSummary}, norm ${norm.toFixed(1)} dB(A) (Module 1: ${escapeHtml(getActiveNorm().label)}):</strong> ${summaryText}. Kansgewogen jaargemiddelde per variant (zelfde best/middel/worst-weging als Module 13). Richting woning t.o.v. turbine: ${m14BearingLabel(state.m14Bearing)}.`;
+}
+
+function renderModule15() {
+  const norm = getActiveNorm();
+  const ldenNorm = Number(norm.lden);
+  const nightNorm = Number(norm.lnight);
+  const pct = m14ScenarioPercentages();
+
+  const contextCallout = document.getElementById('m15-context-callout');
+  if (contextCallout) {
+    contextCallout.innerHTML = `<strong>Basiswaarden:</strong> bronvermogen L<sub>WA</sub> = <strong>${state.lwa.toFixed(1)} dB(A)</strong> (Module 1) — de kolommen hieronder tonen dit bronvermogen verhoogd met de IEC 61400-11-bronsterkte-onzekerheid (+1,5 / +2,0 dB) en, alleen voor de ringen 500–900 m, aanvullend verhoogd met de ISO 9613-2-overdrachtsonzekerheid (+3,0 dB). Richting = <strong>${m14BearingLabel(state.m14Bearing)}</strong> (Module 13), normkeuze = <strong>${escapeHtml(norm.label)}</strong>: Lden ${Number.isFinite(ldenNorm) ? ldenNorm.toFixed(1) + ' dB(A)' : '—'}, L<sub>night</sub> ${Number.isFinite(nightNorm) ? nightNorm.toFixed(1) + ' dB(A)' : '—'}.`;
+  }
+
+  m15RenderTable('m15-lden-table-body', 'm15-lden-result-callout', 'Lden', ldenNorm, 'Lden (jaargemiddeld)', pct);
+  m15RenderTable('m15-night-table-body', 'm15-night-result-callout', 'Lnacht', nightNorm, 'Lnight (jaargemiddeld, nachtperiode)', pct);
+}
+
 // Minimum aantal stilstandnachten/-dagen per jaar dat nodig is om het kansgewogen jaargemiddelde
 // (hoorbaar, eerste ring) binnen `norm` te krijgen. Loopt n = 0..365 op en hergebruikt
 // uitsluitend m8JaargemiddeldeMetStilstand() (Module 7) \u2014 raakt de hoorbaar/Lden/Lnacht dB-berekening
@@ -913,6 +1025,7 @@ function initModule14() {
     bearingSelect.addEventListener('change', () => {
       state.m14Bearing = parseInt(bearingSelect.value, 10);
       renderModule14();
+      renderModule15();
     });
   }
   if (stilstandInput) {
@@ -943,6 +1056,7 @@ function initModule14() {
     });
   }
   renderModule14();
+  renderModule15();
 }
 
 // ---------- App state ----------
@@ -1499,6 +1613,7 @@ function render() {
   renderModule7();
   renderModule8();
   renderModule14();
+  renderModule15();
 }
 
 // ---------- Locatie toevoegen: adreszoeker (PDOK Locatieserver) & coordinaten ----------
@@ -4782,6 +4897,7 @@ function m13BuildReportHtml(mapImages) {
         <tr><td>12</td><td>Bouw-/investeringskosten per turbine(groep), PBL-eindadvies SDE++ 2026.</td><td>${hasM12 ? `${m12rows.length} groep(en), ${m12TotalVermogen.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW totaal, €${Math.round(m12TotalInvest).toLocaleString('nl-NL')} investering` : '— (nog geen turbinegroep toegevoegd)'}</td></tr>
         <tr><td>13</td><td>Jaargemiddelde Lden/L<sub>night</sub> per scenario en windrichting, getoetst aan de eigen Lden-/L<sub>night</sub>-norm uit Module 1 (experimentele uitbreiding).</td><td>Richting ${m14BearingLabel(state.m14Bearing)}, op ${DISTANCES[0]} m: kansgewogen jaargemiddelde L<sub>night</sub> ${m14NearestNightWeighted != null ? m14NearestNightWeighted.toFixed(1) + ' dB(A)' : '—'}${Number.isFinite(m14NightNorm) ? ` (norm ${m14NightNorm.toFixed(1)} dB(A))` : ''} — zie §11</td></tr>
         <tr><td>14</td><td>Dit rapport: een doorlopende, citeerbare synthese van alle bovenstaande modules.</td><td>U leest het nu.</td></tr>
+        <tr><td>15</td><td>Bronvermogen- en overdrachtsonzekerheid: telt de IEC 61400-11-bronsterkte-onzekerheid (+1,5/+2,0 dB) en, alleen op 500&ndash;900 m, de ISO 9613-2-overdrachtsonzekerheid (+3,0 dB) op bij het jaargemiddelde uit Module 13 (experimentele uitbreiding).</td><td>Zie §12 hieronder.</td></tr>
       </tbody>
     </table>
   </section>`;
@@ -5099,7 +5215,7 @@ function m13BuildReportHtml(mapImages) {
         <li>De investeringskosten zijn <strong>eenmalig kapitaal</strong> van de projectontwikkelaar/investeerder, terugverdiend over de exploitatieperiode via energieverkoop (en doorgaans SDE++-subsidie) — een bedrijfseconomische kostenpost voor één partij.</li>
         <li>De maatschappelijke kosten zijn grotendeels <strong>jaarlijks terugkerende, gespreide lasten voor omwonenden</strong> — een andere partij, die geen deel heeft in de opbrengsten van de turbine.</li>
         <li>Op basis van de wetenschappelijk best onderbouwde rij (<strong>hoorbaar geluid, kritisch hinderpercentage 33,7%</strong>, §5) bedraagt de geschatte maatschappelijke kostenpost over ${horizon} jaar <strong>${hoorbaarCritTotal != null ? m9FmtEuro(hoorbaarCritTotal) : '—'}</strong>, tegenover een investering van <strong>${m9FmtEuro(m12TotalInvest)}</strong> — dat is <strong>${(hoorbaarCritTotal != null && m12TotalInvest > 0) ? (hoorbaarCritTotal / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong> van de investering, puur aan externe kosten die niet in de businesscase van de ontwikkelaar zitten. Wordt hetzelfde hinderpercentage illustratief ook op de (grotere) infrasoonring toegepast, loopt dit op tot <strong>${infrasoonCritTotal != null ? m9FmtEuro(infrasoonCritTotal) : '—'}</strong> (<strong>${(infrasoonCritTotal != null && m12TotalInvest > 0) ? (infrasoonCritTotal / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong>) — dat bovenste cijfer heeft echter geen eigen hinderstudie als onderbouwing (zie §5) en dient uitsluitend als gevoeligheidsindicatie.</li>
-        <li>Deze externe kosten worden in de huidige vergunningverlening <strong>niet gecompenseerd of geïnternaliseerd</strong> (behalve, deels, via planschadevergoeding bij waardedaling boven de 4% NMR-drempel, §9) — ze blijven bij de omwonenden liggen, wat de aanleiding is voor het advies in §12.</li>
+        <li>Deze externe kosten worden in de huidige vergunningverlening <strong>niet gecompenseerd of geïnternaliseerd</strong> (behalve, deels, via planschadevergoeding bij waardedaling boven de 4% NMR-drempel, §9) — ze blijven bij de omwonenden liggen, wat de aanleiding is voor het advies in §13.</li>
       </ul>
     </div>` : m12Banner}
   </section>`;
@@ -5142,22 +5258,40 @@ function m13BuildReportHtml(mapImages) {
     <p class="rp-note">Toelichting: (1) dit gaat uit van volledige stilstand (~0 dB bijdrage) op de stilstandnachten, terwijl een stilstandvoorziening in de praktijk vaak alleen bij specifieke windrichtingen/-snelheden ingrijpt, niet op willekeurige hele nachten; (2) de volgorde waarin nachten worden stilgezet (zwaarste eerst) is dezelfde aanname als bij de interactieve stilstandvraag in Module 13 — een andere volgorde (bijvoorbeeld willekeurig) zou meer stilstandnachten vergen; (3) voor laagfrequent geluid is de Vercammen-hindercurve gebruikt als meest onderbouwde beschikbare toetsingskader, maar dit is geen wettelijke norm.</p>
   </section>`;
 
+  // ---- Sectie: bronvermogen- en overdrachtsonzekerheid (Module 15) ----
+  const uncertaintySection = `
+  <section class="rp-section">
+    <h2>12. Bronvermogen- en overdrachtsonzekerheid (IEC 61400-11 / ISO 9613-2, experimentele uitbreiding)</h2>
+    <p>§11 toetst de Module 13-jaargemiddelden aan één vaste bronvermogenwaarde (Module 1) en de propagatieformule van dit model — beide zijn in werkelijkheid metingen/schattingen met een eigen onzekerheidsmarge, geen exacte getallen. Deze sectie telt die marges op bij de kansgewogen jaargemiddelden uit §11 (zelfde best/middel/worst-weging, best ${m14Pct.best.toFixed(0)}%, middel ${m14Pct.middel.toFixed(0)}%, worst ${m14Pct.worst.toFixed(0)}%; richting woning t.o.v. turbine: ${m14BearingLabel(state.m14Bearing)}).</p>
+    <p><strong>Bronsterkte-onzekerheid (IEC 61400-11):</strong> een <a href="https://publicaties.ecn.nl/PdfFetch.aspx?nr=ECN-C--01-025" target="_blank" rel="noopener">ECN-werkshoprapport over de ontwikkeling van deze meetnorm</a> noemt als voorbeeld een gemeten bronsterkte van 92 dB met <strong>1,5 dB als standaardafwijking</strong>. Een handhavingsonderzoek bij <a href="https://www.windwiki.nl/wp-content/uploads/2023/11/onderzoek_naleving_milieunormen_windpark_ospeldijk_compleet_d.d._22_februari_2023_geanonimiseerd.pdf" target="_blank" rel="noopener">Windpark Ospeldijk</a> laat zien dat het gemeten bronvermogen in de praktijk circa <strong>2,0 dB hoger</strong> uitviel dan de fabrieksopgave. Beide worden hieronder los als kolom getoond, bovenop de Module 1-basiswaarde.</p>
+    <p><strong>Overdrachtsonzekerheid (ISO 9613-2 — expliciet niet IEC 61400-11):</strong> een <a href="https://www.utn.uu.se/sts/student/wp-content/uploads/gamla%20exjobb/0901_wondollek.pdf" target="_blank" rel="noopener">academisch afstudeeronderzoek dat ISO 9613-2 citeert</a> vermeldt een nauwkeurigheid van ±3 dB voor afstanden van 0–1000 m (bij een gemiddelde bronhoogte van 0–5 m) — dit is een <strong>ISO 9613-2</strong>-cijfer; IEC 61400-11 beschrijft alleen de meetmethode voor het bronvermogen zelf, niet de foutmarge van de geluidsoverdracht door de lucht. <a href="https://docs.wind-watch.org/08-11-02-kamperman-james-ver-2-1-wind-watch-org-noise-criteria-for-siting-wind-turbines.pdf" target="_blank" rel="noopener">Kamperman &amp; James</a> wijzen erop dat windturbines vaak buiten de hoogte-/windsnelheidsgrenzen vallen waarvoor ISO 9613-2 is gevalideerd. Deze <strong>+3,0 dB</strong> wordt daarom uitsluitend toegepast op de ringen <strong>500 en 900 m</strong> (binnen het 0–1000 m-bereik van de bron); voor de ringen 1300/1500/2000/5000 m ontbreekt een vergelijkbaar onderbouwd cijfer en tonen de tabellen "n.v.t.".</p>
+
+    <h3>12.1 Lden — jaargemiddeld, met bronsterkte- en overdrachtsonzekerheid</h3>
+    ${m15TableHtml('Lden', m14LdenNorm, m14Pct, m14LdenUnit)}
+
+    <h3>12.2 L<sub>night</sub> — jaargemiddeld, nachtperiode, met bronsterkte- en overdrachtsonzekerheid</h3>
+    ${m15TableHtml('Lnacht', m14NightNorm, m14Pct, m14LdenUnit)}
+
+    <h3>12.3 Beperkingen</h3>
+    <p class="rp-note">(1) de +3,0 dB overdrachtsmarge is uitsluitend onderbouwd voor het 0–1000 m-bereik van ISO 9613-2 en wordt daarom bewust niet toegepast op de ringen boven 1000 m — dat betekent niet dat daar geen overdrachtsonzekerheid bestaat, alleen dat er voor dit model geen gelijkwaardig onderbouwd cijfer is gevonden; (2) de twee bronsterkte-marges (1,5 en 2,0 dB) zijn afkomstig van twee verschillende, niet-representatieve casus (één meetvoorbeeld, één handhavingszaak), geen gepubliceerde populatiestatistiek; (3) deze sectie telt de marges rekenkundig op (dB erbij), niet statistisch gecombineerd (bijv. wortel-kwadratensom) — een bewust conservatieve, niet de kansrekenkundig striktste keuze; (4) deze sectie raakt de onderliggende hoorbaar-/laagfrequent-/infrasoon-rekenlogica zelf niet aan en herrekent uitsluitend met een verhoogd bronvermogen en/of een vaste overdrachtstoeslag via de bestaande §11-functies.</p>
+  </section>`;
+
   // ---- Sectie: advies ----
   const advisorySection = `
   <section class="rp-section">
-    <h2>12. Advies — internationale voorbeelden en normstelling</h2>
+    <h2>13. Advies — internationale voorbeelden en normstelling</h2>
     <p>Nederland toetst windturbinegeluid uitsluitend op hoorbaar geluid (dB(A), Lden/Lnight) en kent <strong>geen enkele normstelling voor laagfrequent of infrasoon geluid</strong> — een leemte die drie landen om ons heen op uiteenlopende manieren hebben ingevuld.</p>
 
-    <h3>12.1 Denemarken — expliciete LFN-norm</h3>
+    <h3>13.1 Denemarken — expliciete LFN-norm</h3>
     <p>Denemarken hanteert sinds de <a href="https://eng.mst.dk/media/urbm0xut/statutory-order-on-noise-from-wind-turbines-2019-version.pdf" target="_blank" rel="noopener">Bekendtgørelse nr. 1284 van 15 december 2011</a> een bindende, <strong>berekende</strong> (niet gemeten) binnenwaarde voor laagfrequent geluid van windturbines: <strong>20 dB(A) in de avond (19-22u) en nacht (22-07u)</strong>, en 25 dB(A) overdag, in het 10-160 Hz-gebied per 1/3-octaafband. Deze norm bestond al als algemene richtlijn voor andere geluidsbronnen (<a href="https://eng.mst.dk/industry/noise/wind-turbines" target="_blank" rel="noopener">Deense Milieuagentschap</a>), maar werd in 2011 specifiek voor windturbines tot een verplichte, bij vergunningverlening te berekenen grenswaarde gemaakt — zie ook <a href="https://journals.sagepub.com/doi/pdf/10.1260/0263-0923.31.4.239" target="_blank" rel="noopener">Jakobsen (2012)</a> voor de onderliggende motivatie.</p>
 
-    <h3>12.2 Duitsland — dynamische, weersafhankelijke nachtmodus</h3>
+    <h3>13.2 Duitsland — dynamische, weersafhankelijke nachtmodus</h3>
     <p>Duitsland heeft geen apart LFN-getal, maar kent via de <a href="https://de.wikipedia.org/wiki/Technische_Anleitung_zum_Schutz_gegen_L%C3%A4rm" target="_blank" rel="noopener">TA Lärm</a> gebiedsafhankelijke nachtnormen (35 dB(A) in reine Wohngebiete, 40 dB(A) in allgemeine Wohngebiete, 45 dB(A) in dorps-/mengbestemmingen) én de praktijk van <strong>"schallreduzierter nächtlicher Betrieb"</strong>: vergunningen kunnen een nachtelijke bedrijfsmodus voorschrijven die <em>afhankelijk van de heersende windsnelheid</em> vermogen (en daarmee geluid) terugregelt, om overschrijding te voorkomen zonder de turbine het hele jaar op verminderd vermogen te laten draaien. Deze aanpak — vermogensreductie precies op de momenten dat de omstandigheden risicovol zijn — werd nog in januari 2026 door het Bundesverwaltungsgericht bevestigd als toelaatbare vergunningsvoorwaarde (<a href="https://www.bverwg.de/pm/2025/4" target="_blank" rel="noopener">BVerwG, persbericht nr. 4/2025</a>).</p>
 
-    <h3>12.3 WHO 2018 — een expliciete leemte, juist voor de nacht</h3>
+    <h3>13.3 WHO 2018 — een expliciete leemte, juist voor de nacht</h3>
     <p>De <a href="https://iris.who.int/bitstream/handle/10665/343936/WHO-EURO-2018-3287-43046-60243-eng.pdf" target="_blank" rel="noopener">WHO Environmental Noise Guidelines (2018)</a> geven voor windturbines een voorwaardelijke aanbeveling van Lden &lt;45 dB, maar <strong>expliciet geen Lnight-aanbeveling</strong> — als enige geluidsbron in de gehele richtlijn (wegverkeer, spoor en luchtvaart krijgen alle drie wél een Lnight-waarde). De WHO motiveert dit met de te lage bewijskwaliteit van de beschikbare nachtstudies, niet met de conclusie dat nachtelijke blootstelling onbelangrijk zou zijn (<a href="https://www.wbm.co.uk/wp-content/uploads/2018/11/WBM-WHO-2018-Summary-Nov-2018.pdf" target="_blank" rel="noopener">WBM-samenvatting</a>). Dit is relevant omdat dit rapport net laat zien dat de nacht de kern van het probleem is — precies waar de WHO geen harde ondergrens durft te trekken.</p>
 
-    <h3>12.4 Aanbeveling voor Nederland</h3>
+    <h3>13.4 Aanbeveling voor Nederland</h3>
     <ol class="rp-list">
       <li><strong>Introduceer een Nederlandse LFN-norm naar Deens voorbeeld:</strong> een berekende binnenwaarde van orde 20 dB(A) in de 10-160 Hz-band voor de avond/nacht (met een ruimere dagwaarde), als aanvulling op — niet vervanging van — de bestaande hoorbaar-geluidnorm. Dit dicht de leemte die dit rapport in §4/§5 en §11 blootlegt: laagfrequent en infrasoon geluid worden nu alleen indicatief getoond, niet getoetst.</li>
       <li><strong>Koppel operationele maatregelen aan de scenario-detectie van Module 5/6:</strong> verplicht een noise-reduced-operation-modus (vermogensreductie) op nachten waarin de klimatologische/shear-capacity-indicatoren een worst-case (vSBL-)regime voorspellen, naar het Duitse precedent van een weersafhankelijke nachtmodus — in plaats van het hele jaar een vaste, permanente afregeling die op de meeste nachten onnodig is en op de kritieke nachten mogelijk nog steeds ontoereikend.</li>
@@ -5260,6 +5394,7 @@ function m13BuildReportHtml(mapImages) {
   ${valueSection}
   ${compareSection}
   ${lden13Section}
+  ${uncertaintySection}
   ${advisorySection}
   ${bronnenSection}
   <div class="rp-footer">Automatisch gegenereerd door het interactieve windturbinegeluidsmodel (Module 14). Dient ter beleidsmatige illustratie — vervangt geen formeel akoestisch onderzoek, planschadetaxatie of gezondheidskundig advies. Klik linksboven op "Afdrukken / opslaan als PDF" en kies als bestemming "Opslaan als PDF" om dit rapport te downloaden.</div>

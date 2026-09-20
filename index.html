@@ -1040,6 +1040,49 @@
     <button type="button" class="add-turbine-btn" id="m13-generate-btn" disabled>Rapport genereren (PDF)</button>
   </section>
 
+  <!-- MODULE 15 -->
+  <section class="module" id="module-15">
+    <div class="module-head">
+      <span class="module-num">Module 15</span>
+      <h2>Bronvermogen- en overdrachtsonzekerheid <span class="badge-future">Uitbreidingsoptie &mdash; experimenteel</span></h2>
+    </div>
+    <p class="module-desc">Module 13 rekent met &eacute;&eacute;n vaste bronvermogenwaarde (jouw Module 1-ingave) en met de propagatieformule zoals die in dit model is ge&iuml;mplementeerd (Methodologie &sect;2) &mdash; beide zijn in werkelijkheid metingen/schattingen met een eigen onzekerheidsmarge, geen exacte getallen. Deze module telt die marges op en laat zien wat ze betekenen voor het kansgewogen jaargemiddelde uit Module 13.</p>
+    <p class="module-desc"><strong>Deel A &mdash; bronsterkte-onzekerheid (IEC 61400-11):</strong> een gemeten IEC 61400-11-bronvermogen heeft een aangetoonde standaardafwijking; een <a href="https://publicaties.ecn.nl/PdfFetch.aspx?nr=ECN-C--01-025" target="_blank" rel="noopener">ECN-werkshoprapport over de ontwikkeling van deze meetnorm</a> noemt als voorbeeld een gemeten bronsterkte van 92 dB met <strong>1,5 dB als standaardafwijking</strong>. Daarnaast laat een handhavingsonderzoek bij <a href="https://www.windwiki.nl/wp-content/uploads/2023/11/onderzoek_naleving_milieunormen_windpark_ospeldijk_compleet_d.d._22_februari_2023_geanonimiseerd.pdf" target="_blank" rel="noopener">Windpark Ospeldijk</a> zien dat het gemeten bronvermogen in de praktijk circa <strong>2,0 dB hoger</strong> uitviel dan de fabrieksopgave &mdash; een praktijkmarge, geen IEC 61400-11-getal. Beide worden hieronder naast elkaar getoond, als aparte kolommen bovenop de Module 1-basiswaarde.</p>
+    <p class="module-desc"><strong>Deel B &mdash; overdrachtsonzekerheid (ISO 9613-2, hier gecorrigeerd t.o.v. IEC 61400-11):</strong> een <a href="https://www.utn.uu.se/sts/student/wp-content/uploads/gamla%20exjobb/0901_wondollek.pdf" target="_blank" rel="noopener">academisch afstudeeronderzoek dat ISO 9613-2 citeert</a> vermeldt een nauwkeurigheid van &plusmn;3 dB voor afstanden van 0&ndash;1000 m (bij een gemiddelde bronhoogte van 0&ndash;5 m) &mdash; <strong>dit is een ISO 9613-2-cijfer, niet een IEC 61400-11-cijfer</strong> (IEC 61400-11 beschrijft alleen de meetmethode voor het bronvermogen, niet de foutmarge van geluidsoverdracht door de lucht). <a href="https://docs.wind-watch.org/08-11-02-kamperman-james-ver-2-1-wind-watch-org-noise-criteria-for-siting-wind-turbines.pdf" target="_blank" rel="noopener">Kamperman &amp; James</a> wijzen er bovendien op dat windturbines vaak buiten de hoogte-/windsnelheidsgrenzen vallen waarvoor ISO 9613-2 is gevalideerd, wat de kans op een grotere praktijkafwijking eerder vergroot dan verkleint. Deze <strong>+3,0 dB</strong> wordt daarom uitsluitend toegepast op de ringen <strong>500 en 900 m</strong> &mdash; binnen het 0&ndash;1000 m-bereik waarvoor de bron zelf een cijfer geeft. Voor de ringen 1300/1500/2000/5000 m bestaat geen vergelijkbaar onderbouwd cijfer; deze module breidt de marge daar bewust <strong>niet</strong> stilzwijgend uit en toont in plaats daarvan "n.v.t.".</p>
+    <p class="module-desc"><strong>Deel C &mdash; combinatie:</strong> de tabellen hieronder tonen per afstand vijf kolommen naast elkaar: de Module 1-basiswaarde, de twee bronsterkte-varianten afzonderlijk, en (alleen voor 500/900 m) elke bronsterkte-variant nogmaals met de overdrachtsmarge erbovenop &mdash; steeds als kansgewogen jaargemiddelde (dezelfde best/middel/worst-weging als Module 13), getoetst aan de eigen Lden-/L<sub>night</sub>-norm uit Module 1.</p>
+
+    <p class="callout" id="m15-context-callout"></p>
+
+    <div class="data-table-card">
+      <h3>1. Lden-jaargemiddelde per afstand, met bronsterkte- en overdrachtsonzekerheid <span class="cat-badge cat-hoorbaar">Hoorbaar</span></h3>
+      <div class="cum-result-wrap">
+        <table class="data-table norm-table" id="m15-lden-table">
+          <thead><tr><th>Afstand</th><th>Basis (Module 1)</th><th>+1,5 dB bron</th><th>+2,0 dB bron</th><th>+1,5 dB bron &amp; +3,0 dB overdracht<span class="th-sub">alleen 500&ndash;900 m</span></th><th>+2,0 dB bron &amp; +3,0 dB overdracht<span class="th-sub">alleen 500&ndash;900 m</span></th></tr></thead>
+          <tbody id="m15-lden-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <p class="callout m8-totals-highlight" id="m15-lden-result-callout"></p>
+
+    <div class="data-table-card">
+      <h3>2. Nachtperiode (L<sub>night</sub>, jaargemiddeld) per afstand, met bronsterkte- en overdrachtsonzekerheid <span class="cat-badge cat-hoorbaar">Hoorbaar</span></h3>
+      <div class="cum-result-wrap">
+        <table class="data-table norm-table" id="m15-night-table">
+          <thead><tr><th>Afstand</th><th>Basis (Module 1)</th><th>+1,5 dB bron</th><th>+2,0 dB bron</th><th>+1,5 dB bron &amp; +3,0 dB overdracht<span class="th-sub">alleen 500&ndash;900 m</span></th><th>+2,0 dB bron &amp; +3,0 dB overdracht<span class="th-sub">alleen 500&ndash;900 m</span></th></tr></thead>
+          <tbody id="m15-night-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <p class="callout m8-totals-highlight" id="m15-night-result-callout"></p>
+
+    <div class="method-callout">
+      <h3>Bronnen en beperkingen</h3>
+      <p>1,5 dB: <a href="https://publicaties.ecn.nl/PdfFetch.aspx?nr=ECN-C--01-025" target="_blank" rel="noopener">ECN-werkshoprapport, ECN-C--01-025</a> (standaardafwijking bij een IEC 61400-11-meting). 2,0 dB: <a href="https://www.windwiki.nl/wp-content/uploads/2023/11/onderzoek_naleving_milieunormen_windpark_ospeldijk_compleet_d.d._22_februari_2023_geanonimiseerd.pdf" target="_blank" rel="noopener">handhavingsonderzoek Windpark Ospeldijk</a> (gemeten vs. opgegeven bronvermogen). 3,0 dB overdracht: <a href="https://www.utn.uu.se/sts/student/wp-content/uploads/gamla%20exjobb/0901_wondollek.pdf" target="_blank" rel="noopener">afstudeeronderzoek dat ISO 9613-2 citeert</a>, ondersteund door de kritiek van <a href="https://docs.wind-watch.org/08-11-02-kamperman-james-ver-2-1-wind-watch-org-noise-criteria-for-siting-wind-turbines.pdf" target="_blank" rel="noopener">Kamperman &amp; James</a> op de toepasbaarheid van ISO 9613-2 op windturbines. Let op: dit is nadrukkelijk een <strong>ISO 9613-2</strong>-cijfer, niet een IEC 61400-11-cijfer.</p>
+      <p class="rp-note">Beperkingen: (1) de +3,0 dB overdrachtsmarge is uitsluitend onderbouwd voor het 0&ndash;1000 m-bereik van ISO 9613-2 en wordt daarom bewust niet toegepast op de ringen boven 1000 m &mdash; dat betekent niet dat daar geen overdrachtsonzekerheid bestaat, alleen dat er voor dit model geen gelijkwaardig onderbouwd cijfer is gevonden; (2) de twee bronsterkte-marges (1,5 en 2,0 dB) zijn afkomstig van twee verschillende, niet-representatieve casus (&eacute;&eacute;n meetvoorbeeld, &eacute;&eacute;n handhavingszaak) en zijn geen gepubliceerde populatiestatistiek over windturbines in het algemeen; (3) deze module telt de marges rekenkundig op (dB erbij), niet statistisch gecombineerd (bijv. wortel-kwadratensom van twee onzekerheden) &mdash; dat is een bewust conservatieve, geen kansrekenkundig striktste keuze; (4) net als Module 13 raakt deze module de onderliggende hoorbaar-/laagfrequent-/infrasoon-rekenlogica zelf niet aan, en herrekent uitsluitend met een verhoogd bronvermogen en/of een vaste overdrachtstoeslag via de bestaande Module 13-functies.</p>
+    </div>
+  </section>
+
+
   <!-- METHODOLOGY -->
   <section class="module" id="methodology">
     <div class="module-head">
