@@ -1204,6 +1204,9 @@ const state = {
   // Module 12: bouw-/investeringskosten per turbine (PBL-eindadvies SDE++ 2026) — zie script.js §M12.
   // Volledig losstaand van de geplaatste turbine(s)/locatie(s) hierboven: vrije invoer per turbinegroep.
   m12Groups: [],
+  // Module 15 (rendement): marktprijs en O&M-percentage voor de rendabiliteitsberekening bovenop
+  // Module 12's investerings-/vollasturencijfers — zie script.js §MREND.
+  mRendPrice: 87, mRendOmPct: 4.5, // defaults == MREND_DEFAULT_PRICE_EUR_MWH / MREND_DEFAULT_OM_PCT
   // Module 13: Lden/Lnight per scenario — peilrichting ontvanger t.o.v. de turbine, losstaand
   // van de op de kaart geplaatste turbines. m14StilstandNachten: aantal stilstandnachten/jaar
   // ingevuld bij de interactieve stilstand-vraag (eerste ring, 500 m, hoorbaar/Lnacht).
@@ -4522,6 +4525,48 @@ const M12_WINDPARKVERLIES_PCT = 13;
 const M12_LEVENSDUUR_JAAR = 20;
 let m12NextId = 1;
 
+// ---------- Module 15: rendement — hoeveel dagen/vollasturen per jaar zijn nodig? ----------
+// Hergebruikt uitsluitend m12ComputeRow() en de M12_*-constanten hierboven — er wordt geen
+// investerings- of vollasturenlogica opnieuw geïmplementeerd, alleen een extra laag
+// (marktprijs × productie versus O&M-/kapitaalslasten) daarbovenop.
+const MREND_DEFAULT_PRICE_EUR_MWH = 87; // €/MWh, groothandelsprijs 2025-gemiddelde (zie module-desc voor bron)
+const MREND_DEFAULT_OM_PCT = 4.5; // % van investering per jaar, gemiddeld over 20 jaar levensduur
+const MREND_ILLUSTRATIEF_GROEP = {
+  id: -1, naam: 'Illustratief voorbeeld (5 MW, regulier, windcategorie III)',
+  vermogenMw: 5, aantal: 1, categorie: 'regulier', windcategorie: 'III',
+};
+
+function mRendGetRows() {
+  const base = state.m12Groups.length > 0 ? state.m12Groups : [MREND_ILLUSTRATIEF_GROEP];
+  return base.map((g, i) => m12ComputeRow(g, i));
+}
+
+function mRendComputeRow(r) {
+  const price = state.mRendPrice;
+  const omPct = state.mRendOmPct;
+  const omAnnual = r.investeringTotaal * (omPct / 100);
+  const capexAnnual = r.investeringTotaal / M12_LEVENSDUUR_JAAR;
+  const netProductieFactor = 1 - M12_WINDPARKVERLIES_PCT / 100;
+  const opbrengstPerVollasturen = r.vermogenTotaalMw * netProductieFactor * price; // € per vollasturen-eenheid/jaar
+  const vollastNodigOpex = opbrengstPerVollasturen > 0 ? omAnnual / opbrengstPerVollasturen : null;
+  const vollastNodigVolledig = opbrengstPerVollasturen > 0 ? (omAnnual + capexAnnual) / opbrengstPerVollasturen : null;
+  const dagenNodigOpex = vollastNodigOpex != null ? vollastNodigOpex / 24 : null;
+  const dagenNodigVolledig = vollastNodigVolledig != null ? vollastNodigVolledig / 24 : null;
+  const dagenWerkelijk = r.vollasturen / 24;
+  const opbrengstJaar = r.jaarproductie * price;
+  const isOpexRendabel = vollastNodigOpex != null && r.vollasturen >= vollastNodigOpex;
+  const isVolledigRendabel = vollastNodigVolledig != null && r.vollasturen >= vollastNodigVolledig;
+  return {
+    ...r, omAnnual, capexAnnual, netProductieFactor, opbrengstPerVollasturen,
+    vollastNodigOpex, vollastNodigVolledig, dagenNodigOpex, dagenNodigVolledig,
+    dagenWerkelijk, opbrengstJaar, isOpexRendabel, isVolledigRendabel,
+  };
+}
+
+function mRendComputeAll() {
+  return mRendGetRows().map(mRendComputeRow);
+}
+
 function m12FmtEuroDec(n) {
   return n == null || Number.isNaN(n) ? '\u2014' : '\u20ac' + n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -4558,12 +4603,14 @@ function m12AddGroup() {
   if (statusEl) { statusEl.textContent = ''; statusEl.className = 'hint'; }
   renderModule12();
   renderModule13();
+  if (typeof renderModuleRend === 'function') renderModuleRend();
 }
 
 function m12RemoveGroup(id) {
   state.m12Groups = state.m12Groups.filter((g) => g.id !== id);
   renderModule12();
   renderModule13();
+  if (typeof renderModuleRend === 'function') renderModuleRend();
 }
 
 function m12ComputeRow(g, idx) {
@@ -4695,6 +4742,66 @@ function renderModule12() {
       <div class="m11-kpi-card m11-kpi-woningen"><span class="m11-kpi-label">Jaarproductie</span><span class="m11-kpi-value">${m9Fmt(totals.jaarproductie)} MWh</span><span class="m11-kpi-sub">per jaar, na 13% windparkverlies</span></div>
       <div class="m11-kpi-card m11-kpi-compensabel"><span class="m11-kpi-label">\u20ac/MWh (20 jaar)</span><span class="m11-kpi-value">${m12FmtEuroDec(gemKostenLevensduur)}</span><span class="m11-kpi-sub">jaar 1: ${m12FmtEuroDec(gemKostenJaar1)}</span></div>
     `;
+  }
+}
+
+function renderModuleRend() {
+  const tableBody = document.getElementById('mrend-table-body');
+  const kpiGrid = document.getElementById('mrend-kpi-grid');
+  const totalsCallout = document.getElementById('mrend-totals-callout');
+  const totalsText = document.getElementById('mrend-totals-text');
+  const illustratiefNote = document.getElementById('mrend-illustratief-note');
+  if (!tableBody) return;
+
+  const priceInput = document.getElementById('mrend-price-input');
+  const omInput = document.getElementById('mrend-om-input');
+  if (priceInput && document.activeElement !== priceInput) priceInput.value = state.mRendPrice;
+  if (omInput && document.activeElement !== omInput) omInput.value = state.mRendOmPct;
+
+  const usingIllustratief = state.m12Groups.length === 0;
+  if (illustratiefNote) illustratiefNote.style.display = usingIllustratief ? '' : 'none';
+
+  const rows = mRendComputeAll();
+
+  const rowsHtml = rows.map((r) => {
+    const calcOpex = calcSpan(
+      `Jaarlijkse O&M-kosten / opbrengst per vollasturen-eenheid:\n${m9FmtEuro(r.omAnnual)} / (${r.vermogenTotaalMw.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW \u00d7 (1 \u2212 ${M12_WINDPARKVERLIES_PCT}%) \u00d7 \u20ac${state.mRendPrice}/MWh)\n= ${r.vollastNodigOpex != null ? m9Fmt(Math.round(r.vollastNodigOpex)) : '\u2014'} vollasturen/jaar (${r.dagenNodigOpex != null ? r.dagenNodigOpex.toFixed(0) : '\u2014'} dagen-equivalent).`,
+      r.vollastNodigOpex != null ? `${m9Fmt(Math.round(r.vollastNodigOpex))} (${r.dagenNodigOpex.toFixed(0)} dagen)` : '\u2014'
+    );
+    const calcVolledig = calcSpan(
+      `(Jaarlijkse O&M-kosten + jaarlijkse afschrijving over ${M12_LEVENSDUUR_JAAR} jaar) / opbrengst per vollasturen-eenheid:\n(${m9FmtEuro(r.omAnnual)} + ${m9FmtEuro(r.capexAnnual)}) / (${r.vermogenTotaalMw.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW \u00d7 (1 \u2212 ${M12_WINDPARKVERLIES_PCT}%) \u00d7 \u20ac${state.mRendPrice}/MWh)\n= ${r.vollastNodigVolledig != null ? m9Fmt(Math.round(r.vollastNodigVolledig)) : '\u2014'} vollasturen/jaar (${r.dagenNodigVolledig != null ? r.dagenNodigVolledig.toFixed(0) : '\u2014'} dagen-equivalent).`,
+      r.vollastNodigVolledig != null ? `${m9Fmt(Math.round(r.vollastNodigVolledig))} (${r.dagenNodigVolledig.toFixed(0)} dagen)` : '\u2014'
+    );
+    const oordeel = r.isVolledigRendabel
+      ? '<td class="norm-ok">Rendabel incl. investering</td>'
+      : (r.isOpexRendabel ? '<td>Dekt O&amp;M, niet de volledige investering</td>' : '<td class="norm-exceed">Niet rendabel bij huidige vollasturen</td>');
+    return `<tr>
+      <td>${escapeHtml(r.label)}</td>
+      <td>${r.vermogenTotaalMw.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW</td>
+      <td>${r.windcategorie}</td>
+      <td>${m9Fmt(r.vollasturen)} (${r.dagenWerkelijk.toFixed(0)} dagen-equiv.)</td>
+      <td>${calcOpex}</td>
+      <td>${calcVolledig}</td>
+      ${oordeel}
+    </tr>`;
+  }).join('');
+  tableBody.innerHTML = rowsHtml;
+
+  const r0 = rows[0];
+  if (kpiGrid) {
+    kpiGrid.innerHTML = `
+      <div class="m11-kpi-card m11-kpi-totaal"><span class="m11-kpi-label">Vollasturen nodig (O&amp;M)</span><span class="m11-kpi-value">${r0.vollastNodigOpex != null ? m9Fmt(Math.round(r0.vollastNodigOpex)) : '\u2014'}</span><span class="m11-kpi-sub">${r0.dagenNodigOpex != null ? r0.dagenNodigOpex.toFixed(0) + ' dagen-equivalent/jaar' : ''}</span></div>
+      <div class="m11-kpi-card m11-kpi-eigen"><span class="m11-kpi-label">Vollasturen nodig (incl. investering)</span><span class="m11-kpi-value">${r0.vollastNodigVolledig != null ? m9Fmt(Math.round(r0.vollastNodigVolledig)) : '\u2014'}</span><span class="m11-kpi-sub">${r0.dagenNodigVolledig != null ? r0.dagenNodigVolledig.toFixed(0) + ' dagen-equivalent/jaar, 20 jaar afschrijving' : ''}</span></div>
+      <div class="m11-kpi-card m11-kpi-woningen"><span class="m11-kpi-label">Werkelijke vollasturen (PBL)</span><span class="m11-kpi-value">${m9Fmt(r0.vollasturen)}</span><span class="m11-kpi-sub">${r0.dagenWerkelijk.toFixed(0)} dagen-equivalent/jaar, windcat. ${r0.windcategorie}</span></div>
+      <div class="m11-kpi-card m11-kpi-compensabel"><span class="m11-kpi-label">Marktopbrengst/jaar</span><span class="m11-kpi-value">${m9FmtEuro(r0.opbrengstJaar)}</span><span class="m11-kpi-sub">bij \u20ac${state.mRendPrice}/MWh, O&amp;M ${state.mRendOmPct}%/jaar</span></div>
+    `;
+  }
+
+  if (totalsCallout) totalsCallout.style.display = '';
+  if (totalsText) {
+    totalsText.innerHTML = r0.isVolledigRendabel
+      ? `<div class="m11-totals-line">Bij <strong>${m9Fmt(r0.vollasturen)} vollasturen/jaar</strong> (${r0.dagenWerkelijk.toFixed(0)} dagen-equivalent) verdient deze configuratie zowel de O&amp;M-kosten als de investering terug binnen de ${M12_LEVENSDUUR_JAAR}-jarige afschrijvingstermijn, bij een aangenomen elektriciteitsprijs van \u20ac${state.mRendPrice}/MWh en O&amp;M-kosten van ${state.mRendOmPct}%/jaar van de investering.</div>`
+      : `<div class="m11-totals-line">Bij <strong>${m9Fmt(r0.vollasturen)} vollasturen/jaar</strong> (${r0.dagenWerkelijk.toFixed(0)} dagen-equivalent) is minimaal <strong>${r0.vollastNodigVolledig != null ? m9Fmt(Math.round(r0.vollastNodigVolledig)) + ' vollasturen (' + r0.dagenNodigVolledig.toFixed(0) + ' dagen-equivalent)' : 'een hoger aantal vollasturen'}</strong> nodig om ook de investering (naast O&amp;M) binnen ${M12_LEVENSDUUR_JAAR} jaar terug te verdienen bij \u20ac${state.mRendPrice}/MWh \u2014 dit rekenvoorbeeld haalt dat bij de huidige aannames ${r0.isOpexRendabel ? 'nog net wel voor de O&amp;M-kosten, maar niet voor de volledige investering' : 'ook voor de O&amp;M-kosten niet'}.</div>`;
   }
 }
 
@@ -5026,8 +5133,9 @@ function m13BuildReportHtml(mapImages) {
         <tr><td>11</td><td>Maatschappelijke kosten: bundelt zorgkosten (Module 8), DALY-waarde (Module 9) en waardedaling (Module 10) tot één bedrag per geluidscategorie, plus een A/B/C-uitsplitsing tussen het officieel getolereerde hinderniveau en de mogelijke overschrijding daarvan.</td><td>${hoorbaarCritTotal != null ? `Zie §10/§10.1 hieronder — bijv. hoorbaar/33,7%: ${m9FmtEuro(hoorbaarCritTotal)} totale maatschappelijke kosten over ${horizon} jaar` : '— (geen BAG-gegevens of geen turbine geplaatst)'}</td></tr>
         <tr><td>12</td><td>Bouw-/investeringskosten per turbine(groep), PBL-eindadvies SDE++ 2026.</td><td>${hasM12 ? `${m12rows.length} groep(en), ${m12TotalVermogen.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW totaal, €${Math.round(m12TotalInvest).toLocaleString('nl-NL')} investering` : '— (nog geen turbinegroep toegevoegd)'}</td></tr>
         <tr><td>13</td><td>Jaargemiddelde Lden/L<sub>night</sub> per scenario en windrichting, getoetst aan de eigen Lden-/L<sub>night</sub>-norm uit Module 1 (experimentele uitbreiding).</td><td>Richting ${m14BearingLabel(state.m14Bearing)}, op ${DISTANCES[0]} m: kansgewogen jaargemiddelde L<sub>night</sub> ${m14NearestNightWeighted != null ? m14NearestNightWeighted.toFixed(1) + ' dB(A)' : '—'}${Number.isFinite(m14NightNorm) ? ` (norm ${m14NightNorm.toFixed(1)} dB(A))` : ''} — zie §11</td></tr>
-        <tr><td>14</td><td>Dit rapport: een doorlopende, citeerbare synthese van alle bovenstaande modules.</td><td>U leest het nu.</td></tr>
-        <tr><td>15</td><td>Bronvermogen- en overdrachtsonzekerheid: telt de IEC 61400-11-bronsterkte-onzekerheid (+1,5/+2,0 dB) en, alleen op 500&ndash;900 m, de ISO 9613-2-overdrachtsonzekerheid (+3,0 dB) op bij het jaargemiddelde uit Module 13 (experimentele uitbreiding).</td><td>Zie §12 hieronder.</td></tr>
+        <tr><td>14</td><td>Bronvermogen- en overdrachtsonzekerheid: telt de IEC 61400-11-bronsterkte-onzekerheid (+1,5/+2,0 dB) en, alleen op 500&ndash;900 m, de ISO 9613-2-overdrachtsonzekerheid (+3,0 dB) op bij het jaargemiddelde uit Module 13 (experimentele uitbreiding).</td><td>Zie §12 hieronder.</td></tr>
+        <tr><td>15</td><td>Rendement: hoeveel vollasturen/dagen per jaar een turbine(groep) moet draaien om O&amp;M-kosten en investering (Module 12) terug te verdienen, plus een antwoord op de vraag in welk scenario (best/middel/worst) de turbine most likely op vol vermogen draait.</td><td>Zie §13 hieronder.</td></tr>
+        <tr><td>16</td><td>Dit rapport: een doorlopende, citeerbare synthese van alle bovenstaande modules.</td><td>U leest het nu.</td></tr>
       </tbody>
     </table>
   </section>`;
@@ -5345,7 +5453,7 @@ function m13BuildReportHtml(mapImages) {
         <li>De investeringskosten zijn <strong>eenmalig kapitaal</strong> van de projectontwikkelaar/investeerder, terugverdiend over de exploitatieperiode via energieverkoop (en doorgaans SDE++-subsidie) — een bedrijfseconomische kostenpost voor één partij.</li>
         <li>De maatschappelijke kosten zijn grotendeels <strong>jaarlijks terugkerende, gespreide lasten voor omwonenden</strong> — een andere partij, die geen deel heeft in de opbrengsten van de turbine.</li>
         <li>Op basis van de wetenschappelijk best onderbouwde rij (<strong>hoorbaar geluid, kritisch hinderpercentage 33,7%</strong>, §5) bedraagt de geschatte maatschappelijke kostenpost over ${horizon} jaar <strong>${hoorbaarCritTotal != null ? m9FmtEuro(hoorbaarCritTotal) : '—'}</strong>, tegenover een investering van <strong>${m9FmtEuro(m12TotalInvest)}</strong> — dat is <strong>${(hoorbaarCritTotal != null && m12TotalInvest > 0) ? (hoorbaarCritTotal / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong> van de investering, puur aan externe kosten die niet in de businesscase van de ontwikkelaar zitten. Wordt hetzelfde hinderpercentage illustratief ook op de (grotere) infrasoonring toegepast, loopt dit op tot <strong>${infrasoonCritTotal != null ? m9FmtEuro(infrasoonCritTotal) : '—'}</strong> (<strong>${(infrasoonCritTotal != null && m12TotalInvest > 0) ? (infrasoonCritTotal / m12TotalInvest * 100).toLocaleString('nl-NL', { maximumFractionDigits: 0 }) + '%' : '—'}</strong>) — dat bovenste cijfer heeft echter geen eigen hinderstudie als onderbouwing (zie §5) en dient uitsluitend als gevoeligheidsindicatie.</li>
-        <li>Deze externe kosten worden in de huidige vergunningverlening <strong>niet gecompenseerd of geïnternaliseerd</strong> (behalve, deels, via planschadevergoeding bij waardedaling boven de 4% NMR-drempel, §9) — ze blijven bij de omwonenden liggen, wat de aanleiding is voor het advies in §13.</li>
+        <li>Deze externe kosten worden in de huidige vergunningverlening <strong>niet gecompenseerd of geïnternaliseerd</strong> (behalve, deels, via planschadevergoeding bij waardedaling boven de 4% NMR-drempel, §9) — ze blijven bij de omwonenden liggen, wat de aanleiding is voor het advies in §14.</li>
       </ul>
     </div>` : m12Banner}
   </section>`;
@@ -5414,22 +5522,45 @@ function m13BuildReportHtml(mapImages) {
     <p class="rp-note">Beperking: voor de laagfrequente (Vercammen) kolom is aangenomen dat de overdrachtsonzekerheid gelijk doorwerkt op alle 9 tertsbanden — voor de bronsterkte-onzekerheid (IEC 61400-11, breedbandig gemeten) is dat een redelijke aanname, maar voor de +3,0 dB overdrachtsonzekerheid (ISO 9613-2) is dat niet apart onderbouwd per frequentieband.</p>
   </section>`;
 
+  // ---- Sectie: rendement (Module 15) ----
+  const mRendRows = mRendComputeAll();
+  const mRendRowsHtml = mRendRows.map((r) => {
+    const oordeel = r.isVolledigRendabel
+      ? 'Rendabel incl. investering'
+      : (r.isOpexRendabel ? 'Dekt O&amp;M, niet de volledige investering' : 'Niet rendabel bij huidige vollasturen');
+    return `<tr><td>${escapeHtml(r.label)}</td><td>${r.vermogenTotaalMw.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} MW</td><td>${r.windcategorie}</td><td>${m9Fmt(r.vollasturen)} (${r.dagenWerkelijk.toFixed(0)} d.)</td><td>${r.vollastNodigOpex != null ? `${m9Fmt(Math.round(r.vollastNodigOpex))} (${r.dagenNodigOpex.toFixed(0)} d.)` : '—'}</td><td>${r.vollastNodigVolledig != null ? `${m9Fmt(Math.round(r.vollastNodigVolledig))} (${r.dagenNodigVolledig.toFixed(0)} d.)` : '—'}</td><td>${oordeel}</td></tr>`;
+  }).join('');
+  const mRendUsingIllustratief = state.m12Groups.length === 0;
+  const rendementSection = `
+  <section class="rp-section">
+    <h2>13. Rendement: hoeveel dagen per jaar moet de turbine draaien? (Module 15, experimentele uitbreiding)</h2>
+    <p>Deze sectie hergebruikt de investerings- en vollasturencijfers van Module 12 (geen nieuwe reken- of vollasturenlogica) en zet daar een marktprijs- en onderhoudslaag overheen: hoeveel vollasturen (omgerekend naar volle-vermogen-dagequivalenten, ÷24) moet een turbine(groep) draaien om (a) de jaarlijkse O&amp;M-kosten te dekken, en (b) daarbovenop ook de investering binnen de gebruikelijke 20-jarige levensduur terug te verdienen — bij een aangenomen elektriciteitsprijs van €${state.mRendPrice}/MWh en O&amp;M-kosten van ${state.mRendOmPct}%/jaar van de investering.${mRendUsingIllustratief ? ' Er is nog geen turbinegroep ingevuld in Module 12; onderstaande cijfers zijn daarom een illustratief rekenvoorbeeld (5 MW, regulier, windcategorie III).' : ''}</p>
+    <table class="rp-table rp-table-compact">
+      <thead><tr><th>Groep</th><th>Vermogen</th><th>Windcat.</th><th>Werkelijke vollasturen (PBL)</th><th>Nodig voor O&amp;M</th><th>Nodig incl. investering (20 jr)</th><th>Oordeel</th></tr></thead>
+      <tbody>${mRendRowsHtml}</tbody>
+    </table>
+    <p class="rp-note">Rekenwijze: benodigde vollasturen = (O&amp;M-kosten [+ jaarlijkse afschrijving]) / (vermogen × (1 − 13% windparkverlies) × elektriciteitsprijs) — dezelfde windparkverlies-constante als Module 12. Prijs- en O&amp;M-aannames: groothandelsprijs 2025-gemiddeld circa €87/MWh (<a href="https://www.salderingswijzer.nl/prijsarchief" target="_blank" rel="noopener">Salderingswijzer</a>; medio 2026 circa €103/MWh, <a href="https://www.energievergelijk.nl/energieprijzen/stroomprijs" target="_blank" rel="noopener">Energievergelijk</a>), O&amp;M circa 3,8–5,2%/jaar van de investering (<a href="https://olino.org/blog/nl/articles/2010/01/28/windmolen-faq/" target="_blank" rel="noopener">Olino</a>). Realistische vollasturenbenchmarks: landelijk gemiddelde 2024 2.613 vollasturen (<a href="https://www.cbs.nl/nl-nl/cijfers/detail/70960ned" target="_blank" rel="noopener">CBS StatLine 70960NED</a>), moderne turbines (≥96 m ashoogte) 2.826 vollasturen (<a href="https://www.cbs.nl/nl-nl/cijfers/detail/71227NED" target="_blank" rel="noopener">CBS StatLine 71227NED</a>), goede windlocaties tot 3.850 vollasturen (<a href="https://www.rvo.nl/files/file/2025-05/Monitor-Wind-op-Land-2024.pdf" target="_blank" rel="noopener">RVO, Monitor Wind op Land 2024</a>).</p>
+    <h3>13.1 In welk scenario draait de turbine most likely op vol vermogen?</h3>
+    <p>Het antwoord hangt af van de vraag die je stelt. Kijk je naar het <strong>absolute</strong> aantal uren op vol vermogen, dan is dat vermoedelijk vaker het geval bij sterke, synoptisch aangedreven wind in een goed gemengde atmosfeer — dichter bij het <strong>best-case</strong>-regime van dit model (geen extra windschering-/inversietoeslag nodig omdat de wind toch al hard genoeg is). Kijk je echter naar de vraag <em>wanneer het rotorvlak relatief tot de op leefniveau/geostrofisch verwachte wind het hardst wordt aangedreven</em> — de vraag die voor geluidshinder het meest relevant is, omdat die juist de nachten betreft die op leefniveau kalm lijken — dan wijst de literatuur eerder naar het <strong>worst-case (vSBL/nachtelijke lage-luchtlaag-jet)-regime</strong>: <a href="https://docs.wind-watch.org/vandenBerg_turbinesnight_JSV2004.pdf" target="_blank" rel="noopener">Van den Berg (2004)</a> mat op ashoogte tot 2,6× hogere windsnelheden dan op basis van grondniveau werd verwacht, met tot 15 dB hoger turbinegeluid als gevolg. Lage-luchtlaag-jets kunnen de wind op ashoogte 70–100%+ boven de geostrofische wind uitversterken (<a href="https://journals.ametsoc.org/view/journals/atsc/74/9/jas-d-17-0013.1.xml" target="_blank" rel="noopener">Ziemann e.a. 2017</a>), en juist bij een kleinere geostrofische wind is die relatieve versterking het grootst (<a href="https://d-nb.info/1187926426/34" target="_blank" rel="noopener">idealized-LES-onderzoek</a>). Moderne turbines bereiken hun nominale vermogen al bij ashoogtewindsnelheden van circa 11–13 m/s (<a href="https://www.digitalwindmill.com/renewable-energy/wind-turbine-101-how-they-work-types-costs-environmental-impact" target="_blank" rel="noopener">Digital Windmill</a>) — een bereik dat een nachtelijke jet ook op een schijnbaar kalme avond kan overschrijden.</p>
+    <p class="rp-note">Beperkingen: (1) vuistregelberekening zonder financieringslasten, rente/WACC, inflatie of belastingeffecten; (2) sterk afhankelijk van de aangenomen elektriciteitsprijs; bij subsidie (SDE++) ligt het marktprijs-break-evenpunt lager dan hier getoond, omdat subsidie het verschil met een gegarandeerde basisprijs bijlegt — deze sectie rekent bewust met de kale marktprijs; (3) het antwoord op §13.1 is een relatieve, geen absolute uitspraak — het gaat om wanneer de turbine naar verhouding tot wat op leefniveau verwacht wordt het hardst draait, niet om het totaal aantal klokuren op vol vermogen per jaar.</p>
+  </section>`;
+
   // ---- Sectie: advies ----
   const advisorySection = `
   <section class="rp-section">
-    <h2>13. Advies — internationale voorbeelden en normstelling</h2>
+    <h2>14. Advies — internationale voorbeelden en normstelling</h2>
     <p>Nederland toetst windturbinegeluid uitsluitend op hoorbaar geluid (dB(A), Lden/Lnight) en kent <strong>geen enkele normstelling voor laagfrequent of infrasoon geluid</strong> — een leemte die drie landen om ons heen op uiteenlopende manieren hebben ingevuld.</p>
 
-    <h3>13.1 Denemarken — expliciete LFN-norm</h3>
+    <h3>14.1 Denemarken — expliciete LFN-norm</h3>
     <p>Denemarken hanteert sinds de <a href="https://eng.mst.dk/media/urbm0xut/statutory-order-on-noise-from-wind-turbines-2019-version.pdf" target="_blank" rel="noopener">Bekendtgørelse nr. 1284 van 15 december 2011</a> een bindende, <strong>berekende</strong> (niet gemeten) binnenwaarde voor laagfrequent geluid van windturbines: <strong>20 dB(A) in de avond (19-22u) en nacht (22-07u)</strong>, en 25 dB(A) overdag, in het 10-160 Hz-gebied per 1/3-octaafband. Deze norm bestond al als algemene richtlijn voor andere geluidsbronnen (<a href="https://eng.mst.dk/industry/noise/wind-turbines" target="_blank" rel="noopener">Deense Milieuagentschap</a>), maar werd in 2011 specifiek voor windturbines tot een verplichte, bij vergunningverlening te berekenen grenswaarde gemaakt — zie ook <a href="https://journals.sagepub.com/doi/pdf/10.1260/0263-0923.31.4.239" target="_blank" rel="noopener">Jakobsen (2012)</a> voor de onderliggende motivatie.</p>
 
-    <h3>13.2 Duitsland — dynamische, weersafhankelijke nachtmodus</h3>
+    <h3>14.2 Duitsland — dynamische, weersafhankelijke nachtmodus</h3>
     <p>Duitsland heeft geen apart LFN-getal, maar kent via de <a href="https://de.wikipedia.org/wiki/Technische_Anleitung_zum_Schutz_gegen_L%C3%A4rm" target="_blank" rel="noopener">TA Lärm</a> gebiedsafhankelijke nachtnormen (35 dB(A) in reine Wohngebiete, 40 dB(A) in allgemeine Wohngebiete, 45 dB(A) in dorps-/mengbestemmingen) én de praktijk van <strong>"schallreduzierter nächtlicher Betrieb"</strong>: vergunningen kunnen een nachtelijke bedrijfsmodus voorschrijven die <em>afhankelijk van de heersende windsnelheid</em> vermogen (en daarmee geluid) terugregelt, om overschrijding te voorkomen zonder de turbine het hele jaar op verminderd vermogen te laten draaien. Deze aanpak — vermogensreductie precies op de momenten dat de omstandigheden risicovol zijn — werd nog in januari 2026 door het Bundesverwaltungsgericht bevestigd als toelaatbare vergunningsvoorwaarde (<a href="https://www.bverwg.de/pm/2025/4" target="_blank" rel="noopener">BVerwG, persbericht nr. 4/2025</a>).</p>
 
-    <h3>13.3 WHO 2018 — een expliciete leemte, juist voor de nacht</h3>
+    <h3>14.3 WHO 2018 — een expliciete leemte, juist voor de nacht</h3>
     <p>De <a href="https://iris.who.int/bitstream/handle/10665/343936/WHO-EURO-2018-3287-43046-60243-eng.pdf" target="_blank" rel="noopener">WHO Environmental Noise Guidelines (2018)</a> geven voor windturbines een voorwaardelijke aanbeveling van Lden &lt;45 dB, maar <strong>expliciet geen Lnight-aanbeveling</strong> — als enige geluidsbron in de gehele richtlijn (wegverkeer, spoor en luchtvaart krijgen alle drie wél een Lnight-waarde). De WHO motiveert dit met de te lage bewijskwaliteit van de beschikbare nachtstudies, niet met de conclusie dat nachtelijke blootstelling onbelangrijk zou zijn (<a href="https://www.wbm.co.uk/wp-content/uploads/2018/11/WBM-WHO-2018-Summary-Nov-2018.pdf" target="_blank" rel="noopener">WBM-samenvatting</a>). Dit is relevant omdat dit rapport net laat zien dat de nacht de kern van het probleem is — precies waar de WHO geen harde ondergrens durft te trekken.</p>
 
-    <h3>13.4 Aanbeveling voor Nederland</h3>
+    <h3>14.4 Aanbeveling voor Nederland</h3>
     <ol class="rp-list">
       <li><strong>Introduceer een Nederlandse LFN-norm naar Deens voorbeeld:</strong> een berekende binnenwaarde van orde 20 dB(A) in de 10-160 Hz-band voor de avond/nacht (met een ruimere dagwaarde), als aanvulling op — niet vervanging van — de bestaande hoorbaar-geluidnorm. Dit dicht de leemte die dit rapport in §4/§5 en §11 blootlegt: laagfrequent en infrasoon geluid worden nu alleen indicatief getoond, niet getoetst.</li>
       <li><strong>Koppel operationele maatregelen aan de scenario-detectie van Module 5/6:</strong> verplicht een noise-reduced-operation-modus (vermogensreductie) op nachten waarin de klimatologische/shear-capacity-indicatoren een worst-case (vSBL-)regime voorspellen, naar het Duitse precedent van een weersafhankelijke nachtmodus — in plaats van het hele jaar een vaste, permanente afregeling die op de meeste nachten onnodig is en op de kritieke nachten mogelijk nog steeds ontoereikend.</li>
@@ -5455,6 +5586,15 @@ function m13BuildReportHtml(mapImages) {
       <li>Technische Anleitung zum Schutz gegen Lärm, <a href="https://de.wikipedia.org/wiki/Technische_Anleitung_zum_Schutz_gegen_L%C3%A4rm" target="_blank" rel="noopener">overzicht</a></li>
       <li>Bundesverwaltungsgericht, <a href="https://www.bverwg.de/pm/2025/4" target="_blank" rel="noopener">persbericht nr. 4/2025 (schallreduzierter Betrieb)</a></li>
       <li>WHO (2018), <a href="https://iris.who.int/bitstream/handle/10665/343936/WHO-EURO-2018-3287-43046-60243-eng.pdf" target="_blank" rel="noopener">Environmental Noise Guidelines for the European Region</a>, samengevat door <a href="https://www.wbm.co.uk/wp-content/uploads/2018/11/WBM-WHO-2018-Summary-Nov-2018.pdf" target="_blank" rel="noopener">WBM (2018)</a></li>
+      <li>Salderingswijzer, <a href="https://www.salderingswijzer.nl/prijsarchief" target="_blank" rel="noopener">prijsarchief groothandelsprijs elektriciteit</a></li>
+      <li>Energievergelijk, <a href="https://www.energievergelijk.nl/energieprijzen/stroomprijs" target="_blank" rel="noopener">actuele stroomprijzen</a></li>
+      <li>Olino, <a href="https://olino.org/blog/nl/articles/2010/01/28/windmolen-faq/" target="_blank" rel="noopener">Windmolen FAQ (O&amp;M-kosten)</a></li>
+      <li>CBS StatLine, <a href="https://www.cbs.nl/nl-nl/cijfers/detail/70960ned" target="_blank" rel="noopener">70960NED</a> en <a href="https://www.cbs.nl/nl-nl/cijfers/detail/71227NED" target="_blank" rel="noopener">71227NED</a> (vollasturen windturbines)</li>
+      <li>RVO (2025), <a href="https://www.rvo.nl/files/file/2025-05/Monitor-Wind-op-Land-2024.pdf" target="_blank" rel="noopener">Monitor Wind op Land 2024</a></li>
+      <li>Van den Berg (2004), <a href="https://docs.wind-watch.org/vandenBerg_turbinesnight_JSV2004.pdf" target="_blank" rel="noopener">Journal of Sound and Vibration 277(4-5), 955-970</a></li>
+      <li>Ziemann e.a. (2017), <a href="https://journals.ametsoc.org/view/journals/atsc/74/9/jas-d-17-0013.1.xml" target="_blank" rel="noopener">Journal of the Atmospheric Sciences 74(9), 2925-2943</a></li>
+      <li>Idealized-LES-onderzoek naar lage-luchtlaag-jets, <a href="https://d-nb.info/1187926426/34" target="_blank" rel="noopener">d-nb.info/1187926426/34</a></li>
+      <li>Digital Windmill, <a href="https://www.digitalwindmill.com/renewable-energy/wind-turbine-101-how-they-work-types-costs-environmental-impact" target="_blank" rel="noopener">Wind Turbine 101</a></li>
     </ul>
     <p class="rp-note">Zie ook de uitgebreide methodologie- en bronnenlijst onderaan de webapplicatie (sectie "Methodologie &amp; bronnen") voor de volledige onderbouwing van Module 1-7.</p>
   </section>`;
@@ -5513,7 +5653,7 @@ function m13BuildReportHtml(mapImages) {
 <div class="rp-page">
   <div class="rp-toolbar no-print"><button class="rp-print-btn" onclick="window.print()">Afdrukken / opslaan als PDF</button></div>
   <div class="rp-header">
-    <div class="rp-eyebrow">Kritisch rapport — Module 14</div>
+    <div class="rp-eyebrow">Kritisch rapport — Module 16</div>
     <h1>Windturbinegeluid 's nachts: hinder, maatschappelijke kosten en normstelling</h1>
     <div class="rp-sub">Gegenereerd op ${genDate} om ${genTime} · Bronvermogen ${state.lwa.toFixed(1)} dB(A) · ${n} turbine(s): ${escapeHtml(turbineList)}</div>
   </div>
@@ -5533,9 +5673,10 @@ function m13BuildReportHtml(mapImages) {
   ${compareSection}
   ${lden13Section}
   ${uncertaintySection}
+  ${rendementSection}
   ${advisorySection}
   ${bronnenSection}
-  <div class="rp-footer">Automatisch gegenereerd door het interactieve windturbinegeluidsmodel (Module 14). Dient ter beleidsmatige illustratie — vervangt geen formeel akoestisch onderzoek, planschadetaxatie of gezondheidskundig advies. Klik linksboven op "Afdrukken / opslaan als PDF" en kies als bestemming "Opslaan als PDF" om dit rapport te downloaden.</div>
+  <div class="rp-footer">Automatisch gegenereerd door het interactieve windturbinegeluidsmodel (Module 16). Dient ter beleidsmatige illustratie — vervangt geen formeel akoestisch onderzoek, planschadetaxatie of gezondheidskundig advies. Klik linksboven op "Afdrukken / opslaan als PDF" en kies als bestemming "Opslaan als PDF" om dit rapport te downloaden.</div>
 </div>
 </body>
 </html>`;
@@ -5991,6 +6132,19 @@ initModule14();
 render();
 renderModule12();
 renderModule13();
+renderModuleRend();
 initCalcTooltip();
 const m13Btn = document.getElementById('m13-generate-btn');
 if (m13Btn) m13Btn.addEventListener('click', m13OpenReport);
+const mRendPriceInput = document.getElementById('mrend-price-input');
+if (mRendPriceInput) mRendPriceInput.addEventListener('input', () => {
+  const v = parseFloat(mRendPriceInput.value);
+  state.mRendPrice = Number.isFinite(v) && v >= 0 ? v : 0;
+  renderModuleRend();
+});
+const mRendOmInput = document.getElementById('mrend-om-input');
+if (mRendOmInput) mRendOmInput.addEventListener('input', () => {
+  const v = parseFloat(mRendOmInput.value);
+  state.mRendOmPct = Number.isFinite(v) && v >= 0 ? v : 0;
+  renderModuleRend();
+});
